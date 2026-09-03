@@ -73,6 +73,9 @@ app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/voice", voiceRouter);
 
+// Favicon handler
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+
 // Health check endpoint (Instantly responds 200 OK on Vercel)
 app.get("/", (req, res) => {
   res.json({
