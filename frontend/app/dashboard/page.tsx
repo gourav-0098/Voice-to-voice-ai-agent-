@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { API_BASE } from "../config";
 
 interface UserProfile {
   id: string;
@@ -35,7 +36,7 @@ export default function UserDashboard() {
       }
 
       // Fetch fresh profile & quota
-      fetch("http://localhost:5000/api/auth/me", {
+      fetch(`${API_BASE}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
@@ -73,7 +74,7 @@ export default function UserDashboard() {
     setMemoryMessage(null);
 
     try {
-      const res = await fetch("http://localhost:5000/api/voice/history", {
+      const res = await fetch(`${API_BASE}/api/voice/history`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

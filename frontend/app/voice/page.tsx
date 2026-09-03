@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { API_BASE } from "../config";
 
 // Extend Window interface for Web Speech API
 declare global {
@@ -100,7 +101,7 @@ export default function VoicePage() {
       }
 
       if (token) {
-        fetch("http://localhost:5000/api/auth/me", {
+        fetch(`${API_BASE}/api/auth/me`, {
           headers: { Authorization: "Bearer " + token },
         })
           .then((res) => (res.ok ? res.json() : null))
@@ -305,7 +306,7 @@ export default function VoicePage() {
     setIsAiLoading(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/voice", {
+      const response = await fetch(`${API_BASE}/api/voice`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,7 +356,7 @@ export default function VoicePage() {
       }
     } catch (err: any) {
       console.error("❌ Failed to send voice text to backend:", err);
-      const errMsg = `Notice: ${err.message || "Could not connect to http://localhost:5000"}`;
+      const errMsg = `Notice: ${err.message || "Could not connect to Chatly backend"}`;
       setAiResponse(errMsg);
     } finally {
       setIsAiLoading(false);
@@ -586,7 +587,7 @@ export default function VoicePage() {
     const token = typeof window !== "undefined" ? localStorage.getItem("chatly_token") : null;
     if (token) {
       try {
-        await fetch("http://localhost:5000/api/voice/history", {
+        await fetch(`${API_BASE}/api/voice/history`, {
           method: "DELETE",
           headers: { Authorization: "Bearer " + token },
         });

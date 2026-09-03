@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { API_BASE } from "../config";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -21,28 +22,26 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    // Client-side validations
-    if (!name.trim()) {
-      setError("Please enter your full name.");
+    // Validation
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Please fill in all required fields.");
       return;
     }
-    if (!email.trim() || !email.includes("@")) {
-      setError("Please enter a valid email address.");
-      return;
-    }
+
     if (password.length < 6) {
       setError("Password must be at least 6 characters long.");
       return;
     }
+
     if (password !== confirmPassword) {
-      setError("Passwords do not match. Please re-enter.");
+      setError("Passwords do not match. Please verify.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/signup", {
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

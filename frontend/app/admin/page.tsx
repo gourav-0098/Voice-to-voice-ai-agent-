@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { API_BASE } from "../config";
 
 interface AdminMetrics {
   totalUsers: number;
@@ -45,7 +46,7 @@ export default function AdminDashboard() {
 
     try {
       // 1. Fetch Stats
-      const statsRes = await fetch("http://localhost:5000/api/admin/stats", {
+      const statsRes = await fetch(`${API_BASE}/api/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -61,7 +62,7 @@ export default function AdminDashboard() {
       }
 
       // 2. Fetch Users
-      const usersRes = await fetch("http://localhost:5000/api/admin/users", {
+      const usersRes = await fetch(`${API_BASE}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const usersData = await usersRes.json();
@@ -88,7 +89,7 @@ export default function AdminDashboard() {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/reset-quota`, {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/reset-quota`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -117,7 +118,7 @@ export default function AdminDashboard() {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/toggle-role`, {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/toggle-role`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });

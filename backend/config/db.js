@@ -13,11 +13,14 @@ if (!cached) {
 }
 
 export async function connectDB() {
-  let mongoURI = process.env.MONGODB_URI || "mongodb://localhost:27017/chatly_db";
+  let mongoURI = process.env.MONGODB_URI;
 
-  // Fallback to local MongoDB if user has not yet replaced <db_password>
-  if (mongoURI.includes("<db_password>")) {
-    console.warn("⚠️ Atlas <db_password> placeholder detected in .env. Falling back to local MongoDB until password is provided.");
+  if (!mongoURI) {
+    if (process.env.VERCEL) {
+      throw new Error(
+        "MONGODB_URI environment variable is missing on Vercel! Please add MONGODB_URI in Vercel Project Settings -> Environment Variables."
+      );
+    }
     mongoURI = "mongodb://localhost:27017/chatly_db";
   }
 
@@ -32,7 +35,7 @@ export async function connectDB() {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
+      bufferCommands: true,
       maxPoolSize: 10, // Optimized for serverless free tier
       serverSelectionTimeoutMS: 5000,
     };
