@@ -1,0 +1,147 @@
+import express from "express";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import { verifyToken } from "../middleware/auth.js";
+
+const router = express.Router();
+
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Helper to generate JWT
+const generateToken = (userId, email) => {
+  const secret = process.env.JWT_SECRET || "chatly_default_secret_key_change_in_production";
+  return jwt.sign({ id: userId, email }, secret, { expiresIn: "7d" });
+};
+
+// =========================================================
+// POST /api/auth/signup
+// =========================================================
+router.post("/signup", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Validation & Length guards to prevent CPU/memory exhaustion
+    if (!name || typeof name !== "string" || !name.trim() || name.length > 80) {
+      return res.status(400).json({ error: "Please enter a valid name (1-80 characters)." });
+    }
+    if (!email || typeof email !== "string" || !email.trim() || email.length > 120) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+    if (!password || typeof password !== "string" || password.length < 6 || password.length > 128) {
+      return res.status(400).json({ error: "Password must be between 6 and 128 characters long." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return res.status(400).json({ error: "Invalid email address format." });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: normalizedEmail }).lean();
+    if (existingUser) {
+      return res.status(400).json({ error: "An account with this email address already exists. Please log in." });
+    }
+
+    // Create user
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password,
+    });
+
+    // Generate JWT
+    const token = generateToken(user._id, user.email);
+
+    return res.status(201).json({
+      status: "success",
+      message: "Account created successfully!",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        quota: user.getQuotaSummary(),
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Signup error:", error.message || error);
+    return res.status(500).json({
+      error: error.message || "Failed to create account. Please try again.",
+    });
+  }
+});
+
+// =========================================================
+// POST /api/auth/login
+// =========================================================
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password || typeof password !== "string" || password.length > 128) {
+      return res.status(400).json({ error: "Please provide both email and password." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Find user and explicitly include password field
+    const user = await User.findOne({ email: normalizedEmail }).select("+password");
+    if (!user) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    // Verify password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    // Generate JWT
+    const token = generateToken(user._id, user.email);
+
+    return res.json({
+      status: "success",
+      message: "Logged in successfully!",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        quota: user.getQuotaSummary(),
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error.message || error);
+    return res.status(500).json({
+      error: error.message || "Login failed. Please try again.",
+    });
+  }
+});
+
+// =========================================================
+// GET /api/auth/me (Protected Route)
+// =========================================================
+router.get("/me", verifyToken, async (req, res) => {
+  try {
+    return res.json({
+      status: "success",
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        quota: req.user.getQuotaSummary(),
+        createdAt: req.user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Profile fetch error:", error.message || error);
+    return res.status(500).json({ error: "Could not fetch user profile." });
+  }
+});
+
+export default router;
