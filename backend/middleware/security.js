@@ -1,37 +1,80 @@
-import rateLimit from "express-rate-limit";
+// Zero-dependency Native Rate Limiters & Sanitizer for Vercel Serverless & Node
+const ipMap = new Map();
 
-// Layer-7 DDoS Protection: Global IP Rate Limiter
-export const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per 15 min
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: "Too many requests from this IP address. Please try again later.",
-  },
-});
+// Periodic cleanup to avoid memory leak
+if (typeof setInterval !== "undefined") {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of ipMap.entries()) {
+      if (now > record.resetTime) {
+        ipMap.delete(key);
+      }
+    }
+  }, 10 * 60 * 1000).unref?.();
+}
 
-// Brute-force & Credential Stuffing Shield: Auth Rate Limiter
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // Limit each IP to 15 login/signup attempts per 15 min
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: "Too many authentication attempts. Please try again after 15 minutes.",
-  },
-});
+// Global rate limiter (250 req / 15 min)
+export const globalLimiter = (req, res, next) => {
+  const ip = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim();
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const record = ipMap.get(ip) || { count: 0, resetTime: now + windowMs };
 
-// Voice Endpoint Flood Protection
-export const voiceLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60, // Max 60 voice calls per IP per 15 min
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: "Voice request frequency limit exceeded. Please slow down.",
-  },
-});
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + windowMs;
+  } else {
+    record.count++;
+  }
+  ipMap.set(ip, record);
+
+  if (record.count > 250) {
+    return res.status(429).json({ error: "Too many requests from this IP address. Please try again later." });
+  }
+  next();
+};
+
+// Auth rate limiter (25 attempts / 15 min)
+export const authLimiter = (req, res, next) => {
+  const ip = ((req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim()) + "_auth";
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const record = ipMap.get(ip) || { count: 0, resetTime: now + windowMs };
+
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + windowMs;
+  } else {
+    record.count++;
+  }
+  ipMap.set(ip, record);
+
+  if (record.count > 25) {
+    return res.status(429).json({ error: "Too many authentication attempts. Please try again after 15 minutes." });
+  }
+  next();
+};
+
+// Voice call rate limiter (80 calls / 15 min)
+export const voiceLimiter = (req, res, next) => {
+  const ip = ((req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim()) + "_voice";
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const record = ipMap.get(ip) || { count: 0, resetTime: now + windowMs };
+
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + windowMs;
+  } else {
+    record.count++;
+  }
+  ipMap.set(ip, record);
+
+  if (record.count > 80) {
+    return res.status(429).json({ error: "Voice request frequency limit exceeded. Please slow down." });
+  }
+  next();
+};
 
 // NoSQL Injection & MongoDB Operator Sanitizer
 export const sanitizeInput = (req, res, next) => {
@@ -39,7 +82,7 @@ export const sanitizeInput = (req, res, next) => {
     if (!obj || typeof obj !== "object") return;
     for (const key of Object.keys(obj)) {
       if (key.startsWith("$") || key.includes(".")) {
-        delete obj[key]; // Strip dangerous MongoDB operators like $gt, $ne, $where
+        delete obj[key];
       } else if (typeof obj[key] === "object") {
         clean(obj[key]);
       }
@@ -49,5 +92,6 @@ export const sanitizeInput = (req, res, next) => {
   clean(req.body);
   clean(req.query);
   clean(req.params);
+
   next();
 };

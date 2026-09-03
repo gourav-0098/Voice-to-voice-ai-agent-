@@ -1,7 +1,5 @@
 import express from "express";
 import cors from "cors";
-import helmet from "helmet";
-import compression from "compression";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -33,14 +31,14 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// 2. Security & Performance Middleware
+// 2. Native Security Headers (Zero extra packages needed, Vercel edge handles compression)
 app.disable("x-powered-by");
-app.use(
-  helmet({
-    contentSecurityPolicy: false, // Prevents blocking cross-origin API calls on Vercel
-  })
-);
-app.use(compression());
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
 
 // 3. CORS Configuration
 const allowedOrigins = [
