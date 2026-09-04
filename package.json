@@ -4,6 +4,7 @@
   "type": "module",
   "main": "backend/index.js",
   "scripts": {
+    "build": "echo 'Build ready'",
     "start": "node backend/index.js",
     "dev": "node backend/index.js"
   },
