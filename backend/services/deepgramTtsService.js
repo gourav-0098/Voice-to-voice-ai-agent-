@@ -12,6 +12,55 @@ const DEEPGRAM_API_KEY =
 const MODEL_NAME = "flux-alexis-en";
 const MODEL_UUID = "36f312ab-d06a-4c1c-9071-ba18bebb29e9";
 
+// Simple transliteration helper for Devanagari Hindi characters to Latin phonetics
+function transliterateDevanagariToLatin(text) {
+  if (!/[\u0900-\u097F]/.test(text)) return text;
+
+  const wordMap = {
+    "नमस्ते": "Namaste",
+    "धन्यवाद": "Dhanyawaad",
+    "हाँ": "Haan",
+    "नहीं": "Nahi",
+    "आप": "Aap",
+    "कैसे": "kaise",
+    "हैं": "hain",
+    "क्या": "kya",
+    "मदद": "madad",
+    "कर": "kar",
+    "सकता": "sakta",
+    "सकती": "sakti",
+    "हूँ": "hoon",
+    "मैं": "Main",
+    "ठीक": "theek",
+    "बहुत": "bahut",
+    "अच्छा": "achha",
+    "बताइए": "bataiye",
+  };
+
+  let result = text;
+  for (const [hindi, latin] of Object.entries(wordMap)) {
+    result = result.split(hindi).join(latin);
+  }
+
+  const charMap = {
+    "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo",
+    "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au", "क": "k", "ख": "kh",
+    "ग": "g", "घ": "gh", "च": "ch", "छ": "chh", "ज": "j", "झ": "jh",
+    "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "त": "t", "थ": "th",
+    "द": "d", "ध": "dh", "न": "n", "प": "p", "फ": "f", "ब": "b",
+    "भ": "bh", "म": "m", "य": "y", "र": "r", "ल": "l", "व": "v",
+    "श": "sh", "ष": "sh", "स": "s", "ह": "h", "ा": "a", "ि": "i",
+    "ी": "ee", "ु": "u", "ू": "oo", "े": "e", "ै": "ai", "ो": "o",
+    "ौ": "au", "ं": "n", "्": "", "।": "."
+  };
+
+  for (const [hindi, latin] of Object.entries(charMap)) {
+    result = result.split(hindi).join(latin);
+  }
+
+  return result.replace(/[\u0900-\u097F]/g, "").trim();
+}
+
 /**
  * Generate speech audio from text using Deepgram's Flux TTS (Alexis)
  * @param {string} text - Text to synthesize into speech
@@ -22,7 +71,8 @@ export async function generateSpeech(text) {
     return null;
   }
 
-  const cleanText = text.replace(/[*_#`~]/g, "").trim();
+  let cleanText = text.replace(/[*_#`~]/g, "").trim();
+  cleanText = transliterateDevanagariToLatin(cleanText);
   if (!cleanText) return null;
 
   try {

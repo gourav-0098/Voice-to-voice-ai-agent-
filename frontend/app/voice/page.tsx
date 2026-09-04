@@ -223,21 +223,33 @@ export default function VoicePage() {
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
 
+      const isHindiScript = /[\u0900-\u097F]/.test(cleanText);
       const voices = window.speechSynthesis.getVoices();
-      const naturalVoice =
-        voices.find(
-          (v) =>
-            v.lang.startsWith("en") &&
-            (v.name.includes("Google") ||
-              v.name.includes("Natural") ||
-              v.name.includes("Samantha") ||
-              v.name.includes("Jenny") ||
-              v.name.includes("Daniel") ||
-              v.name.includes("Zira"))
-        ) || voices.find((v) => v.lang.startsWith("en"));
+      let selectedVoice = null;
 
-      if (naturalVoice) {
-        utterance.voice = naturalVoice;
+      if (isHindiScript) {
+        // Find dedicated Hindi (hi-IN) voice
+        selectedVoice =
+          voices.find((v) => v.lang.startsWith("hi") || v.name.includes("Hindi") || v.name.includes("हिन्दी")) ||
+          voices.find((v) => v.lang === "hi-IN" || v.lang.startsWith("en-IN") || v.name.includes("India"));
+        utterance.lang = "hi-IN";
+      } else {
+        // Natural English / Hinglish voice
+        selectedVoice =
+          voices.find(
+            (v) =>
+              v.lang.startsWith("en") &&
+              (v.name.includes("Google") ||
+                v.name.includes("Natural") ||
+                v.name.includes("Samantha") ||
+                v.name.includes("Jenny") ||
+                v.name.includes("Daniel") ||
+                v.name.includes("Zira"))
+          ) || voices.find((v) => v.lang.startsWith("en"));
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
       }
 
       utterance.onstart = () => {
