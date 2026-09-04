@@ -51,15 +51,21 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     const user = req.user;
     const isAdmin = user.role === "admin" || user.email?.toLowerCase() === "r19216871@gamil.com";
 
-    // 1. Sliding-window account rate limit
+    // 1. Account rate limit check
     console.log(`📍 [VOICE CHECKPOINT 2] Checking quota for user ${user.email} (isAdmin: ${isAdmin})...`);
-    const quota = await user.checkAndRecordVoiceCall();
+    let quota = { allowed: true, isAdmin, remainingHourly: "Unlimited", remainingDaily: "Unlimited" };
+    try {
+      quota = await user.checkAndRecordVoiceCall();
+    } catch (quotaErr) {
+      console.warn("⚠️ Quota check warning, defaulting to allow:", quotaErr.message);
+    }
+
     if (!quota.allowed) {
       console.warn(`⚠️ [VOICE CHECKPOINT 2] Quota exceeded for user: ${user.email}`);
       return res.status(429).json({
-        error: quota.error,
+        error: quota.error || "Rate limit exceeded. Please wait a moment before speaking again.",
         quota,
-        reply: quota.error,
+        reply: quota.error || "You have reached your voice call limit. Please check back soon!",
       });
     }
 
@@ -76,8 +82,13 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
 
     // 2. Retrieve recent conversation history from MongoDB
     console.log("📍 [VOICE CHECKPOINT 4] Fetching recent conversation turns from MongoDB...");
-    const recentHistory = await Conversation.getRecentTurns(user._id, 6);
-    console.log(`✅ [VOICE CHECKPOINT 4] Retrieved ${recentHistory.length} previous history items`);
+    let recentHistory = [];
+    try {
+      recentHistory = await Conversation.getRecentTurns(user._id, 6);
+      console.log(`✅ [VOICE CHECKPOINT 4] Retrieved ${recentHistory.length} previous history items`);
+    } catch (historyErr) {
+      console.warn("⚠️ History fetch warning, proceeding without history:", historyErr.message);
+    }
 
     // 3. If Admin: Retrieve long-term semantic knowledge from Qdrant
     let qdrantMemories = [];
@@ -103,29 +114,58 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       { role: "user", parts: [{ text: prompt }] },
     ];
 
+    let aiReply = "I heard you loud and clear! How can I assist you further?";
     const geminiStart = Date.now();
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents,
-      config: {
-        systemInstruction: dynamicInstruction,
-      },
-    });
 
-    const aiReply = response.text?.trim() || "I hear you! How can I help you further?";
-    console.log(`🤖 [VOICE CHECKPOINT 6] Gemini replied in ${Date.now() - geminiStart}ms: "${aiReply.slice(0, 100)}..."`);
+    try {
+      if (!ai) {
+        ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents,
+        config: {
+          systemInstruction: dynamicInstruction,
+        },
+      });
+
+      if (response.text) {
+        aiReply = response.text.trim();
+      } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
+        aiReply = response.candidates[0].content.parts[0].text.trim();
+      }
+      console.log(`🤖 [VOICE CHECKPOINT 6] Gemini replied in ${Date.now() - geminiStart}ms: "${aiReply.slice(0, 100)}..."`);
+    } catch (geminiError) {
+      console.error("❌ [GEMINI ERROR]:", geminiError.message || geminiError);
+      
+      // Check for Gemini Rate Limit / Resource Exhaustion
+      if (geminiError.message?.includes("429") || geminiError.message?.includes("ResourceExhausted") || geminiError.message?.includes("quota")) {
+        return res.status(429).json({
+          error: "Google Gemini AI quota limit reached. Please wait a moment before trying again.",
+          reply: "I am receiving a lot of requests right now. Please give me a few seconds and speak again!",
+        });
+      }
+
+      // Safe fallback response instead of crashing the turn
+      aiReply = "I understand what you said. Could you please repeat that one more time?";
+    }
 
     // 5. Save exchange to MongoDB conversation history
     console.log("📍 [VOICE CHECKPOINT 7] Saving exchange to MongoDB...");
-    await Conversation.appendTurn(user._id, prompt, aiReply);
-    console.log("✅ [VOICE CHECKPOINT 7] Exchange persisted to MongoDB conversation history");
+    try {
+      await Conversation.appendTurn(user._id, prompt, aiReply);
+      console.log("✅ [VOICE CHECKPOINT 7] Exchange persisted to MongoDB conversation history");
+    } catch (dbErr) {
+      console.warn("⚠️ MongoDB history save warning:", dbErr.message);
+    }
 
     // 6. If Admin: Asynchronously index memory into Qdrant
     if (isAdmin) {
       console.log("📍 [VOICE CHECKPOINT 8] Queuing Qdrant memory indexing for admin...");
       memoryService
         .saveAdminMemory(`User asked: ${prompt}. Chatly answered: ${aiReply}`, user.email)
-        .catch((err) => console.warn("⚠️ Qdrant async save error:", err.message));
+        .catch((err) => console.warn("⚠️ Qdrant async save warning:", err.message));
     }
 
     // 7. Synthesize speech using Deepgram's Flux TTS (Alexis Voice)
@@ -155,7 +195,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       userText: prompt,
       quota,
       hasLongTermMemory: qdrantMemories.length > 0,
-      memoryTurns: recentHistory.length / 2 + 1,
+      memoryTurns: (recentHistory?.length || 0) / 2 + 1,
     });
   } catch (error) {
     console.error("❌ [VOICE CHECKPOINT CRITICAL ERROR] Pipeline failure:", error.message || error);

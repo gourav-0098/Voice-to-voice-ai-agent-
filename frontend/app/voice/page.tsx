@@ -349,7 +349,17 @@ export default function VoicePage() {
       }
 
       if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
+        let serverError = `Server responded with status ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.details || errData.error || errData.reply) {
+            serverError = errData.details || errData.error || errData.reply;
+          }
+        } catch (_) {}
+        setError(serverError);
+        setAiResponse(serverError);
+        speakAiResponse(serverError);
+        throw new Error(serverError);
       }
 
       const data = await response.json();
