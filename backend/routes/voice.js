@@ -1,29 +1,12 @@
 import express from "express";
-import { GoogleGenAI } from "@google/genai";
 import { verifyToken } from "../middleware/auth.js";
 import { voiceLimiter } from "../middleware/security.js";
 import Conversation from "../models/Conversation.js";
 import memoryService from "../services/memoryService.js";
 import deepgramTts from "../services/deepgramTtsService.js";
+import aiService, { DEFAULT_SYSTEM_INSTRUCTION } from "../services/aiService.js";
 
 const router = express.Router();
-
-// Initialize Google Gemini client
-const apiKey = process.env.GEMINI_API_KEY || "";
-console.log("📍 [VOICE CHECKPOINT] Initializing Gemini AI client. Key present:", !!apiKey);
-let ai = null;
-try {
-  ai = new GoogleGenAI({ apiKey });
-  console.log("✅ [VOICE CHECKPOINT] GoogleGenAI client ready!");
-} catch (err) {
-  console.error("❌ [VOICE CHECKPOINT ERROR] GoogleGenAI init failure:", err.message);
-}
-
-// System instruction for clean conversational spoken output
-const SYSTEM_INSTRUCTION =
-  "You are Chatly, an intelligent, helpful, and natural conversational voice AI companion. Answer the user directly and conversationally in 1 to 2 clear spoken sentences. " +
-  "CRITICAL FOR HINDI & HINGLISH: If the user speaks or asks in Hindi or Hinglish, always answer in friendly, natural conversational Hinglish using the English/Latin alphabet (Romanized Hindi, e.g., 'Haan bilkul! Main aapki madad kar sakta hoon. Aap kya puchna chahte hain?'). Never output Devanagari Hindi characters (do not write in हिंदी लिपि), because the text-to-speech engine requires Romanized Latin characters to speak aloud. " +
-  "Do NOT repeat or echo the user's question. Do NOT use markdown symbols, asterisks, hashtags, or bullet points so it sounds natural when spoken aloud via text-to-speech.";
 
 // =========================================================
 // DELETE /api/voice/history - Clear conversation context
@@ -102,54 +85,20 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       }
     }
 
-    let dynamicInstruction = SYSTEM_INSTRUCTION;
+    let dynamicInstruction = DEFAULT_SYSTEM_INSTRUCTION;
     if (qdrantMemories.length > 0) {
       dynamicInstruction += `\n\n[RETRIEVED FROM ADMIN QDRANT KNOWLEDGE BASE & LONG-TERM MEMORY]:\n${qdrantMemories.map((m, i) => `${i + 1}. ${m}`).join("\n")}\nUse these retrieved facts naturally if relevant to the user's question.`;
     }
 
-    // 4. Send multi-turn contents to Google Gemini 2.5 Flash
-    console.log("📍 [VOICE CHECKPOINT 6] Calling Google Gemini 2.5 Flash...");
-    const contents = [
-      ...recentHistory,
-      { role: "user", parts: [{ text: prompt }] },
-    ];
-
-    let aiReply = "I heard you loud and clear! How can I assist you further?";
-    const geminiStart = Date.now();
-
-    try {
-      if (!ai) {
-        ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-      }
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents,
-        config: {
-          systemInstruction: dynamicInstruction,
-        },
-      });
-
-      if (response.text) {
-        aiReply = response.text.trim();
-      } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
-        aiReply = response.candidates[0].content.parts[0].text.trim();
-      }
-      console.log(`🤖 [VOICE CHECKPOINT 6] Gemini replied in ${Date.now() - geminiStart}ms: "${aiReply.slice(0, 100)}..."`);
-    } catch (geminiError) {
-      console.error("❌ [GEMINI ERROR]:", geminiError.message || geminiError);
-      
-      // Check for Gemini Rate Limit / Resource Exhaustion
-      if (geminiError.message?.includes("429") || geminiError.message?.includes("ResourceExhausted") || geminiError.message?.includes("quota")) {
-        return res.status(429).json({
-          error: "Google Gemini AI quota limit reached. Please wait a moment before trying again.",
-          reply: "I am receiving a lot of requests right now. Please give me a few seconds and speak again!",
-        });
-      }
-
-      // Safe fallback response instead of crashing the turn
-      aiReply = "I understand what you said. Could you please repeat that one more time?";
-    }
+    // 4. Generate AI response via Groq (Primary) with Gemini (Fallback)
+    console.log("📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator (Groq Primary -> Gemini Fallback)...");
+    const aiResult = await aiService.generateAIResponse({
+      prompt,
+      history: recentHistory,
+      systemInstruction: dynamicInstruction,
+    });
+    const aiReply = aiResult.reply;
+    console.log(`🤖 [VOICE CHECKPOINT 6] AI (${aiResult.provider} / ${aiResult.model}) replied in ${aiResult.latencyMs}ms: "${aiReply.slice(0, 100)}..."`);
 
     // 5. Save exchange to MongoDB conversation history
     console.log("📍 [VOICE CHECKPOINT 7] Saving exchange to MongoDB...");
@@ -185,6 +134,9 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     return res.json({
       status: "success",
       reply: aiReply,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      aiLatencyMs: aiResult.latencyMs,
       audio: audioPayload?.audioBase64 || null,
       audioFormat: audioPayload?.format || "audio/wav",
       voice: {
