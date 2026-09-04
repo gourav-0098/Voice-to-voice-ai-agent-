@@ -2,9 +2,6 @@ import mongoose from "mongoose";
 
 /**
  * Global cache across Vercel serverless function invocations.
- * In serverless environments, container reuse allows caching the Mongoose
- * connection promise, preventing new connections on every HTTP request
- * and avoiding hitting the MongoDB Atlas free tier connection limit (500 connections).
  */
 let cached = global.mongoose;
 
@@ -17,10 +14,12 @@ export async function connectDB() {
 
   if (!mongoURI) {
     if (process.env.VERCEL) {
+      console.error("❌ [DB CHECKPOINT ERROR] MONGODB_URI environment variable is missing on Vercel!");
       throw new Error(
         "MONGODB_URI environment variable is missing on Vercel! Please add MONGODB_URI in Vercel Project Settings -> Environment Variables."
       );
     }
+    console.log("ℹ️  [DB CHECKPOINT] Local mode: Using default localhost MongoDB URI");
     mongoURI = "mongodb://localhost:27017/chatly_db";
   }
 
@@ -29,18 +28,24 @@ export async function connectDB() {
     mongoURI = mongoURI.replace(/\.mongodb\.net\/(\?|$)/, ".mongodb.net/chatly_db$1");
   }
 
+  const maskedURI = mongoURI.replace(/\/\/[^:]+:[^@]+@/, "//***:***@");
+  console.log(`🔌 [DB CHECKPOINT] Connecting to: ${maskedURI}`);
+
   if (cached.conn) {
+    console.log("⚡ [DB CHECKPOINT] Reusing cached Mongoose connection pool");
     return cached.conn;
   }
 
   if (!cached.promise) {
+    console.log("⏳ [DB CHECKPOINT] Creating new Mongoose connection promise...");
     const opts = {
       bufferCommands: true,
-      maxPoolSize: 10, // Optimized for serverless free tier
+      maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
     };
 
     cached.promise = mongoose.connect(mongoURI, opts).then((mongooseInstance) => {
+      console.log("✅ [DB CHECKPOINT] MongoDB connection established successfully!");
       return mongooseInstance;
     });
   }
@@ -50,7 +55,7 @@ export async function connectDB() {
     return cached.conn;
   } catch (e) {
     cached.promise = null;
-    console.error("MongoDB connection failure:", e.message || e);
+    console.error("❌ [DB CHECKPOINT ERROR] MongoDB connection failure:", e.message || e);
     throw e;
   }
 }
