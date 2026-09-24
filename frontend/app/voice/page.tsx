@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { API_BASE } from "../config";
 import VisualizerCanvas, { VisualizerState } from "./components/VisualizerCanvas";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 // Extend Window interface for Web Speech API
 declare global {
@@ -133,7 +135,12 @@ export default function VoicePage() {
   const [quota, setQuota] = useState<UserProfile["quota"] | null>(null);
 
   // Settings & Modes
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const isDark = mounted ? resolvedTheme === "dark" : true;
   const [conversationMode, setConversationMode] = useState<"voice-only" | "voice-chat" | "text-only">("voice-chat");
   const [selectedVoice, setSelectedVoice] = useState<string>("flux-alexis-en");
   const [selectedPersona, setSelectedPersona] = useState<string>("conversational");
@@ -224,15 +231,9 @@ export default function VoicePage() {
     }
   }, [isAiSpeaking, isAiLoading, interimText, listening]);
 
-  // Theme synchronization
+  // Preferences synchronization
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("chatly_theme") as "dark" | "light" | null;
-      if (savedTheme) {
-        setTheme(savedTheme);
-        document.documentElement.classList.toggle("light", savedTheme === "light");
-        document.documentElement.setAttribute("data-theme", savedTheme);
-      }
       const savedMode = localStorage.getItem("chatly_mode") as any;
       if (savedMode && ["voice-only", "voice-chat", "text-only"].includes(savedMode)) {
         setConversationMode(savedMode);
@@ -249,13 +250,7 @@ export default function VoicePage() {
   }, []);
 
   const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("chatly_theme", nextTheme);
-      document.documentElement.classList.toggle("light", nextTheme === "light");
-      document.documentElement.setAttribute("data-theme", nextTheme);
-    }
+    setTheme(isDark ? "light" : "dark");
   };
 
   const handleVoiceChange = (voiceId: string) => {
@@ -963,7 +958,6 @@ export default function VoicePage() {
   };
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.email === "r19216871@gamil.com";
-  const isDark = theme === "dark";
 
   // =========================================================
   // REUSABLE DASHBOARD SETTINGS CONTENT
@@ -972,49 +966,50 @@ export default function VoicePage() {
   const renderDashboardSettings = (isMobile: boolean = false) => (
     <div className="flex flex-col h-full space-y-6">
       {/* Brand & Close Button (for mobile) */}
-      <div className="flex items-center justify-between pb-4 border-b border-white/10">
-        <Link href="/" className="flex items-center gap-2 group">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">
+        <Link href="/" className="flex items-center gap-2.5 group">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-black font-bold shadow-md shadow-emerald-500/20">
             🎙️
           </div>
           <div>
-            <span className={`font-bold text-base tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+            <span className="font-bold text-base tracking-tight text-slate-900 dark:text-white">
               Chatly AI
             </span>
-            <span className="block text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">
+            <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">
               Control Panel
             </span>
           </div>
         </Link>
 
-        {isMobile && (
-          <button
-            type="button"
-            onClick={() => setMobileDrawerOpen(false)}
-            aria-label="Close settings drawer"
-            className="p-2 rounded-xl text-zinc-400 hover:text-white transition cursor-pointer"
-          >
-            ✕
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Theme Quick Toggle */}
+          <ThemeToggle />
+
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(false)}
+              aria-label="Close settings drawer"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* USER PROFILE & LIVE QUOTA CARD */}
-      <div
-        className={`rounded-2xl p-4 border transition ${
-          isDark ? "bg-white/[0.03] border-white/10" : "bg-slate-100 border-slate-200"
-        }`}
-      >
+      <div className="rounded-2xl p-4 border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.03] dark:border-white/10 dark:shadow-none">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs border border-emerald-500/30">
               {currentUser ? currentUser.name.slice(0, 2).toUpperCase() : "👤"}
             </div>
             <div>
-              <p className={`text-xs font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
+              <p className="text-xs font-semibold text-slate-900 dark:text-white">
                 {currentUser ? currentUser.name : "Guest User"}
               </p>
-              <p className="text-[10px] text-zinc-500 truncate max-w-[140px]">
+              <p className="text-[10px] text-slate-500 dark:text-zinc-500 truncate max-w-[140px]">
                 {currentUser ? currentUser.email : "Not signed in"}
               </p>
             </div>
@@ -1024,7 +1019,7 @@ export default function VoicePage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="text-[11px] text-zinc-400 hover:text-red-400 transition cursor-pointer"
+              className="text-[11px] text-slate-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition cursor-pointer font-medium"
             >
               Sign Out
             </button>
@@ -1035,7 +1030,7 @@ export default function VoicePage() {
                 setShowLoginModal(true);
                 if (isMobile) setMobileDrawerOpen(false);
               }}
-              className="text-xs px-2.5 py-1 rounded-full bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition cursor-pointer"
+              className="text-xs px-2.5 py-1 rounded-full bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition cursor-pointer shadow-xs"
             >
               Sign In
             </button>
@@ -1043,23 +1038,23 @@ export default function VoicePage() {
         </div>
 
         {/* Quota Counters */}
-        <div className="space-y-1.5 pt-2 border-t border-white/10 text-xs">
+        <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
           {isAdmin ? (
-            <div className="flex items-center justify-between text-amber-400 font-medium">
+            <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-medium">
               <span>Account Plan</span>
               <span>👑 Admin (Unlimited)</span>
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
                 <span>Hourly Quota</span>
-                <span className="font-semibold text-emerald-400">
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                   {quota ? `${quota.remainingHourly} / 5 calls` : "5 / 5 calls"}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
                 <span>Daily Quota</span>
-                <span className="font-semibold text-cyan-400">
+                <span className="font-semibold text-sky-600 dark:text-cyan-400">
                   {quota ? `${quota.remainingDaily} / 10 calls` : "10 / 10 calls"}
                 </span>
               </div>
@@ -1068,34 +1063,28 @@ export default function VoicePage() {
         </div>
 
         {/* Personal Semantic Memory Indicator */}
-        <div className="flex items-center justify-between pt-2 mt-1 border-t border-white/10 text-[11px]">
-          <span className="flex items-center gap-1.5 text-cyan-400 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+        <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-200 dark:border-white/10 text-[11px]">
+          <span className="flex items-center gap-1.5 text-sky-600 dark:text-cyan-400 font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-pulse" />
             Semantic Memory
           </span>
-          <span className="text-[10px] text-zinc-500 font-medium">Active (Qdrant)</span>
+          <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-medium">Active (Qdrant)</span>
         </div>
       </div>
 
       {/* CONVERSATION MODE SELECTOR */}
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
           Conversation Mode
         </label>
-        <div
-          className={`grid grid-cols-3 gap-1 p-1 rounded-2xl border text-xs font-medium ${
-            isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-200/80 border-slate-300 text-slate-700"
-          }`}
-        >
+        <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl border text-xs font-medium bg-slate-100 border-slate-200 dark:bg-white/[0.02] dark:border-white/10">
           <button
             type="button"
             onClick={() => handleModeChange("voice-only")}
             className={`py-2 rounded-xl cursor-pointer text-center transition ${
               conversationMode === "voice-only"
-                ? isDark
-                  ? "bg-white text-black font-semibold shadow"
-                  : "bg-white text-slate-900 font-semibold shadow"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
             }`}
           >
             🎙️ Voice
@@ -1105,10 +1094,8 @@ export default function VoicePage() {
             onClick={() => handleModeChange("voice-chat")}
             className={`py-2 rounded-xl cursor-pointer text-center transition ${
               conversationMode === "voice-chat"
-                ? isDark
-                  ? "bg-white text-black font-semibold shadow"
-                  : "bg-white text-slate-900 font-semibold shadow"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
             }`}
           >
             💬 Split
@@ -1118,10 +1105,8 @@ export default function VoicePage() {
             onClick={() => handleModeChange("text-only")}
             className={`py-2 rounded-xl cursor-pointer text-center transition ${
               conversationMode === "text-only"
-                ? isDark
-                  ? "bg-white text-black font-semibold shadow"
-                  : "bg-white text-slate-900 font-semibold shadow"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
             }`}
           >
             ⌨️ Text
@@ -1131,7 +1116,7 @@ export default function VoicePage() {
 
       {/* AI PERSONA & CADENCE SELECTOR */}
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
           AI Persona & Cadence
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -1144,17 +1129,15 @@ export default function VoicePage() {
                 onClick={() => handlePersonaChange(p.id)}
                 className={`text-left p-2.5 rounded-xl border text-xs transition cursor-pointer flex flex-col justify-between ${
                   isSelected
-                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 font-semibold shadow-sm"
-                    : isDark
-                    ? "border-white/5 bg-white/[0.02] text-zinc-400 hover:bg-white/5 hover:text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs dark:border-white/5 dark:bg-white/[0.02] dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="text-sm select-none">{p.icon}</span>
                   <span className="font-medium text-xs">{p.label}</span>
                 </div>
-                <p className="text-[10px] text-zinc-500 leading-tight">{p.desc}</p>
+                <p className="text-[10px] text-slate-500 dark:text-zinc-500 leading-tight">{p.desc}</p>
               </button>
             );
           })}
@@ -1163,7 +1146,7 @@ export default function VoicePage() {
 
       {/* DEEPGRAM VOICE SELECTOR */}
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
           Neural Voice Model
         </label>
         <div className="space-y-1.5">
@@ -1176,17 +1159,15 @@ export default function VoicePage() {
                 onClick={() => handleVoiceChange(v.id)}
                 className={`w-full text-left px-3.5 py-2.5 rounded-xl border text-xs transition cursor-pointer flex items-center justify-between ${
                   isSelected
-                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 font-semibold"
-                    : isDark
-                    ? "border-white/5 bg-white/[0.02] text-zinc-400 hover:bg-white/5 hover:text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs dark:border-white/5 dark:bg-white/[0.02] dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
                 }`}
               >
                 <div>
                   <p className="font-medium">{v.label}</p>
-                  <p className="text-[10px] text-zinc-500">{v.desc}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-500">{v.desc}</p>
                 </div>
-                {isSelected && <span className="text-emerald-400 text-sm">✓</span>}
+                {isSelected && <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>}
               </button>
             );
           })}
@@ -1195,27 +1176,23 @@ export default function VoicePage() {
 
       {/* INTERACTIVE TOGGLES: HANDS-FREE, MUTE, THEME */}
       <div className="space-y-2">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
           Preferences
         </label>
 
         {/* Hands-Free Toggle */}
-        <div
-          className={`flex items-center justify-between p-3 rounded-2xl border transition ${
-            isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100 border-slate-200"
-          }`}
-        >
+        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
           <div>
-            <p className={`text-xs font-medium ${isDark ? "text-white" : "text-slate-900"}`}>
+            <p className="text-xs font-medium text-slate-900 dark:text-white">
               ✨ Hands-Free Mode
             </p>
-            <p className="text-[10px] text-zinc-500">Auto re-opens mic after AI speaks</p>
+            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Auto re-opens mic after AI speaks</p>
           </div>
           <button
             type="button"
             onClick={() => setHandsFree(!handsFree)}
             className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ${
-              handsFree ? "bg-emerald-500" : "bg-zinc-700"
+              handsFree ? "bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
             }`}
           >
             <div
@@ -1227,16 +1204,12 @@ export default function VoicePage() {
         </div>
 
         {/* Voice Audio Mute */}
-        <div
-          className={`flex items-center justify-between p-3 rounded-2xl border transition ${
-            isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100 border-slate-200"
-          }`}
-        >
+        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
           <div>
-            <p className={`text-xs font-medium ${isDark ? "text-white" : "text-slate-900"}`}>
+            <p className="text-xs font-medium text-slate-900 dark:text-white">
               🔊 AI Voice Audio
             </p>
-            <p className="text-[10px] text-zinc-500">Mute or play AI spoken responses</p>
+            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Mute or play AI spoken responses</p>
           </div>
           <button
             type="button"
@@ -1246,8 +1219,8 @@ export default function VoicePage() {
             }}
             className={`px-3 py-1 text-xs rounded-full border cursor-pointer transition ${
               voiceMuted
-                ? "border-red-500/40 bg-red-500/10 text-red-400 font-semibold"
-                : "border-white/10 bg-white/5 text-zinc-300 hover:text-white"
+                ? "border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 font-semibold"
+                : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
             }`}
           >
             {voiceMuted ? "🔇 Muted" : "Active"}
@@ -1255,83 +1228,65 @@ export default function VoicePage() {
         </div>
 
         {/* Theme Toggle */}
-        <div
-          className={`flex items-center justify-between p-3 rounded-2xl border transition ${
-            isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100 border-slate-200"
-          }`}
-        >
+        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
           <div>
-            <p className={`text-xs font-medium ${isDark ? "text-white" : "text-slate-900"}`}>
+            <p className="text-xs font-medium text-slate-900 dark:text-white">
               {isDark ? "🌙 Dark Mode" : "☀️ Light Mode"}
             </p>
-            <p className="text-[10px] text-zinc-500">Switch color theme</p>
+            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Switch color theme</p>
           </div>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={`p-1.5 rounded-full border cursor-pointer transition text-sm ${
-              isDark
-                ? "border-white/10 bg-white/5 text-amber-300 hover:bg-white/10"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-sm"
-            }`}
-          >
-            {isDark ? "☀️" : "🌙"}
-          </button>
+          <ThemeToggle />
         </div>
       </div>
 
       {/* ACTIVE AI TOOLS BADGES */}
-      <div
-        className={`p-3.5 rounded-2xl border ${
-          isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100 border-slate-200"
-        }`}
-      >
-        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+      <div className="p-3.5 rounded-2xl border bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
           Active AI Tools
         </p>
         <div className="space-y-1.5 text-xs">
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
             <span className="flex items-center gap-1.5">
               <span>🌐</span>
               <span>Live Web Search</span>
             </span>
-            <span className="text-[10px] text-emerald-400 font-semibold">Enabled</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Enabled</span>
           </div>
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
             <span className="flex items-center gap-1.5">
               <span>📄</span>
               <span>Web Page Scraper</span>
             </span>
-            <span className="text-[10px] text-emerald-400 font-semibold">Enabled</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Enabled</span>
           </div>
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
             <span className="flex items-center gap-1.5">
               <span>🧠</span>
               <span>Semantic Memory</span>
             </span>
-            <span className="text-[10px] text-purple-400 font-semibold">Qdrant Cloud</span>
+            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">Qdrant Cloud</span>
           </div>
         </div>
       </div>
 
       {/* QUICK ACTIONS & LINKS */}
-      <div className="pt-2 border-t border-white/10 space-y-2 text-xs">
+      <div className="pt-2 border-t border-slate-200 dark:border-white/10 space-y-2 text-xs">
         {messages.length > 0 && (
           <button
             type="button"
             onClick={clearHistory}
-            className="w-full text-center py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition cursor-pointer font-medium"
+            className="w-full text-center py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300 hover:bg-red-500/20 transition cursor-pointer font-medium"
           >
             🗑️ Clear Conversation History
           </button>
         )}
 
-        <div className="flex items-center justify-between text-zinc-400 pt-2">
-          <Link href="/dashboard" className="hover:text-white transition">
+        <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400 pt-2">
+          <Link href="/dashboard" className="hover:text-slate-900 dark:hover:text-white transition">
             Dashboard →
           </Link>
           {isAdmin && (
-            <Link href="/admin" className="text-amber-400 hover:text-amber-300 transition font-medium">
+            <Link href="/admin" className="text-amber-600 dark:text-amber-400 hover:underline transition font-medium">
               👑 Admin Console
             </Link>
           )}
@@ -1457,11 +1412,7 @@ export default function VoicePage() {
       {/* =====================================================
           1. LAPTOP / DESKTOP SIDEBAR DASHBOARD (>= lg)
       ===================================================== */}
-      <aside
-        className={`hidden lg:flex w-80 flex-col h-screen sticky top-0 border-r p-6 overflow-y-auto shrink-0 transition-colors ${
-          isDark ? "border-white/10 bg-zinc-950/40 backdrop-blur-xl" : "border-slate-200 bg-white/80 backdrop-blur-xl shadow-sm"
-        }`}
-      >
+      <aside className="hidden lg:flex w-80 flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-6 overflow-y-auto shrink-0 transition-colors shadow-sm dark:shadow-none">
         {renderDashboardSettings(false)}
       </aside>
 
@@ -1472,16 +1423,12 @@ export default function VoicePage() {
         <div className="fixed inset-0 z-50 lg:hidden">
           {/* Backdrop blur */}
           <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setMobileDrawerOpen(false)}
           />
 
           {/* Sliding sheet */}
-          <div
-            className={`fixed inset-y-0 right-0 w-full max-w-sm p-6 overflow-y-auto border-l shadow-2xl transition-transform ${
-              isDark ? "bg-zinc-950 border-white/10" : "bg-white border-slate-200"
-            }`}
-          >
+          <div className="fixed inset-y-0 right-0 w-full max-w-sm p-6 overflow-y-auto border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl transition-transform">
             {renderDashboardSettings(true)}
           </div>
         </div>
@@ -1492,43 +1439,37 @@ export default function VoicePage() {
       ===================================================== */}
       <div className="flex-1 flex flex-col min-h-screen max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
         {/* Streamlined Main Header */}
-        <header
-          className={`flex items-center justify-between border-b pb-4 gap-3 transition-colors ${
-            isDark ? "border-white/10" : "border-slate-200"
-          }`}
-        >
+        <header className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4 gap-3 transition-colors">
           {/* Left on mobile: Brand */}
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className={`lg:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold transition ${
-                isDark ? "text-white" : "text-slate-900"
-              }`}
+              className="lg:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white transition"
             >
               🎙️ Chatly
             </Link>
 
-            <span className="hidden lg:inline text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <span className="hidden lg:inline text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
               Voice Assistant Stage
             </span>
           </div>
 
-          {/* Center/Right: Pipeline Status + Mobile Hamburger */}
+          {/* Center/Right: Pipeline Status + Mobile Theme Toggle + Hamburger */}
           <div className="flex items-center gap-3">
             {/* Dynamic Status Indicator Chip */}
             <div
               className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
                 pipelineState === "listening"
-                  ? "border-red-500/50 bg-red-500/15 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.25)]"
+                  ? "border-red-500/50 bg-red-500/15 text-red-500 dark:text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.25)]"
                   : pipelineState === "transcribing"
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                  ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
                   : pipelineState === "synthesizing"
-                  ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
+                  ? "border-sky-500/50 bg-sky-500/15 text-sky-600 dark:text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
                   : pipelineState === "speaking"
-                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
                   : isDark
-                  ? "border-white/10 bg-white/5 text-zinc-400"
-                  : "border-slate-200 bg-white text-slate-600 shadow-sm"
+                  ? "border-white/10 bg-white/5 text-zinc-300"
+                  : "border-slate-200 bg-white text-slate-700 shadow-xs"
               }`}
             >
               <span
@@ -1538,7 +1479,7 @@ export default function VoicePage() {
                     : pipelineState === "transcribing"
                     ? "bg-amber-400 animate-pulse"
                     : pipelineState === "synthesizing"
-                    ? "bg-cyan-400 animate-pulse"
+                    ? "bg-sky-400 dark:bg-cyan-400 animate-pulse"
                     : pipelineState === "speaking"
                     ? "bg-emerald-400 animate-pulse"
                     : "bg-emerald-500"
@@ -1557,16 +1498,17 @@ export default function VoicePage() {
               </span>
             </div>
 
+            {/* Mobile Header Theme Toggle */}
+            <div className="lg:hidden">
+              <ThemeToggle />
+            </div>
+
             {/* Mobile Hamburger Menu Toggle Button (< lg) */}
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label="Open settings dashboard"
-              className={`lg:hidden flex items-center justify-center p-2 rounded-xl border cursor-pointer transition ${
-                isDark
-                  ? "border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  : "border-slate-200 bg-white text-slate-900 hover:bg-slate-100 shadow-sm"
-              }`}
+              className="lg:hidden flex items-center justify-center p-2 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -1582,13 +1524,13 @@ export default function VoicePage() {
               <div className="flex items-start gap-3">
                 <span className="text-lg">⚠️</span>
                 <div>
-                  <p className="text-sm font-semibold text-red-400">Notice</p>
-                  <p className="mt-0.5 text-xs leading-5 text-red-200/90">{error}</p>
+                  <p className="text-sm font-semibold text-red-500 dark:text-red-400">Notice</p>
+                  <p className="mt-0.5 text-xs leading-5 text-red-700 dark:text-red-200/90">{error}</p>
                 </div>
               </div>
               <button
                 onClick={() => setError(null)}
-                className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
+                className="text-xs text-slate-500 dark:text-zinc-400 hover:underline cursor-pointer"
               >
                 Dismiss
               </button>
@@ -1605,13 +1547,13 @@ export default function VoicePage() {
             <p
               className={`mb-4 text-xs sm:text-sm font-medium tracking-wide transition-colors ${
                 pipelineState === "listening"
-                  ? "text-red-400"
+                  ? "text-red-500 dark:text-red-400"
                   : pipelineState === "transcribing"
-                  ? "text-amber-400"
+                  ? "text-amber-600 dark:text-amber-400"
                   : pipelineState === "speaking"
-                  ? "text-emerald-400"
+                  ? "text-emerald-600 dark:text-emerald-400"
                   : pipelineState === "synthesizing"
-                  ? "text-cyan-400"
+                  ? "text-sky-600 dark:text-cyan-400"
                   : isDark
                   ? "text-zinc-400"
                   : "text-slate-600"
@@ -1684,14 +1626,14 @@ export default function VoicePage() {
                 }}
                 className={`w-full sm:w-auto touch-manipulation select-none rounded-2xl sm:rounded-full px-8 py-3.5 font-semibold text-sm sm:text-base transition-all duration-150 cursor-pointer active:scale-95 text-center ${
                   !isStarted
-                    ? "cursor-not-allowed opacity-50 border border-white/5 bg-white/5 text-zinc-600"
+                    ? "cursor-not-allowed opacity-50 border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-zinc-600"
                     : listening
                     ? "border border-red-500 bg-red-600 text-white shadow-[0_0_30px_rgba(239,68,68,0.45)] hover:bg-red-700"
                     : !currentUser
-                    ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                    ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30"
                     : isDark
                     ? "border border-white/20 bg-white text-black hover:bg-zinc-200 shadow-md"
-                    : "border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
+                    : "border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
                 }`}
               >
                 <span className="flex items-center justify-center gap-2.5">
@@ -1712,7 +1654,7 @@ export default function VoicePage() {
                 <button
                   type="button"
                   onClick={stopAiSpeaking}
-                  className="w-full sm:w-auto cursor-pointer rounded-2xl sm:rounded-full border border-red-500/40 bg-red-500/10 px-6 py-3.5 text-xs sm:text-sm font-semibold text-red-400 transition hover:bg-red-500/20 active:scale-95 text-center"
+                  className="w-full sm:w-auto cursor-pointer rounded-2xl sm:rounded-full border border-red-500/40 bg-red-500/10 px-6 py-3.5 text-xs sm:text-sm font-semibold text-red-500 dark:text-red-400 transition hover:bg-red-500/20 active:scale-95 text-center"
                 >
                   ⏹️ Interrupt AI (Barge-in)
                 </button>
@@ -1722,15 +1664,11 @@ export default function VoicePage() {
             {/* Subtitles pill in Voice-Only mode */}
             {conversationMode === "voice-only" && (interimText || aiResponse) && (
               <div className="mt-6 w-full max-w-lg px-4 text-center">
-                <div
-                  className={`rounded-2xl p-4 border backdrop-blur-md shadow-lg transition ${
-                    isDark ? "bg-white/[0.04] border-white/10" : "bg-white border-slate-200"
-                  }`}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500 mb-1">
+                <div className="rounded-2xl p-4 border backdrop-blur-md shadow-lg transition bg-white border-slate-200 dark:bg-white/[0.04] dark:border-white/10">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
                     {interimText ? "You Spoke" : "Chatly AI"}
                   </p>
-                  <p className={`text-sm ${isDark ? "text-zinc-200" : "text-slate-800"}`}>
+                  <p className="text-sm text-slate-800 dark:text-zinc-200">
                     {interimText || aiResponse}
                   </p>
                 </div>
@@ -1747,12 +1685,12 @@ export default function VoicePage() {
             {/* Transcript Header with Clear History */}
             <div className="flex items-center justify-between px-2 mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
                   Conversation Transcript ({messages.length})
                 </span>
                 {isAiSpeaking && (
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
                     Speaking...
                   </span>
                 )}
@@ -1762,7 +1700,7 @@ export default function VoicePage() {
                 <button
                   type="button"
                   onClick={clearHistory}
-                  className="text-xs text-zinc-500 hover:text-red-400 transition cursor-pointer"
+                  className="text-xs text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer"
                 >
                   Clear History
                 </button>
@@ -1772,17 +1710,15 @@ export default function VoicePage() {
             {/* Scrollable Message Feed */}
             <div
               ref={chatScrollRef}
-              className={`flex-1 overflow-y-auto rounded-3xl border p-4 sm:p-6 space-y-4 max-h-[420px] transition-colors ${
-                isDark ? "border-white/10 bg-white/[0.02]" : "border-slate-200 bg-white shadow-inner"
-              }`}
+              className="flex-1 overflow-y-auto rounded-3xl border p-4 sm:p-6 space-y-4 max-h-[420px] transition-colors border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-white/[0.02] dark:shadow-none"
             >
               {messages.length === 0 && !isAiLoading && (
                 <div className="py-12 text-center">
                   <p className="text-3xl mb-2">💬</p>
-                  <p className={`text-sm font-medium ${isDark ? "text-zinc-400" : "text-slate-600"}`}>
+                  <p className="text-sm font-medium text-slate-700 dark:text-zinc-300">
                     No messages yet.
                   </p>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">
                     Press the microphone button or type below to begin.
                   </p>
                 </div>
@@ -1802,10 +1738,10 @@ export default function VoicePage() {
                   >
                     {/* Speaker & Timestamp header */}
                     <div className="flex items-center gap-2 mb-1 px-1">
-                      <span className="text-[11px] font-semibold text-zinc-400">
+                      <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300">
                         {isUser ? currentUser?.name || "You" : "Chatly AI"}
                       </span>
-                      <span className="text-[10px] text-zinc-500">{timeString}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">{timeString}</span>
                     </div>
 
                     {/* Message Bubble */}
@@ -1813,11 +1749,11 @@ export default function VoicePage() {
                       className={`group relative max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed transition ${
                         isUser
                           ? isDark
-                            ? "bg-emerald-600/30 border border-emerald-500/40 text-emerald-100 rounded-tr-none"
+                            ? "bg-emerald-600/30 border border-emerald-500/40 text-emerald-100 rounded-tr-none shadow-sm"
                             : "bg-emerald-600 text-white rounded-tr-none shadow-sm"
                           : isDark
-                          ? "bg-white/[0.05] border border-white/10 text-zinc-200 rounded-tl-none"
-                          : "bg-slate-100 border border-slate-200 text-slate-800 rounded-tl-none"
+                          ? "bg-white/[0.05] border border-white/10 text-zinc-200 rounded-tl-none shadow-sm"
+                          : "bg-slate-100/90 border border-slate-200 text-slate-800 rounded-tl-none shadow-xs"
                       }`}
                     >
                       {/* Gemini / ChatGPT Style Tool Usage Indicator */}
@@ -1826,10 +1762,10 @@ export default function VoicePage() {
                         if (!meta) return null;
                         return (
                           <div
-                            className={`mb-2.5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md transition-all shadow-sm ${
+                            className={`mb-2.5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md transition-all shadow-xs ${
                               isDark
                                 ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
-                                : "border-cyan-600/30 bg-cyan-50 text-cyan-900"
+                                : "border-sky-300 bg-sky-50 text-sky-900"
                             }`}
                           >
                             <span className="text-sm select-none">{meta.icon}</span>
@@ -1846,14 +1782,14 @@ export default function VoicePage() {
                         );
                       })()}
 
-                      <p>{msg.text}</p>
+                      <p className="whitespace-pre-wrap">{msg.text}</p>
 
                       {/* Quick Actions (Copy & Replay) */}
-                      <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-2 opacity-80 group-hover:opacity-100 transition">
+                      <div className="mt-2 pt-2 border-t border-slate-200/80 dark:border-white/10 flex items-center gap-2 transition">
                         <button
                           type="button"
                           onClick={() => copyToClipboard(msg.text, msg.id)}
-                          className="text-[10px] text-zinc-400 hover:text-white transition cursor-pointer flex items-center gap-1"
+                          className="text-[10px] text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer flex items-center gap-1 font-medium"
                         >
                           {copiedId === msg.id ? "✓ Copied!" : "📋 Copy"}
                         </button>
@@ -1868,7 +1804,7 @@ export default function VoicePage() {
                                 speakAiResponse(msg.text);
                               }
                             }}
-                            className="text-[10px] text-emerald-400 hover:text-emerald-300 transition cursor-pointer flex items-center gap-1 ml-2"
+                            className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition cursor-pointer flex items-center gap-1 ml-2 font-medium"
                           >
                             ▶ Replay Voice
                           </button>
@@ -1883,27 +1819,23 @@ export default function VoicePage() {
               {isAiLoading && (
                 <div className="flex flex-col items-start animate-in fade-in duration-200">
                   <div className="flex items-center gap-2 mb-1 px-1">
-                    <span className="text-[11px] font-semibold text-cyan-400">Chatly AI</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+                    <span className="text-[11px] font-semibold text-sky-600 dark:text-cyan-400">Chatly AI</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-ping" />
                       Consulting tools & synthesizing...
                     </span>
                   </div>
 
-                  <div
-                    className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl rounded-tl-none border shadow-sm ${
-                      isDark ? "bg-white/[0.04] border-white/10" : "bg-slate-100 border-slate-200"
-                    }`}
-                  >
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl rounded-tl-none border shadow-xs bg-sky-50 border-sky-200 text-sky-900 dark:bg-white/[0.04] dark:border-white/10 dark:text-cyan-300">
                     <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 dark:bg-cyan-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500 dark:bg-cyan-500"></span>
                     </span>
-                    <span className="text-xs text-cyan-300 font-medium">Running live tool</span>
+                    <span className="text-xs font-medium">Running live tool</span>
                     <div className="flex items-center gap-1 ml-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.3s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.15s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce [animation-delay:-0.3s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce [animation-delay:-0.15s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce" />
                     </div>
                   </div>
                 </div>
@@ -1912,8 +1844,8 @@ export default function VoicePage() {
               {/* Interim Realtime Transcript */}
               {interimText && (
                 <div className="flex flex-col items-end opacity-75">
-                  <span className="text-[10px] text-red-400 mb-1">Transcribing live...</span>
-                  <div className="rounded-2xl rounded-tr-none border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs text-red-200 italic">
+                  <span className="text-[10px] text-red-500 dark:text-red-400 mb-1">Transcribing live...</span>
+                  <div className="rounded-2xl rounded-tr-none border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs text-red-700 dark:text-red-200 italic">
                     {interimText}
                   </div>
                 </div>
@@ -1933,9 +1865,7 @@ export default function VoicePage() {
                 setManualInput("");
                 sendVoiceToBackend(textToSend);
               }}
-              className={`mt-3 flex items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition ${
-                isDark ? "border-white/10 bg-white/[0.03] focus-within:border-white/30" : "border-slate-300 bg-white focus-within:border-emerald-500 shadow-sm"
-              }`}
+              className="mt-3 flex items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
             >
               <input
                 type="text"
@@ -1947,16 +1877,12 @@ export default function VoicePage() {
                     : "Please sign in to send messages..."
                 }
                 disabled={!currentUser}
-                className={`flex-1 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 ${
-                  isDark ? "text-white placeholder:text-zinc-500" : "text-slate-900 placeholder:text-slate-400"
-                }`}
+                className="flex-1 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
               />
               <button
                 type="submit"
                 disabled={!manualInput.trim() || isAiLoading}
-                className={`cursor-pointer rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed ${
-                  isDark ? "bg-white text-black hover:bg-zinc-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                }`}
+                className="cursor-pointer rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
               >
                 Send →
               </button>
@@ -1965,7 +1891,7 @@ export default function VoicePage() {
         )}
 
         {/* FOOTER */}
-        <footer className="mt-auto pt-6 text-center text-xs text-zinc-500">
+        <footer className="mt-auto pt-6 text-center text-xs text-slate-500 dark:text-zinc-500">
           <div className="flex flex-wrap items-center justify-center gap-3">
             <span>Model: {activeModel}</span>
             <span>•</span>
