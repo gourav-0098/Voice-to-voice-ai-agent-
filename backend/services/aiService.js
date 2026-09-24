@@ -64,6 +64,8 @@ export function getSystemInstruction(personaKey = "conversational") {
     `[STRICT VOICE CONVERSATION RULES]:\n` +
     `- You are speaking directly through a voice synthesizer to human ears.\n` +
     `- NEVER output raw code, python scripts, 'Toolcode', 'print(...)', or programming syntax in your text.\n` +
+    `- NEVER output LaTeX math symbols like \\sqrt{}, \\times, \\boxed{}, or dollar signs $$.\n` +
+    `- Say numbers and math naturally in words (e.g. "The square root of 4 is 2").\n` +
     `- NEVER echo or repeat tool execution commands.\n` +
     `- Always summarize tool findings into clear, natural, friendly conversational dialogue in 1 to 2 spoken sentences.\n\n` +
     `CRITICAL FOR HINDI & HINGLISH: If the user speaks or asks in Hindi or Hinglish, always answer in friendly, natural conversational Hinglish using the English/Latin alphabet (Romanized Hindi, e.g., 'Haan bilkul! Main aapki madad kar sakta hoon.'). Never output Devanagari Hindi characters.\n` +
@@ -73,7 +75,15 @@ export function getSystemInstruction(personaKey = "conversational") {
 
 export const DEFAULT_SYSTEM_INSTRUCTION = getSystemInstruction();
 
-// Initialize Gemini client for fallback
+// List of Gemini models to cycle through (Priority 1)
+const GEMINI_CANDIDATE_MODELS = [
+  "gemini-flash-latest",
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite",
+  "gemini-2.5-flash",
+];
+
+// Initialize Gemini client
 let geminiClient = null;
 function getGeminiClient() {
   if (!geminiClient) {
@@ -90,17 +100,24 @@ function getGeminiClient() {
 }
 
 /**
- * Clean text for clean TTS speech output (remove markdown, asterisks, bullet points, tool leaks)
+ * Clean text for clean TTS speech output (remove markdown, asterisks, LaTeX, bullet points, tool leaks)
  */
 function cleanForVoice(text) {
   if (!text) return "";
   return text
-    .replace(/<think>[\s\S]*?<\/think>/gi, "") // Remove reasoning tokens if any
+    .replace(/<think>[\s\S]*?<\/think>/gi, "") // Remove reasoning tokens
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "") // Remove XML tool calls
     .replace(/Toolcode:\s*print\([^)]*\)[.\s]*/gi, "") // Remove Toolcode: print(...)
     .replace(/Toolcode:[^\n.]*/gi, "") // Remove stray Toolcode lines
     .replace(/\bprint\s*\([^)]*\)[.\s]*/gi, "") // Remove stray print(...) calls
     .replace(/\b(?:get_?weather|get_?current_?time|web_?search|scrape_?web_?page|calculate_?expression)\s*\([^)]*\)/gi, "") // Remove function call expressions
+    .replace(/\\\[|\\\]|\\\(|\\\)/g, "") // Remove LaTeX brackets \[ \] \( \)
+    .replace(/\\boxed\{([^}]+)\}/g, "$1") // Remove \boxed{...}
+    .replace(/\\sqrt\{([^}]+)\}/g, "square root of $1") // Convert \sqrt{4} to "square root of 4"
+    .replace(/\\times/g, " times ") // Convert \times to times
+    .replace(/\\approx/g, " approximately ") // Convert \approx
+    .replace(/\\cdot/g, " times ") // Convert \cdot
+    .replace(/\$+/g, "") // Remove dollar math delimiters
     .replace(/[*_#`~>]/g, "") // Remove markdown asterisks, hashes, backticks
     .replace(/\[.*?\]\(.*?\)/g, "") // Remove links
     .replace(/^\s*[-•*]\s+/gm, "") // Remove bullet points
@@ -109,7 +126,109 @@ function cleanForVoice(text) {
 }
 
 /**
- * Call Groq Cloud Chat Completion API with Tool Calling Support
+ * Call Google Gemini API (Primary Engine) with Candidate Model Failover and Tool Support
+ * @param {Object} options
+ * @param {string} options.prompt - Current user input
+ * @param {Array} options.history - Array of recent conversation turns
+ * @param {string} options.systemInstruction - Custom system prompt
+ * @returns {Promise<{reply: string, model: string, toolUsed?: Object}>}
+ */
+async function callGemini({ prompt, history = [], systemInstruction }) {
+  const client = getGeminiClient();
+  if (!client) {
+    throw new Error("Gemini AI client is not available.");
+  }
+
+  const contents = [];
+  for (const turn of history.slice(-6)) {
+    const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
+    contents.push({
+      role,
+      parts: [{ text: turn.text || "" }],
+    });
+  }
+  contents.push({ role: "user", parts: [{ text: prompt }] });
+
+  let lastError = null;
+
+  for (const model of GEMINI_CANDIDATE_MODELS) {
+    try {
+      console.log(`🤖 [GEMINI PRIMARY] Trying model: ${model}...`);
+      let toolUsed = null;
+
+      const response = await client.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
+          tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
+        },
+      });
+
+      const candidate = response.candidates?.[0];
+      const functionCalls = candidate?.content?.parts?.filter((p) => p.functionCall) || [];
+
+      if (functionCalls.length > 0) {
+        contents.push(candidate.content);
+
+        const toolParts = [];
+        for (const fc of functionCalls) {
+          const toolName = fc.functionCall.name;
+          const toolArgs = fc.functionCall.args || {};
+          console.log(`⚡ [GEMINI TOOL CALL] ${model} triggered: ${toolName}`, toolArgs);
+
+          if (!toolUsed) {
+            toolUsed = {
+              name: toolName,
+              detail: toolArgs.location || toolArgs.query || toolArgs.expression || toolArgs.url || "",
+              args: toolArgs,
+            };
+          }
+
+          const toolResult = await executeTool(toolName, toolArgs);
+          toolParts.push({
+            functionResponse: {
+              name: toolName,
+              response: { result: toolResult },
+            },
+          });
+        }
+
+        contents.push({ role: "user", parts: toolParts });
+
+        const followUp = await client.models.generateContent({
+          model,
+          contents,
+          config: {
+            systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
+          },
+        });
+
+        let reply = followUp.text || followUp.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        reply = cleanForVoice(reply);
+        if (!reply) {
+          throw new Error("Empty response returned from Gemini follow-up.");
+        }
+        return { reply, model, toolUsed };
+      }
+
+      let reply = response.text || candidate?.content?.parts?.[0]?.text || "";
+      reply = cleanForVoice(reply);
+      if (!reply) {
+        throw new Error("Empty response returned from Gemini.");
+      }
+      return { reply, model, toolUsed };
+    } catch (err) {
+      console.warn(`⚠️ [GEMINI] Model ${model} encountered an issue (${err.status || err.message}). Failing over to next Gemini candidate...`);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All Gemini candidate models failed.");
+}
+
+/**
+ * Call Groq Cloud Chat Completion API (Backup Engine) with Tool Calling Support
  * @param {Object} options
  * @param {string} options.prompt - Current user question/input
  * @param {Array} options.history - Array of { role, text } turns
@@ -117,7 +236,7 @@ function cleanForVoice(text) {
  * @param {string} [options.model] - Groq model name
  * @returns {Promise<{reply: string, model: string, toolUsed?: Object}>}
  */
-async function callGroq({ prompt, history = [], systemInstruction, model = "openai/gpt-oss-120b" }) {
+async function callGroq({ prompt, history = [], systemInstruction, model = "qwen/qwen3.8-27b" }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     throw new Error("GROQ_API_KEY is not configured.");
@@ -140,22 +259,21 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
   messages.push({ role: "user", content: prompt });
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s total timeout for multi-turn tool calling
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     let toolUsed = null;
     let iteration = 0;
-    const maxIterations = 4; // Allow multi-step tool calls + final synthesis
+    const maxIterations = 4;
 
     while (iteration < maxIterations) {
       iteration++;
 
-      // When reaching final turn, omit tools so the model focuses purely on spoken synthesis
       const provideTools = iteration < 3;
       const requestBody = {
         model,
         messages,
-        max_tokens: 200,
+        max_tokens: 600,
         temperature: 0.6,
       };
 
@@ -193,7 +311,7 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
             toolArgs = JSON.parse(toolCall.function.arguments || "{}");
           } catch (_) {}
 
-          console.log(`⚡ [GROQ TOOL CALL] Model triggered tool: ${toolName}`, toolArgs);
+          console.log(`⚡ [GROQ BACKUP TOOL CALL] Model triggered tool: ${toolName}`, toolArgs);
           const toolDetail =
             toolArgs.expression || toolArgs.query || toolArgs.location || toolArgs.url || "";
 
@@ -218,8 +336,8 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
         continue;
       }
 
-      // Fallback: Check if model generated pseudo-tool code in content (e.g. Toolcode: print(get_weather(...)))
-      const rawContent = message?.content || "";
+      // Check if model generated pseudo-tool code
+      const rawContent = message?.content || message?.reasoning || "";
       const pseudoToolMatch = rawContent.match(/(?:Toolcode:\s*print\s*\(\s*|print\s*\(\s*)([a-zA-Z_]+)\s*\((.*?)\)\s*\)/i);
       if (pseudoToolMatch && iteration < maxIterations - 1) {
         const rawToolName = pseudoToolMatch[1].toLowerCase().replace(/_/g, "");
@@ -240,7 +358,7 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
         }
 
         if (toolName) {
-          console.log(`⚡ [GROQ PSEUDO-TOOL INTERCEPTED] Executing ${toolName}:`, toolArgs);
+          console.log(`⚡ [GROQ BACKUP PSEUDO-TOOL] Executing ${toolName}:`, toolArgs);
           const toolResult = await executeTool(toolName, toolArgs);
           if (!toolUsed) {
             toolUsed = {
@@ -250,10 +368,9 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
             };
           }
 
-          // Clean assistant message and append tool result observation
           messages.push({
             role: "assistant",
-            content: `I am looking up the real-time information for ${toolName}.`,
+            content: `I am looking up the information for ${toolName}.`,
           });
           messages.push({
             role: "user",
@@ -264,7 +381,7 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
       }
 
       // Final conversational answer
-      let reply = rawContent.trim();
+      let reply = (message?.content || message?.reasoning || "").trim();
       reply = cleanForVoice(reply);
       clearTimeout(timeoutId);
 
@@ -283,101 +400,16 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "open
 }
 
 /**
- * Call Google Gemini API (Emergency / Quota Fallback) with Tool Support
- * @param {Object} options
- * @returns {Promise<{reply: string, model: string, toolUsed?: Object}>}
- */
-async function callGemini({ prompt, history = [], systemInstruction, model = "gemini-2.5-flash" }) {
-  const client = getGeminiClient();
-  if (!client) {
-    throw new Error("Gemini AI client is not available.");
-  }
-
-  const contents = [];
-  for (const turn of history.slice(-6)) {
-    const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
-    contents.push({
-      role,
-      parts: [{ text: turn.text || "" }],
-    });
-  }
-  contents.push({ role: "user", parts: [{ text: prompt }] });
-
-  let toolUsed = null;
-
-  try {
-    const response = await client.models.generateContent({
-      model,
-      contents,
-      config: {
-        systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
-        tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
-      },
-    });
-
-    const candidate = response.candidates?.[0];
-    const functionCalls = candidate?.content?.parts?.filter((p) => p.functionCall) || [];
-
-    if (functionCalls.length > 0) {
-      contents.push(candidate.content);
-
-      const toolParts = [];
-      for (const fc of functionCalls) {
-        const toolName = fc.functionCall.name;
-        const toolArgs = fc.functionCall.args || {};
-        console.log(`⚡ [GEMINI TOOL CALL] Triggered tool: ${toolName}`, toolArgs);
-
-        if (!toolUsed) {
-          toolUsed = {
-            name: toolName,
-            detail: toolArgs.location || toolArgs.query || toolArgs.expression || toolArgs.url || "",
-            args: toolArgs,
-          };
-        }
-
-        const toolResult = await executeTool(toolName, toolArgs);
-        toolParts.push({
-          functionResponse: {
-            name: toolName,
-            response: { result: toolResult },
-          },
-        });
-      }
-
-      contents.push({ role: "user", parts: toolParts });
-
-      const followUp = await client.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
-        },
-      });
-
-      let reply = followUp.text || followUp.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      reply = cleanForVoice(reply);
-      if (!reply) {
-        throw new Error("Empty response returned from Gemini follow-up.");
-      }
-      return { reply, model, toolUsed };
-    }
-
-    let reply = response.text || candidate?.content?.parts?.[0]?.text || "";
-    reply = cleanForVoice(reply);
-    if (!reply) {
-      throw new Error("Empty response returned from Gemini.");
-    }
-    return { reply, model, toolUsed };
-  } catch (err) {
-    throw err;
-  }
-}
-
-/**
- * Orchestrate AI Generation: Groq (Primary) -> Gemini (Fallback) -> Safe Fallback
+ * Orchestrate AI Generation:
+ * 1. PRIORITY: Google Gemini (gemini-flash-latest -> gemini-flash-lite-latest -> gemini-3.5-flash-lite)
+ * 2. BACKUP: Groq Cloud (qwen/qwen3.8-27b / openai/gpt-oss-120b)
+ * 3. RESILIENT FALLBACK: Non-crashing graceful spoken response
+ *
  * @param {Object} params
  * @param {string} params.prompt - Spoken user text
  * @param {Array} [params.history] - Recent conversation turns
+ * @param {string} [params.systemInstruction] - Custom prompt
+ * @param {string} [params.persona] - Persona identifier
  */
 export async function generateAIResponse({
   prompt,
@@ -388,17 +420,40 @@ export async function generateAIResponse({
   const startTime = Date.now();
   const effectiveInstruction = systemInstruction || getSystemInstruction(persona);
 
-  // 1. PRIMARY: Try Groq (Ultra-fast, 30 RPM)
+  // 1. PRIORITY 1: Google Gemini (High Intelligence, Multi-Model Failover, Multi-Tool Support)
   try {
-    console.log("🚀 [AI ORCHESTRATOR] Calling Primary AI: Groq (openai/gpt-oss-120b)...");
+    console.log("🌟 [AI ORCHESTRATOR] Calling Priority 1 AI: Google Gemini...");
+    const geminiStart = Date.now();
+    const geminiResult = await callGemini({
+      prompt,
+      history,
+      systemInstruction: effectiveInstruction,
+    });
+    const latencyMs = Date.now() - startTime;
+    console.log(`✅ [AI ORCHESTRATOR] Gemini replied in ${latencyMs}ms (${geminiResult.model}): "${geminiResult.reply.slice(0, 80)}..."`);
+    return {
+      reply: geminiResult.reply,
+      provider: "gemini",
+      model: geminiResult.model,
+      latencyMs,
+      toolUsed: geminiResult.toolUsed || null,
+    };
+  } catch (geminiErr) {
+    console.warn("⚠️ [AI ORCHESTRATOR] Google Gemini primary failed over all candidate models:", geminiErr.message || geminiErr);
+  }
+
+  // 2. PRIORITY 2 / BACKUP: Groq (Ultra-fast, High throughput)
+  try {
+    console.log("🔄 [AI ORCHESTRATOR] Failing over to Backup AI: Groq Cloud...");
+    const groqStart = Date.now();
     const groqResult = await callGroq({
       prompt,
       history,
       systemInstruction: effectiveInstruction,
-      model: "openai/gpt-oss-120b",
+      model: "qwen/qwen3.8-27b",
     });
     const latencyMs = Date.now() - startTime;
-    console.log(`✅ [AI ORCHESTRATOR] Groq replied in ${latencyMs}ms: "${groqResult.reply.slice(0, 80)}..."`);
+    console.log(`✅ [AI ORCHESTRATOR] Groq backup replied in ${Date.now() - groqStart}ms: "${groqResult.reply.slice(0, 80)}..."`);
     return {
       reply: groqResult.reply,
       provider: "groq",
@@ -407,24 +462,7 @@ export async function generateAIResponse({
       toolUsed: groqResult.toolUsed || null,
     };
   } catch (groqErr) {
-    console.warn("⚠️ [AI ORCHESTRATOR] Groq primary failed:", groqErr.message || groqErr);
-  }
-
-  // 2. SECONDARY / EMERGENCY FALLBACK: Google Gemini 2.5 Flash
-  try {
-    console.log("🔄 [AI ORCHESTRATOR] Failing over to Secondary AI: Google Gemini 2.5 Flash...");
-    const geminiStart = Date.now();
-    const geminiResult = await callGemini({ prompt, history, systemInstruction: effectiveInstruction });
-    const latencyMs = Date.now() - startTime;
-    console.log(`✅ [AI ORCHESTRATOR] Gemini fallback replied in ${Date.now() - geminiStart}ms: "${geminiResult.reply.slice(0, 80)}..."`);
-    return {
-      reply: geminiResult.reply,
-      provider: "gemini",
-      model: geminiResult.model,
-      latencyMs,
-    };
-  } catch (geminiErr) {
-    console.error("❌ [AI ORCHESTRATOR] Gemini fallback also failed:", geminiErr.message || geminiErr);
+    console.error("❌ [AI ORCHESTRATOR] Groq backup also failed:", groqErr.message || groqErr);
   }
 
   // 3. FINAL RESILIENT FALLBACK: Never crash the voice turn
