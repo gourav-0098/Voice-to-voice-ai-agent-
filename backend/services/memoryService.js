@@ -63,35 +63,55 @@ export async function getEmbedding(text) {
 }
 
 /**
- * Search Qdrant 'first_cluster' for relevant context and memories
- * Only called for Admin (r19216871@gamil.com)
+ * Search Qdrant 'first_cluster' for relevant user context and memories
+ * Supports per-user memory isolation and shared knowledge
  */
-export async function searchAdminKnowledge(queryText, limit = 2) {
+export async function searchUserMemory(queryText, userId = null, limit = 2) {
   if (!qdrantClient || !queryText) return [];
 
   try {
     const vector = await getEmbedding(queryText);
     if (!vector) return [];
 
-    const res = await qdrantClient.query("first_cluster", {
+    const queryOptions = {
       query: vector,
       limit,
       with_payload: true,
-    });
+    };
+
+    // Filter by user if userId provided
+    if (userId) {
+      queryOptions.filter = {
+        should: [
+          {
+            key: "user_id",
+            match: { value: String(userId) },
+          },
+          {
+            key: "user_id",
+            match: { value: "global" },
+          },
+          {
+            key: "user_id",
+            match: { value: "r19216871@gamil.com" },
+          },
+        ],
+      };
+    }
+
+    const res = await qdrantClient.query("first_cluster", queryOptions);
 
     if (!res || !res.points || res.points.length === 0) return [];
 
     const contextSnippets = [];
     for (const point of res.points) {
-      // Score threshold to ensure high relevance
-      if (point.score && point.score >= 0.65) {
+      if (point.score && point.score >= 0.62) {
         const text =
           point.payload?.page_content ||
           point.payload?.data ||
           point.payload?.text;
 
         if (text && typeof text === "string") {
-          // Truncate snippet to 300 chars for concise spoken context
           contextSnippets.push(text.trim().substring(0, 300));
         }
       }
@@ -105,9 +125,9 @@ export async function searchAdminKnowledge(queryText, limit = 2) {
 }
 
 /**
- * Save new memory into Qdrant 'first_cluster'
+ * Save new memory into Qdrant 'first_cluster' for any user
  */
-export async function saveAdminMemory(text, userId = "r19216871@gamil.com") {
+export async function saveUserMemory(text, userId = "general_user") {
   if (!qdrantClient || !text || text.length < 5) return false;
 
   try {
@@ -121,7 +141,7 @@ export async function saveAdminMemory(text, userId = "r19216871@gamil.com") {
           id: pointId,
           vector,
           payload: {
-            user_id: userId,
+            user_id: String(userId),
             page_content: text.trim(),
             created_at: new Date().toISOString(),
             source: "voice_conversation",
@@ -130,6 +150,7 @@ export async function saveAdminMemory(text, userId = "r19216871@gamil.com") {
       ],
     });
 
+    console.log(`🧠 [QDRANT MEMORY] Saved memory for user: "${userId}" (${text.slice(0, 60)}...)`);
     return true;
   } catch (err) {
     console.warn("⚠️ Qdrant save memory warning:", err.message);
@@ -137,8 +158,13 @@ export async function saveAdminMemory(text, userId = "r19216871@gamil.com") {
   }
 }
 
+export const searchAdminKnowledge = searchUserMemory;
+export const saveAdminMemory = saveUserMemory;
+
 export default {
   getEmbedding,
+  searchUserMemory,
+  saveUserMemory,
   searchAdminKnowledge,
   saveAdminMemory,
 };

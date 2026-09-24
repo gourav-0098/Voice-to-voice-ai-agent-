@@ -62,11 +62,12 @@ function transliterateDevanagariToLatin(text) {
 }
 
 /**
- * Generate speech audio from text using Deepgram's Flux TTS (Alexis)
+ * Generate speech audio from text using Deepgram's TTS (supports Flux and Aura voices)
  * @param {string} text - Text to synthesize into speech
+ * @param {string} [voiceModel] - Deepgram voice model name (e.g., flux-alexis-en, aura-asteria-en)
  * @returns {Promise<{audioBase64: string, format: string, model: string, modelUuid: string} | null>}
  */
-export async function generateSpeech(text) {
+export async function generateSpeech(text, voiceModel = MODEL_NAME) {
   if (!text || typeof text !== "string" || !text.trim()) {
     return null;
   }
@@ -75,8 +76,11 @@ export async function generateSpeech(text) {
   cleanText = transliterateDevanagariToLatin(cleanText);
   if (!cleanText) return null;
 
+  const targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
+  const endpointVersion = targetModel.startsWith("aura-") ? "v1" : "v2";
+
   try {
-    const url = `https://api.deepgram.com/v2/speak?model=${MODEL_NAME}&encoding=linear16&sample_rate=24000`;
+    const url = `https://api.deepgram.com/${endpointVersion}/speak?model=${encodeURIComponent(targetModel)}&encoding=linear16&sample_rate=24000`;
 
     const response = await fetch(url, {
       method: "POST",

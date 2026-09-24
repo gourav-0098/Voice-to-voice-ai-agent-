@@ -16,6 +16,10 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    toolUsed: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   { _id: false }
 );
@@ -63,12 +67,12 @@ conversationSchema.statics.getRecentTurns = async function (userId, limit = 6) {
 };
 
 // Append an exchange (user input + AI response)
-conversationSchema.statics.appendTurn = async function (userId, userText, modelReply) {
+conversationSchema.statics.appendTurn = async function (userId, userText, modelReply, toolUsed = null) {
   try {
     const now = new Date();
     const newMessages = [
       { role: "user", text: userText, timestamp: now },
-      { role: "model", text: modelReply, timestamp: now },
+      { role: "model", text: modelReply, timestamp: now, toolUsed: toolUsed || null },
     ];
 
     // Keep at most 30 recent turns per user to stay optimal

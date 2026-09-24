@@ -9,6 +9,25 @@ import aiService, { DEFAULT_SYSTEM_INSTRUCTION } from "../services/aiService.js"
 const router = express.Router();
 
 // =========================================================
+// GET /api/voice/history - Get conversation history
+// =========================================================
+router.get("/history", verifyToken, async (req, res) => {
+  try {
+    const convo = await Conversation.findOne({ userId: req.user._id });
+    const messages = convo?.messages?.map((m) => ({
+      sender: m.role === "user" ? "user" : "ai",
+      text: m.text,
+      timestamp: m.timestamp || new Date(),
+      toolUsed: m.toolUsed || null,
+    })) || [];
+    return res.json({ status: "success", messages });
+  } catch (err) {
+    console.error("❌ [VOICE CHECKPOINT ERROR] Get history failure:", err.message || err);
+    return res.status(500).json({ error: "Failed to retrieve history." });
+  }
+});
+
+// =========================================================
 // DELETE /api/voice/history - Clear conversation context
 // =========================================================
 router.delete("/history", verifyToken, async (req, res) => {
@@ -73,29 +92,35 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       console.warn("⚠️ History fetch warning, proceeding without history:", historyErr.message);
     }
 
-    // 3. If Admin: Retrieve long-term semantic knowledge from Qdrant
+    // 3. Persona & Long-term semantic knowledge from Qdrant
+    const selectedPersona = req.body?.persona || "conversational";
     let qdrantMemories = [];
-    if (isAdmin) {
-      console.log("📍 [VOICE CHECKPOINT 5] Searching admin memory in Qdrant Vector Cloud...");
-      try {
-        qdrantMemories = await memoryService.searchAdminKnowledge(prompt, 2);
+    try {
+      const userIdentifier = user?.email || String(user?._id) || "general_user";
+      console.log(`📍 [VOICE CHECKPOINT 5] Searching memory in Qdrant for: ${userIdentifier}...`);
+      qdrantMemories = await memoryService.searchUserMemory(prompt, userIdentifier, 2);
+      if (qdrantMemories.length > 0) {
         console.log(`✅ [VOICE CHECKPOINT 5] Qdrant returned ${qdrantMemories.length} relevant memories`);
-      } catch (memErr) {
-        console.warn("⚠️ [VOICE CHECKPOINT 5] Qdrant search warning:", memErr.message);
       }
+    } catch (memErr) {
+      console.warn("⚠️ [VOICE CHECKPOINT 5] Qdrant search warning:", memErr.message);
     }
 
-    let dynamicInstruction = DEFAULT_SYSTEM_INSTRUCTION;
+    let dynamicInstruction = typeof aiService.getSystemInstruction === "function" 
+      ? aiService.getSystemInstruction(selectedPersona) 
+      : DEFAULT_SYSTEM_INSTRUCTION;
+
     if (qdrantMemories.length > 0) {
-      dynamicInstruction += `\n\n[RETRIEVED FROM ADMIN QDRANT KNOWLEDGE BASE & LONG-TERM MEMORY]:\n${qdrantMemories.map((m, i) => `${i + 1}. ${m}`).join("\n")}\nUse these retrieved facts naturally if relevant to the user's question.`;
+      dynamicInstruction += `\n\n[USER RECALLED LONG-TERM MEMORIES & PERSONAL FACTS]:\n${qdrantMemories.map((m, i) => `${i + 1}. ${m}`).join("\n")}\nNaturally acknowledge these known personal details if relevant to the question.`;
     }
 
     // 4. Generate AI response via Groq (Primary) with Gemini (Fallback)
-    console.log("📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator (Groq Primary -> Gemini Fallback)...");
+    console.log(`📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator with Persona "${selectedPersona}"...`);
     const aiResult = await aiService.generateAIResponse({
       prompt,
       history: recentHistory,
       systemInstruction: dynamicInstruction,
+      persona: selectedPersona,
     });
     const aiReply = aiResult.reply;
     console.log(`🤖 [VOICE CHECKPOINT 6] AI (${aiResult.provider} / ${aiResult.model}) replied in ${aiResult.latencyMs}ms: "${aiReply.slice(0, 100)}..."`);
@@ -103,26 +128,25 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     // 5. Save exchange to MongoDB conversation history
     console.log("📍 [VOICE CHECKPOINT 7] Saving exchange to MongoDB...");
     try {
-      await Conversation.appendTurn(user._id, prompt, aiReply);
+      await Conversation.appendTurn(user._id, prompt, aiReply, aiResult.toolUsed);
       console.log("✅ [VOICE CHECKPOINT 7] Exchange persisted to MongoDB conversation history");
     } catch (dbErr) {
       console.warn("⚠️ MongoDB history save warning:", dbErr.message);
     }
 
-    // 6. If Admin: Asynchronously index memory into Qdrant
-    if (isAdmin) {
-      console.log("📍 [VOICE CHECKPOINT 8] Queuing Qdrant memory indexing for admin...");
-      memoryService
-        .saveAdminMemory(`User asked: ${prompt}. Chatly answered: ${aiReply}`, user.email)
-        .catch((err) => console.warn("⚠️ Qdrant async save warning:", err.message));
-    }
+    // 6. Asynchronously index memory into Qdrant Vector Cloud for continuous learning
+    const userIdentifier = user?.email || String(user?._id) || "general_user";
+    memoryService
+      .saveUserMemory(`User: ${prompt} | Chatly: ${aiReply}`, userIdentifier)
+      .catch((err) => console.warn("⚠️ Qdrant async save warning:", err.message));
 
-    // 7. Synthesize speech using Deepgram's Flux TTS (Alexis Voice)
-    console.log("📍 [VOICE CHECKPOINT 9] Requesting Deepgram Alexis TTS...");
+    // 7. Synthesize speech using Deepgram TTS (Alexis or requested Aura model)
+    const selectedVoiceModel = req.body?.voiceModel || "flux-alexis-en";
+    console.log(`📍 [VOICE CHECKPOINT 9] Requesting Deepgram TTS (${selectedVoiceModel})...`);
     let audioPayload = null;
     const ttsStart = Date.now();
     try {
-      audioPayload = await deepgramTts.generateSpeech(aiReply);
+      audioPayload = await deepgramTts.generateSpeech(aiReply, selectedVoiceModel);
       console.log(`🔊 [VOICE CHECKPOINT 9] Deepgram TTS generated in ${Date.now() - ttsStart}ms (${audioPayload?.audioBase64?.length || 0} base64 chars)`);
     } catch (ttsErr) {
       console.warn("⚠️ [VOICE CHECKPOINT 9] Deepgram TTS failed, falling back to browser speech synthesis:", ttsErr.message);
@@ -146,6 +170,8 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       },
       userText: prompt,
       quota,
+      persona: selectedPersona,
+      toolUsed: aiResult.toolUsed || null,
       hasLongTermMemory: qdrantMemories.length > 0,
       memoryTurns: (recentHistory?.length || 0) / 2 + 1,
     });

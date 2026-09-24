@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Chatly - Conversational Voice AI",
   description: "Real-time, two-way conversational voice AI companion powered by advanced neural intelligence.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
