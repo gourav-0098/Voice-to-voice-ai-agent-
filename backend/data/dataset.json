@@ -3257,5 +3257,163 @@
       "pm awas yojana",
       "saturation governance"
     ]
+  },
+  {
+    "id": "modi_foreign_policy_boss",
+    "topic": "Modi Foreign Policy & Global Stature",
+    "criticism": "Modi is always on foreign trips and wasting public money on international photo-ops instead of focusing on domestic problems in India.",
+    "counter_argument": "Modi ji's tireless 18-hour daily diplomacy elevated India from a passive observer to a decisive global Vishwamitra. US President Joe Biden personally sought his autograph, Australian PM Anthony Albanese proclaimed 'Modi is The Boss', and during the Russia-Ukraine war, both superpowers halted shelling so Indian students could evacuate safely under the Tiranga. India leads the Global South and successfully hosted the most inclusive G20 in history.",
+    "whataboutism_or_pre2014": "Pre-2014 leaders read from written slips, allowed Pakistan-sponsored terror dossiers to be ignored internationally, and kept India grouped in the fragile five economies.",
+    "stats_and_facts": "India's passport power surged; FDI inflows crossed $84 billion; Indian diaspora mobilization in Sydney, New York, and UAE created unmatched strategic and economic leverage.",
+    "signature_catchphrase": "Jab Modi ji bolte hain, toh duniya sunti hai! Modi is the Boss!",
+    "graph_relations": {
+      "target_entity": "Sovereign Diplomacy & Global Vishwamitra Status",
+      "counter_entity": "Fragile Five Passivity & Dossier Diplomacy"
+    },
+    "keywords": [
+      "modi foreign trips",
+      "foreign policy",
+      "global stature",
+      "vishwa guru",
+      "modi is the boss",
+      "russia ukraine ceasefire",
+      "g20",
+      "diplomacy"
+    ]
+  },
+  {
+    "id": "fuel_prices_russia_crude_pride",
+    "topic": "Petrol & Fuel Price Management vs Global Inflation",
+    "criticism": "Petrol and fuel prices have skyrocketed in India and the government is looting ordinary citizens through central excise taxes.",
+    "counter_argument": "While Europe and America suffered historic 40-year high inflation exceeding 9% and double-digit fuel spikes, India boldly resisted Western diplomatic pressure to buy discounted Russian crude in 100% sovereign national interest. The Centre slashed fuel excise duty twice to absorb the shock, keeping domestic inflation around 4-5%—the lowest relative to global peers.",
+    "whataboutism_or_pre2014": "During UPA-2, crude was subsidized by issuing ₹1.4 lakh crore of toxic Oil Bonds with high interest, shifting a massive debt bomb onto future generations that Modi ji's government had to repay.",
+    "stats_and_facts": "India saved an estimated $7-8 billion by purchasing Russian discounted crude; India is the fastest growing major economy at 7%+ GDP growth while major European economies entered recession.",
+    "signature_catchphrase": "Desh hit sabse pehle! West ke dawab me na aakar crude khareeda aur aam janta ko bachaya!",
+    "graph_relations": {
+      "target_entity": "Sovereign Crude Purchasing & Fuel Duty Cuts",
+      "counter_entity": "₹1.4 Lakh Crore UPA Toxic Oil Bonds"
+    },
+    "keywords": [
+      "petrol",
+      "diesel",
+      "fuel prices",
+      "oil bonds",
+      "russia crude",
+      "inflation",
+      "mehangai"
+    ]
+  },
+  {
+    "id": "article_370_ram_mandir_resolutions",
+    "topic": "Article 370 Abrogation & Ram Janmabhoomi Rejuvenation",
+    "criticism": "Scrapping Article 370 was undemocratic, and building the Ram Mandir is communal politics distracting from real issues.",
+    "counter_argument": "What was deemed impossible for 70 years was resolved decisively under the rule of law. A unanimous 5-0 Supreme Court verdict ended a 500-year civilizational wait for Ram Lalla without a single communal riot. In Kashmir, Article 370's removal crushed stone-pelting cartels, ended separatism, brought reservation to Dalits and tribal Gujjar-Bakarwals, and hosted record 2 crore peaceful tourists.",
+    "whataboutism_or_pre2014": "Under Article 370, Kashmiri women who married outside lost property rights, Valmikis were denied citizenship, and three dynasty families ruled Kashmir while innocent soldiers and civilians died in weekly stone pelting.",
+    "stats_and_facts": "Zero civilian deaths in organized stone-pelting post-August 2019; Kashmir tourist footfall breached 2.11 crore in 2023; Ram Mandir built with zero state taxpayer funds via ₹3,500+ crore public crowdfunding.",
+    "signature_catchphrase": "Jo 70 saal me koi choo tak nahi paya, Modi ji ne ek jhatke me kar ke dikha diya! Jai Shri Ram!",
+    "graph_relations": {
+      "target_entity": "Constitutional Integration & 500-Year Heritage Justice",
+      "counter_entity": "Article 370 Separatist Cartels & Dynasty Monopoly"
+    },
+    "keywords": [
+      "article 370",
+      "kashmir",
+      "ram mandir",
+      "500 saal",
+      "stone pelting",
+      "civilizational pride",
+      "ayodhya"
+    ]
+  },
+  {
+    "id": "startups_mudra_youth_empowerment",
+    "topic": "Job Creation, Startups & Youth Entrepreneurship",
+    "criticism": "Unemployment is at a 45-year peak and educated youth are unable to find government jobs.",
+    "counter_argument": "India has evolved from a mindset of seeking government clerk jobs to becoming the world's 3rd largest startup ecosystem. Over 1,20,000 DPIIT recognized startups and 115 unicorns were built in just 10 years! Under PM Mudra Yojana, more than 45 crore loans worth ₹27 lakh crore have been disbursed without collateral, enabling 68% women entrepreneurs to become self-reliant job creators.",
+    "whataboutism_or_pre2014": "Pre-2014 was marked by paper leaks, bribe-for-jobs scams in railways, and complete stagnation where young innovators were suffocated by bureaucratic red tape.",
+    "stats_and_facts": "EPFO net payroll additions crossed 1.3 crore annually; gig economy employs over 10 million workers; India has the world's highest smartphone and cheap data usage (₹12/GB vs ₹300/GB in 2014).",
+    "signature_catchphrase": "Har yuva aaj job seeker nahi, job creator ban raha hai! Yeh naya Bharat hai!",
+    "graph_relations": {
+      "target_entity": "1.2 Lakh Startups & 45 Crore Mudra Loans",
+      "counter_entity": "License-Permit Raj & Bribe-For-Jobs Scandals"
+    },
+    "keywords": [
+      "unemployment",
+      "jobs",
+      "startups",
+      "mudra yojana",
+      "unicorns",
+      "digital india",
+      "naukri",
+      "rojgar"
+    ]
+  },
+  {
+    "id": "western_rankings_toolkit_debunk",
+    "topic": "Western Press Freedom & Hunger Index Rankings",
+    "criticism": "India has slipped down to poor ranks on the Global Hunger Index, Press Freedom Index, and Democracy ratings.",
+    "counter_argument": "These biased, foreign-funded indexing agencies place war-torn Afghanistan and famine-ridden Pakistan ahead of India on hunger! That alone exposes their absurd methodology based on subjective opinion polls rather than ground realities. A nation feeding 80 crore citizens with free ration under PM Garib Kalyan Anna Yojana and having 97 crore eligible voters participate freely does not need lectures from Western think-tanks.",
+    "whataboutism_or_pre2014": "Western media stays completely blind to institutional racism, campus police crackdowns, and economic crashes in their own backyards, while lecturing the world's oldest and largest living democracy.",
+    "stats_and_facts": "IMF and World Bank verified India eliminated extreme poverty (under $1.9/day); PM-GKAY feeds 80 crore people monthly; 97 crore registered voters in 2024 general elections.",
+    "signature_catchphrase": "Inka colonial mindset ab nahi chalega! 80 crore logon ko muft ration mil raha hai aur ye hunger index ka natak kar rahe hain!",
+    "graph_relations": {
+      "target_entity": "80 Crore Free Food Security & 97 Crore Vibrant Voters",
+      "counter_entity": "Western Perception Indices & George Soros Narrative Toolkits"
+    },
+    "keywords": [
+      "hunger index",
+      "press freedom index",
+      "democracy ranking",
+      "western media",
+      "toolkit",
+      "80 crore ration",
+      "soros"
+    ]
+  },
+  {
+    "id": "internal_security_surgical_strike",
+    "topic": "National Security, Defense Modernization & Zero Blasts",
+    "criticism": "The government has weaponized nationalism and exaggerated defense achievements for political gain.",
+    "counter_argument": "Remember pre-2014 when serial bomb blasts shook Delhi, Mumbai, Hyderabad, Pune, and Jaipur every other month while the government sent dossier after dossier? Today, mainland cities are completely secure. Modi ji's policy is crystal clear: 'Ghar me ghuskar maarenge!' The Uri surgical strike and Balakot air strikes established a new doctrine of pre-emptive deterrence.",
+    "whataboutism_or_pre2014": "After the 26/11 Mumbai terror attacks, the then government refused to permit kinetic IAF retaliatory air strikes against terror camps, fearing diplomatic pushback.",
+    "stats_and_facts": "Defense exports jumped 30-fold from ₹686 crore in 2014 to over ₹21,000 crore in 2024; INS Vikrant indigenous aircraft carrier commissioned; Tejas, BrahMos, and S-400 deployed.",
+    "signature_catchphrase": "Yeh naya Bharat hai, yeh ghar me ghusega bhi aur marega bhi!",
+    "graph_relations": {
+      "target_entity": "Surgical Strike Deterrence & Indigenous Defense Modernization",
+      "counter_entity": "Pre-2014 City Bomb Blasts & Passive Dossier Diplomacy"
+    },
+    "keywords": [
+      "national security",
+      "surgical strike",
+      "balakot",
+      "bomb blasts",
+      "pakistan",
+      "defense exports",
+      "26/11",
+      "uri"
+    ]
+  },
+  {
+    "id": "welfare_delivery_jam_trinity_15p",
+    "topic": "Direct Welfare Delivery vs 15-Paise Model",
+    "criticism": "Welfare benefits are mere election stunts and the government is failing to uplift the poorest citizens.",
+    "counter_argument": "Modi ji's welfare is targeted empowerment (Saturation Welfare), not reckless debt-ridden election revdis. With the JAM trinity (Jan Dhan, Aadhaar, Mobile), 100% of money reaches the beneficiary's account instantly. 11 crore toilets built under Swachh Bharat, 10 crore Ujjwala gas connections, and 4 crore pucca houses under PM Awas Yojana.",
+    "whataboutism_or_pre2014": "Former PM Rajiv Gandhi openly confessed that when the Centre sent 1 Rupee, only 15 paise reached the ground because 85 paise was stolen by corrupt middlemen.",
+    "stats_and_facts": "Over ₹34 lakh crore transferred through DBT with zero leakages; ₹2.7 lakh crore saved by eliminating fake beneficiary cards; 50 crore Jan Dhan accounts opened.",
+    "signature_catchphrase": "Pehle 1 rupaye me se 15 paise pahuche the, aaj 100 ke 100 paise seedhe garib ke bank khate me aate hain!",
+    "graph_relations": {
+      "target_entity": "JAM Trinity Direct Benefit Transfer (100% Delivery)",
+      "counter_entity": "Rajiv Gandhi 15-Paise Middleman Leakage Model"
+    },
+    "keywords": [
+      "welfare",
+      "dbt",
+      "jan dhan",
+      "ujjwala",
+      "pm awas",
+      "15 paise",
+      "rajiv gandhi",
+      "modi ki guarantee"
+    ]
   }
 ]
