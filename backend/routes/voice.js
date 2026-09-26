@@ -117,11 +117,14 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
     }
 
     // 1. Adaptive RAG Grounding + Memories
-    const [adaptiveRag, qdrantMemories, recentHistory] = await Promise.all([
+    const clientHistory = Array.isArray(req.body.history) && req.body.history.length > 0 ? req.body.history : null;
+    const [adaptiveRag, qdrantMemories, dbHistory] = await Promise.all([
       adaptiveRagService.getPersonaGrounding(userText, selectedPersona).catch(() => ({ contextPrompt: "", ragSource: null })),
       memoryService.searchUserMemory(userText, userIdentifier, 2).catch(() => []),
-      Conversation.getRecentTurns(user._id, 4).catch(() => []),
+      clientHistory ? Promise.resolve([]) : Conversation.getRecentTurns(user._id, 8).catch(() => []),
     ]);
+
+    const recentHistory = clientHistory || dbHistory;
 
     sendEvent("rag", {
       ragSource: adaptiveRag.ragSource,
@@ -261,14 +264,19 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       });
     }
 
-    // 2. Retrieve recent conversation history from MongoDB
-    console.log("📍 [VOICE CHECKPOINT 4] Fetching recent conversation turns from MongoDB...");
+    // 2. Retrieve recent conversation history (prefer client-supplied active session turns)
     let recentHistory = [];
-    try {
-      recentHistory = await Conversation.getRecentTurns(user._id, 6);
-      console.log(`✅ [VOICE CHECKPOINT 4] Retrieved ${recentHistory.length} previous history items`);
-    } catch (historyErr) {
-      console.warn("⚠️ History fetch warning, proceeding without history:", historyErr.message);
+    if (Array.isArray(req.body.history) && req.body.history.length > 0) {
+      recentHistory = req.body.history;
+      console.log(`✅ [VOICE CHECKPOINT 4] Using ${recentHistory.length} active session history items from client`);
+    } else {
+      console.log("📍 [VOICE CHECKPOINT 4] Fetching recent conversation turns from MongoDB...");
+      try {
+        recentHistory = await Conversation.getRecentTurns(user._id, 8);
+        console.log(`✅ [VOICE CHECKPOINT 4] Retrieved ${recentHistory.length} previous history items from MongoDB`);
+      } catch (historyErr) {
+        console.warn("⚠️ History fetch warning, proceeding without history:", historyErr.message);
+      }
     }
 
     // 3. Persona-Adaptive RAG Grounding + Long-term user memories

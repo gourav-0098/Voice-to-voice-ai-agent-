@@ -472,6 +472,10 @@ export default function VoicePage() {
 
   // Conversation history stream
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Web Audio Visualizer & Interruption / Barge-in Refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -1151,6 +1155,16 @@ export default function VoicePage() {
       audioQueueRef.current.enqueue(chunk.audio, chunk.format || "audio/wav", chunk.text, chunk.index);
     };
 
+    // Prepare recent conversational dialogue history to maintain multi-turn memory
+    const historyPayload = (messagesRef.current || messages)
+      .filter((m) => m.text && m.text.trim())
+      .slice(-8)
+      .map((m) => ({
+        role: m.sender === "user" ? "user" : "assistant",
+        sender: m.sender,
+        text: m.text.trim(),
+      }));
+
     // 1. Try WebSocket Duplex Connection (Lowest Latency < 280ms)
     const activeVoice = selectedVoiceRef.current || selectedVoice;
     const activePersona = selectedPersonaRef.current || selectedPersona;
@@ -1164,6 +1178,7 @@ export default function VoicePage() {
           text: promptText,
           persona: activePersona,
           voiceModel: activeVoice,
+          history: historyPayload,
           token,
         }));
         return;
@@ -1187,6 +1202,7 @@ export default function VoicePage() {
           voiceModel: activeVoice,
           persona: activePersona,
           language: activeLanguage,
+          history: historyPayload,
         }),
       });
 
@@ -1279,6 +1295,7 @@ export default function VoicePage() {
             voiceModel: activeVoice,
             persona: activePersona,
             language: activeLanguage,
+            history: historyPayload,
           }),
         });
 

@@ -251,11 +251,11 @@ export async function streamVoiceResponse({
   if (GROQ_API_KEY) {
     try {
       const messages = [{ role: "system", content: systemInstruction }];
-      for (const turn of history.slice(-4)) {
-        messages.push({
-          role: (turn.sender === "user" || turn.role === "user") ? "user" : "assistant",
-          content: turn.text || "",
-        });
+      for (const turn of history.slice(-8)) {
+        const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
+        if (!text) continue;
+        const role = (turn.sender === "user" || turn.role === "user") ? "user" : "assistant";
+        messages.push({ role, content: text });
       }
       messages.push({ role: "user", content: prompt });
 
@@ -330,10 +330,13 @@ export async function streamVoiceResponse({
       if (geminiApiKey) {
         const client = new GoogleGenAI({ apiKey: geminiApiKey });
         const contents = [];
-        for (const turn of history.slice(-4)) {
+        for (const turn of history.slice(-8)) {
+          const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
+          if (!text) continue;
+          const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
           contents.push({
-            role: (turn.sender === "user" || turn.role === "user") ? "user" : "model",
-            parts: [{ text: turn.text || "" }],
+            role,
+            parts: [{ text }],
           });
         }
         contents.push({ role: "user", parts: [{ text: prompt }] });

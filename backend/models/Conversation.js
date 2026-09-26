@@ -55,9 +55,11 @@ conversationSchema.statics.getRecentTurns = async function (userId, limit = 6) {
     // Return the latest `limit` messages
     const recent = convo.messages.slice(-limit);
 
-    // Format for Gemini SDK contents: [{ role: "user"|"model", parts: [{ text }] }]
+    // Format for multi-provider compatibility (Groq, Gemini SDK, OpenAI)
     return recent.map((m) => ({
       role: m.role,
+      sender: m.role === "user" ? "user" : "ai",
+      text: m.text,
       parts: [{ text: m.text }],
     }));
   } catch (err) {

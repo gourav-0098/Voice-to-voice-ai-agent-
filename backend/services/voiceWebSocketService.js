@@ -52,11 +52,16 @@ export function setupVoiceWebSocket(httpServer) {
           console.log(`🗣️ [WS VOICE TURN] "${prompt.slice(0, 60)}" (Persona: ${persona}, Voice: ${voiceModel})`);
 
           // Fast RAG Grounding & History
-          const [adaptiveRag, qdrantMemories, recentHistory] = await Promise.all([
+          const [adaptiveRag, qdrantMemories, dbHistory] = await Promise.all([
             adaptiveRagService.getPersonaGrounding(prompt, persona).catch(() => ({ contextPrompt: "", ragSource: null })),
             memoryService.searchUserMemory(prompt, userIdentifier, 2).catch(() => []),
-            authenticatedUser ? Conversation.getRecentTurns(authenticatedUser._id, 4).catch(() => []) : Promise.resolve([]),
+            authenticatedUser ? Conversation.getRecentTurns(authenticatedUser._id, 8).catch(() => []) : Promise.resolve([]),
           ]);
+
+          // Prefer real-time client history if provided, falling back to database turns
+          const recentHistory = (Array.isArray(data.history) && data.history.length > 0)
+            ? data.history
+            : dbHistory;
 
           // Send RAG telemetry event to frontend immediately
           if (ws.readyState === WebSocket.OPEN) {
@@ -69,7 +74,7 @@ export function setupVoiceWebSocket(httpServer) {
 
           // Build dynamic instruction
           let dynamicInstruction = typeof aiService.getSystemInstruction === "function"
-            ? aiService.getSystemInstruction(persona)
+            ? aiService.getSystemInstruction(persona, voiceModel)
             : DEFAULT_SYSTEM_INSTRUCTION;
 
           if (adaptiveRag.contextPrompt) {

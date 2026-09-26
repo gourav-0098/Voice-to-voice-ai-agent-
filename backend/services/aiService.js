@@ -112,7 +112,11 @@ export function getSystemInstruction(personaKey = "conversational", voiceModel =
     `- NEVER echo or repeat tool execution commands.\n` +
     `- Always summarize tool findings into clear, natural, friendly conversational dialogue in 1 to 2 spoken sentences.\n\n` +
     `CRITICAL FOR HINDI & HINGLISH: If the user speaks or asks in Hindi or Hinglish, always answer in friendly, natural conversational Hinglish using the English/Latin alphabet (Romanized Hindi, e.g., ${gender === "female" ? "'Haan bilkul! Main aapki madad kar sakti hoon.'" : "'Haan bilkul! Main aapki madad kar sakta hoon.'"}). Never output Devanagari Hindi characters.\n` +
-    `Do NOT repeat or echo the user's question. Do NOT use markdown symbols, asterisks, hashtags, or bullet points so it sounds natural when spoken aloud via text-to-speech.\n\n`;
+    `Do NOT repeat or echo the user's question. Do NOT use markdown symbols, asterisks, hashtags, or bullet points so it sounds natural when spoken aloud via text-to-speech.\n\n` +
+    `[MULTI-TURN CONVERSATION MEMORY]:\n` +
+    `- You have direct access to the recent dialogue history in this active conversation.\n` +
+    `- ALWAYS maintain conversational continuity: remember the user's name, previous questions, topics discussed, preferences stated, and details mentioned earlier in this chat.\n` +
+    `- When the user refers to something said earlier (e.g. 'what was my last question?', 'who did I mention?', 'tell me more about what you just said'), seamlessly recall and reference it directly from the conversation history.\n\n`;
 
   if (personaKey === "andhbhakt") {
     instruction +=
@@ -210,12 +214,15 @@ async function callGemini({ prompt, history = [], systemInstruction }) {
   }
 
   const contents = [];
-  for (const turn of history.slice(-6)) {
-    const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
-    contents.push({
-      role,
-      parts: [{ text: turn.text || "" }],
-    });
+  for (const turn of history.slice(-8)) {
+    const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
+    if (text) {
+      const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
+      contents.push({
+        role,
+        parts: [{ text }],
+      });
+    }
   }
   contents.push({ role: "user", parts: [{ text: prompt }] });
 
@@ -317,10 +324,10 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "qwen
   ];
 
   // Append recent conversation history (last 6 turns)
-  for (const turn of history.slice(-6)) {
-    const role = (turn.sender === "user" || turn.role === "user") ? "user" : "assistant";
-    const content = turn.text || "";
+  for (const turn of history.slice(-8)) {
+    const content = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
     if (content) {
+      const role = (turn.sender === "user" || turn.role === "user") ? "user" : "assistant";
       messages.push({ role, content });
     }
   }
