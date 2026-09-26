@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -115,83 +115,285 @@ const PERSONA_OPTIONS = [
   { id: "andhbhakt", label: "Saffron Debater", desc: "Hyper-nationalist & GraphRAG", icon: "🚩" },
 ];
 
-const VOICE_OPTIONS = [
-  { id: "sarvam-aditya", label: "🇮🇳 Sarvam Aditya (Hindi Male 🔥)", desc: "SOTA Authentic Indian Hindi (Sarvam Bulbul)" },
-  { id: "sarvam-shubh", label: "🇮🇳 Sarvam Shubh (Hindi Male)", desc: "Authoritative & Clear (Sarvam Bulbul)" },
-  { id: "sarvam-priya", label: "🇮🇳 Sarvam Priya (Hindi Female)", desc: "Warm & Natural Hindi (Sarvam Bulbul)" },
-  { id: "sarvam-ritu", label: "🇮🇳 Sarvam Ritu (Hindi Female)", desc: "Expressive & Conversational (Sarvam Bulbul)" },
-  { id: "flux-alexis-en", label: "Alexis (English)", desc: "Expressive & Conversational (Deepgram)" },
-  { id: "aura-asteria-en", label: "Asteria (English)", desc: "Warm & Natural Female (Deepgram)" },
-  { id: "aura-orion-en", label: "Orion (English)", desc: "Confident English Male (Deepgram)" },
-  { id: "hi-IN-MadhurNeural", label: "Madhur (Edge Neural)", desc: "Edge Neural Hindi Backup" },
+export interface VoiceOption {
+  id: string;
+  label: string;
+  desc: string;
+  lang: "hi" | "en";
+  provider: "Sarvam Bulbul" | "Deepgram Aura" | "Deepgram Flux" | "Edge Neural";
+  gender: "Male" | "Female";
+  badge: string;
+}
+
+const VOICE_OPTIONS: VoiceOption[] = [
+  // 🇮🇳 Hindi / Hinglish Voices (Sarvam Bulbul SOTA + Edge Neural Backup)
+  {
+    id: "sarvam-aditya",
+    label: "🇮🇳 Sarvam Aditya (Hindi Male 🔥)",
+    desc: "SOTA Authentic Indian Inflection & Saffron Debater",
+    lang: "hi",
+    provider: "Sarvam Bulbul",
+    gender: "Male",
+    badge: "BULBUL-V3",
+  },
+  {
+    id: "sarvam-shubh",
+    label: "🇮🇳 Sarvam Shubh (Hindi Male)",
+    desc: "Authoritative & Clear Hindi News Cadence",
+    lang: "hi",
+    provider: "Sarvam Bulbul",
+    gender: "Male",
+    badge: "BULBUL-V3",
+  },
+  {
+    id: "sarvam-ashutosh",
+    label: "🇮🇳 Sarvam Ashutosh (Hindi Male)",
+    desc: "Deep, Confident & Powerful Debate Tone",
+    lang: "hi",
+    provider: "Sarvam Bulbul",
+    gender: "Male",
+    badge: "BULBUL-V3",
+  },
+  {
+    id: "sarvam-priya",
+    label: "🇮🇳 Sarvam Priya (Hindi Female)",
+    desc: "Warm, Friendly & Natural Conversational Hindi",
+    lang: "hi",
+    provider: "Sarvam Bulbul",
+    gender: "Female",
+    badge: "BULBUL-V3",
+  },
+  {
+    id: "sarvam-ritu",
+    label: "🇮🇳 Sarvam Ritu (Hindi Female)",
+    desc: "Expressive & Conversational Hindi Female",
+    lang: "hi",
+    provider: "Sarvam Bulbul",
+    gender: "Female",
+    badge: "BULBUL-V3",
+  },
+  {
+    id: "hi-IN-MadhurNeural",
+    label: "🇮🇳 Madhur (Edge Neural Male)",
+    desc: "Microsoft Edge Neural Hindi Backup (Free)",
+    lang: "hi",
+    provider: "Edge Neural",
+    gender: "Male",
+    badge: "EDGE NEURAL",
+  },
+  {
+    id: "hi-IN-SwaraNeural",
+    label: "🇮🇳 Swara (Edge Neural Female)",
+    desc: "Microsoft Edge Neural Hindi Female (Free)",
+    lang: "hi",
+    provider: "Edge Neural",
+    gender: "Female",
+    badge: "EDGE NEURAL",
+  },
+
+  // 🇬🇧 English Voices (Deepgram Flux & Aura Models)
+  {
+    id: "flux-alexis-en",
+    label: "Alexis (English)",
+    desc: "Expressive & Highly Conversational (Deepgram Flux)",
+    lang: "en",
+    provider: "Deepgram Flux",
+    gender: "Female",
+    badge: "DEEPGRAM",
+  },
+  {
+    id: "aura-asteria-en",
+    label: "Asteria (English Female)",
+    desc: "Warm & Natural Female Voice (Deepgram Aura)",
+    lang: "en",
+    provider: "Deepgram Aura",
+    gender: "Female",
+    badge: "DEEPGRAM",
+  },
+  {
+    id: "aura-orion-en",
+    label: "Orion (English Male)",
+    desc: "Confident English Male Cadence (Deepgram Aura)",
+    lang: "en",
+    provider: "Deepgram Aura",
+    gender: "Male",
+    badge: "DEEPGRAM",
+  },
+  {
+    id: "aura-luna-en",
+    label: "Luna (English Female)",
+    desc: "Gentle, Calm & Natural Female (Deepgram Aura)",
+    lang: "en",
+    provider: "Deepgram Aura",
+    gender: "Female",
+    badge: "DEEPGRAM",
+  },
+  {
+    id: "aura-arcas-en",
+    label: "Arcas (English Male)",
+    desc: "Authoritative & Deep Tone (Deepgram Aura)",
+    lang: "en",
+    provider: "Deepgram Aura",
+    gender: "Male",
+    badge: "DEEPGRAM",
+  },
 ];
+
+interface AudioChunkItem {
+  audio: HTMLAudioElement;
+  text: string;
+  index: number;
+  format: string;
+}
 
 /**
  * Pipelined Audio Stream Queue for Sub-300ms Seamless Voice Playback.
- * Plays the first sentence audio immediately while following sentences are queued and played seamlessly.
+ * Ensures strict in-order sequential playback, zero freezing via playback watchdogs,
+ * dynamic format handling (MP3 vs WAV), and smooth audio gap bridging.
  */
 class AudioStreamQueue {
-  private queue: { audio: HTMLAudioElement; text: string; index: number }[] = [];
+  private chunksMap = new Map<number, AudioChunkItem>();
+  private nextPlayIndex = 0;
   private isPlaying = false;
   private currentAudio: HTMLAudioElement | null = null;
+  private watchdogTimer: any = null;
+  private waitMissingTimer: any = null;
   public onStartSpeaking?: () => void;
   public onStopSpeaking?: () => void;
   public onChunkStart?: (chunk: { index: number; text: string }) => void;
 
+  public reset(startIndex = 0) {
+    this.stop();
+    this.nextPlayIndex = startIndex;
+    this.chunksMap.clear();
+  }
+
   enqueue(base64Audio: string, format: string = "audio/wav", text: string = "", index: number = 0) {
+    if (!base64Audio) return;
+
     try {
-      const audioSrc = `data:${format};base64,${base64Audio}`;
+      let mime = format;
+      if (!mime || mime === "linear16") mime = "audio/wav";
+      if (base64Audio.startsWith("//u") || base64Audio.startsWith("/+M") || base64Audio.startsWith("SUQz")) {
+        mime = "audio/mp3";
+      }
+
+      const audioSrc = `data:${mime};base64,${base64Audio}`;
       const audio = new Audio(audioSrc);
+      audio.preload = "auto";
       audio.volume = 1.0;
-      this.queue.push({ audio, text, index });
+
+      this.chunksMap.set(index, { audio, text, index, format: mime });
+
       if (!this.isPlaying) {
-        this.playNext();
+        this.checkAndPlayNext();
       }
     } catch (e) {
       console.warn("Failed to enqueue audio chunk:", e);
     }
   }
 
-  private playNext() {
-    if (this.queue.length === 0) {
-      this.isPlaying = false;
-      this.currentAudio = null;
-      if (this.onStopSpeaking) this.onStopSpeaking();
+  private clearWatchdog() {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
+  private clearWaitMissingTimer() {
+    if (this.waitMissingTimer) {
+      clearTimeout(this.waitMissingTimer);
+      this.waitMissingTimer = null;
+    }
+  }
+
+  private checkAndPlayNext() {
+    this.clearWatchdog();
+    this.clearWaitMissingTimer();
+
+    // 1. If exact next expected chunk is present, play immediately
+    if (this.chunksMap.has(this.nextPlayIndex)) {
+      const nextItem = this.chunksMap.get(this.nextPlayIndex)!;
+      this.chunksMap.delete(this.nextPlayIndex);
+      this.playChunk(nextItem);
       return;
     }
 
+    // 2. If map has future chunks but current index hasn't arrived
+    const availableIndices = Array.from(this.chunksMap.keys()).sort((a, b) => a - b);
+    if (availableIndices.length > 0) {
+      const lowestIndex = availableIndices[0];
+      if (lowestIndex > this.nextPlayIndex) {
+        // Wait up to 1.2s for missing chunk, then skip forward to avoid freeze
+        this.waitMissingTimer = setTimeout(() => {
+          console.warn(`⚠️ [AUDIO QUEUE] Skipped missing chunk #${this.nextPlayIndex} -> jumping to #${lowestIndex}`);
+          this.nextPlayIndex = lowestIndex;
+          this.checkAndPlayNext();
+        }, 1200);
+        return;
+      }
+    }
+
+    // 3. Queue is currently empty or waiting for further chunks
+    this.isPlaying = false;
+    this.currentAudio = null;
+    if (this.onStopSpeaking) this.onStopSpeaking();
+  }
+
+  private playChunk(item: AudioChunkItem) {
     this.isPlaying = true;
-    const nextItem = this.queue.shift()!;
-    this.currentAudio = nextItem.audio;
+    this.currentAudio = item.audio;
+
     if (this.onStartSpeaking) this.onStartSpeaking();
-    if (this.onChunkStart) this.onChunkStart({ index: nextItem.index, text: nextItem.text });
+    if (this.onChunkStart) this.onChunkStart({ index: item.index, text: item.text });
 
-    nextItem.audio.onended = () => {
-      this.playNext();
+    const advance = () => {
+      this.clearWatchdog();
+      item.audio.onended = null;
+      item.audio.onerror = null;
+      this.nextPlayIndex++;
+      this.checkAndPlayNext();
     };
 
-    nextItem.audio.onerror = () => {
-      this.playNext();
+    item.audio.onended = advance;
+    item.audio.onerror = (e) => {
+      console.warn(`⚠️ [AUDIO PLAYBACK] Chunk #${item.index} error:`, e);
+      advance();
     };
 
-    const promise = nextItem.audio.play();
-    if (promise !== undefined) {
-      promise.catch(() => {
-        this.playNext();
+    // Watchdog: If audio stalls, freezes or doesn't fire onended within 12 seconds
+    this.watchdogTimer = setTimeout(() => {
+      console.warn(`⚠️ [AUDIO WATCHDOG] Chunk #${item.index} timed out, forcing advance`);
+      try {
+        item.audio.pause();
+      } catch (_) {}
+      advance();
+    }, 12000);
+
+    const playPromise = item.audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn(`⚠️ [AUDIO PLAYBACK] Chunk #${item.index} play catch:`, err?.message || err);
+        advance();
       });
     }
   }
 
   stop() {
-    this.queue = [];
+    this.clearWatchdog();
+    this.clearWaitMissingTimer();
+    this.chunksMap.clear();
+
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
+        this.currentAudio.src = "";
       } catch (_) {}
       this.currentAudio = null;
     }
     this.isPlaying = false;
+    this.nextPlayIndex = 0;
     if (this.onStopSpeaking) this.onStopSpeaking();
   }
 }
@@ -226,7 +428,8 @@ export default function VoicePage() {
   }, []);
   const isDark = mounted ? resolvedTheme === "dark" : true;
   const [conversationMode, setConversationMode] = useState<"voice-only" | "voice-chat" | "text-only">("voice-chat");
-  const [selectedVoice, setSelectedVoice] = useState<string>("flux-alexis-en");
+  const [selectedLanguage, setSelectedLanguage] = useState<"all" | "hi" | "en">("all");
+  const [selectedVoice, setSelectedVoice] = useState<string>("sarvam-aditya");
   const [selectedPersona, setSelectedPersona] = useState<string>("conversational");
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [handsFree, setHandsFree] = useState(false);
@@ -265,6 +468,7 @@ export default function VoicePage() {
 
   // Streaming Voice & Audio Queue Refs
   const audioQueueRef = useRef<AudioStreamQueue>(new AudioStreamQueue());
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
   const voiceWsRef = useRef<WebSocket | null>(null);
   const [lastTtfa, setLastTtfa] = useState<number | null>(null);
   const currentStreamTextRef = useRef<string>("");
@@ -327,12 +531,36 @@ export default function VoicePage() {
     }
   }, [isAiSpeaking, isAiLoading, interimText, listening]);
 
+  // Audio Stream Queue speaking listeners
+  useEffect(() => {
+    const queue = audioQueueRef.current;
+    queue.onStartSpeaking = () => {
+      setIsAiSpeaking(true);
+      stopListeningRef.current(false);
+    };
+    queue.onStopSpeaking = () => {
+      setIsAiSpeaking(false);
+      if (handsFreeRef.current && isStartedRef.current) {
+        setTimeout(() => {
+          startListeningRef.current();
+        }, 450);
+      }
+    };
+    return () => {
+      queue.stop();
+    };
+  }, []);
+
   // Preferences synchronization
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedMode = localStorage.getItem("chatly_mode") as any;
       if (savedMode && ["voice-only", "voice-chat", "text-only"].includes(savedMode)) {
         setConversationMode(savedMode);
+      }
+      const savedLang = localStorage.getItem("chatly_voice_language") as any;
+      if (savedLang && ["all", "hi", "en"].includes(savedLang)) {
+        setSelectedLanguage(savedLang);
       }
       const savedVoice = localStorage.getItem("chatly_voice");
       if (savedVoice) {
@@ -348,6 +576,31 @@ export default function VoicePage() {
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
   };
+
+  const handleLanguageFilterChange = (lang: "all" | "hi" | "en") => {
+    setSelectedLanguage(lang);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("chatly_voice_language", lang);
+    }
+    const matching = VOICE_OPTIONS.filter((v) => lang === "all" || v.lang === lang);
+    if (!matching.some((v) => v.id === selectedVoice)) {
+      const defaultVoiceForLang =
+        lang === "hi"
+          ? "sarvam-aditya"
+          : lang === "en"
+          ? "flux-alexis-en"
+          : matching[0]?.id || "sarvam-aditya";
+      setSelectedVoice(defaultVoiceForLang);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("chatly_voice", defaultVoiceForLang);
+      }
+    }
+  };
+
+  const filteredVoices = useMemo(() => {
+    if (selectedLanguage === "all") return VOICE_OPTIONS;
+    return VOICE_OPTIONS.filter((v) => v.lang === selectedLanguage);
+  }, [selectedLanguage]);
 
   const handleVoiceChange = (voiceId: string) => {
     setSelectedVoice(voiceId);
@@ -522,6 +775,12 @@ export default function VoicePage() {
 
   // Text-To-Speech Interruption
   const stopAiSpeaking = useCallback(() => {
+    if (activeAbortControllerRef.current) {
+      try {
+        activeAbortControllerRef.current.abort();
+      } catch (_) {}
+      activeAbortControllerRef.current = null;
+    }
     audioQueueRef.current.stop();
     if (audioPlayerRef.current) {
       try {
@@ -720,6 +979,10 @@ export default function VoicePage() {
 
     // 1. Halt any previous speech & stop listening
     stopAiSpeaking();
+    audioQueueRef.current.reset(0);
+
+    const controller = new AbortController();
+    activeAbortControllerRef.current = controller;
 
     const promptText = text.trim();
     const userMsg: ChatMessage = {
@@ -810,11 +1073,13 @@ export default function VoicePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           text: promptText,
           message: promptText,
           voiceModel: selectedVoice,
           persona: selectedPersona,
+          language: selectedLanguage,
         }),
       });
 
@@ -886,6 +1151,11 @@ export default function VoicePage() {
         }
       }
     } catch (streamErr: any) {
+      if (streamErr?.name === "AbortError") {
+        console.log("⏹️ [STREAMING] Voice stream aborted by user interruption");
+        setIsAiLoading(false);
+        return;
+      }
       console.warn("Streaming voice pipeline warning, trying legacy fallback:", streamErr);
 
       // 3. Fallback to Legacy /api/voice endpoint
@@ -1505,30 +1775,87 @@ export default function VoicePage() {
         </div>
       </div>
 
-      {/* DEEPGRAM VOICE SELECTOR */}
+      {/* LANGUAGE & NEURAL VOICE MODEL SELECTOR */}
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
-          Neural Voice Model
-        </label>
-        <div className="space-y-1.5">
-          {VOICE_OPTIONS.map((v) => {
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
+            Voice Model
+          </label>
+          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+            {filteredVoices.length} {filteredVoices.length === 1 ? "voice" : "voices"}
+          </span>
+        </div>
+
+        {/* Dynamic Language Selection Segmented Control */}
+        <div className="grid grid-cols-3 gap-1 p-1 mb-2.5 rounded-xl border text-[11px] font-medium bg-slate-100 border-slate-200 dark:bg-white/[0.03] dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => handleLanguageFilterChange("all")}
+            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
+              selectedLanguage === "all"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-zinc-800 dark:text-white font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
+            }`}
+          >
+            🌐 All
+          </button>
+          <button
+            type="button"
+            onClick={() => handleLanguageFilterChange("hi")}
+            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
+              selectedLanguage === "hi"
+                ? "bg-white text-orange-700 shadow-xs dark:bg-orange-500/20 dark:text-orange-300 font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
+            }`}
+          >
+            🇮🇳 Hindi
+          </button>
+          <button
+            type="button"
+            onClick={() => handleLanguageFilterChange("en")}
+            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
+              selectedLanguage === "en"
+                ? "bg-white text-blue-700 shadow-xs dark:bg-blue-500/20 dark:text-blue-300 font-semibold"
+                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
+            }`}
+          >
+            🇬🇧 English
+          </button>
+        </div>
+
+        {/* Filtered Voice Models List */}
+        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+          {filteredVoices.map((v: VoiceOption) => {
             const isSelected = selectedVoice === v.id;
             return (
               <button
                 key={v.id}
                 type="button"
                 onClick={() => handleVoiceChange(v.id)}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl border text-xs transition cursor-pointer flex items-center justify-between ${
+                className={`w-full text-left px-3 py-2.5 rounded-xl border text-xs transition cursor-pointer flex items-center justify-between gap-2 ${
                   isSelected
-                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
+                    ? "border-emerald-600 bg-emerald-50/90 text-emerald-950 shadow-xs dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs dark:border-white/5 dark:bg-white/[0.02] dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
                 }`}
               >
-                <div>
-                  <p className="font-medium">{v.label}</p>
-                  <p className="text-[10px] text-slate-500 dark:text-zinc-500">{v.desc}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <p className="font-medium truncate text-xs">{v.label}</p>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase tracking-wider shrink-0 ${
+                        v.provider === "Sarvam Bulbul"
+                          ? "bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30"
+                          : v.provider === "Edge Neural"
+                          ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30"
+                          : "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30"
+                      }`}
+                    >
+                      {v.badge}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-500 truncate">{v.desc}</p>
                 </div>
-                {isSelected && <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>}
+                {isSelected && <span className="text-emerald-600 dark:text-emerald-400 text-sm shrink-0">✓</span>}
               </button>
             );
           })}

@@ -106,45 +106,72 @@ export function createDeepgramTtsStream(voiceModel = "aura-asteria-en", onAudioC
   };
 }
 
+import { generateSpeech } from "./deepgramTtsService.js";
+
 /**
- * Fast REST fallback synthesizer for single sentences or clauses.
- * Returns base64 WAV/linear16 audio data.
+ * Multi-engine synthesizer for single sentences or clauses.
+ * Routes to Sarvam AI Bulbul (Hindi/Hinglish), Edge Neural (backup), or Deepgram (English).
+ * Returns { audioBase64, format, text, model }.
  */
 export async function synthesizeSentenceAudio(sentenceText, voiceModel = "aura-asteria-en") {
   const clean = cleanForVoice(sentenceText);
   if (!clean) return null;
 
-  const targetModel = voiceModel || "aura-asteria-en";
-  const endpoint = targetModel.startsWith("aura-") ? "v1" : "v2";
-  const url = `https://api.deepgram.com/${endpoint}/speak?model=${encodeURIComponent(targetModel)}&encoding=linear16&sample_rate=24000`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${DEEPGRAM_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ text: clean }),
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Deepgram TTS HTTP error ${resp.status}`);
+  try {
+    const result = await generateSpeech(clean, voiceModel);
+    if (result && result.audioBase64) {
+      return {
+        audioBase64: result.audioBase64,
+        format: result.format || (result.audioBase64.startsWith("//u") || result.format === "audio/mp3" ? "audio/mp3" : "audio/wav"),
+        sizeBytes: result.audioBase64.length,
+        text: clean,
+        model: result.model || voiceModel,
+      };
+    }
+  } catch (err) {
+    console.warn(`⚠️ [STREAMING SYNTHESIS] Error for "${clean.slice(0, 30)}":`, err.message);
   }
 
-  const arrayBuffer = await resp.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return {
-    audioBase64: buffer.toString("base64"),
-    format: "audio/wav",
-    sizeBytes: buffer.length,
-    text: clean,
-  };
+  return null;
+}
+
+/**
+ * Helper to identify natural sentence or clause boundary.
+ * Supports English punctuation (. ? ! ;), Hindi/Devanagari danda (। ॥),
+ * newlines, and clause breaking.
+ */
+function findSentenceBoundary(buffer) {
+  // 1. Full stop punctuation including Devanagari danda: . ? ! ; \n । ॥
+  const puncMatch = buffer.match(/([.?!;\n\u0964\u0965])(\s+|$)/);
+  if (puncMatch && puncMatch.index !== undefined) {
+    return puncMatch.index + puncMatch[1].length;
+  }
+
+  // 2. Clause break: comma after at least 7 words and 30 characters
+  const words = buffer.trim().split(/\s+/);
+  if (words.length >= 7 && buffer.length >= 30) {
+    const commaMatch = buffer.match(/([,])\s+/);
+    if (commaMatch && commaMatch.index !== undefined && commaMatch.index >= 18) {
+      return commaMatch.index + 1;
+    }
+  }
+
+  // 3. Overflow protection: If buffer exceeds 110 characters without punctuation, break on last space
+  if (buffer.length > 110) {
+    const lastSpace = buffer.lastIndexOf(" ");
+    if (lastSpace > 40) {
+      return lastSpace + 1;
+    }
+  }
+
+  return -1;
 }
 
 /**
  * Streaming LLM Orchestrator
  * Streams tokens from Groq or Gemini, buffers into natural sentence chunks,
- * and feeds sentences concurrently into speech synthesis for sub-300ms audio delivery.
+ * synthesizes sentences concurrently across Sarvam/Edge/Deepgram, and delivers
+ * in-order audio chunks with zero SSE freezing.
  */
 export async function streamVoiceResponse({
   prompt,
@@ -162,37 +189,61 @@ export async function streamVoiceResponse({
   let currentSentenceBuffer = "";
   let sentenceIndex = 0;
 
-  // Helper to trigger sentence synthesis immediately
-  const triggerSentenceSynthesis = async (sentenceText) => {
+  // In-order audio delivery sequencer
+  const completedChunks = new Map();
+  let nextEmitIndex = 0;
+  const inFlightTasks = [];
+
+  const flushOrderedChunks = () => {
+    while (completedChunks.has(nextEmitIndex)) {
+      const payload = completedChunks.get(nextEmitIndex);
+      completedChunks.delete(nextEmitIndex);
+      if (payload && onAudioChunk) {
+        if (!firstAudioTime) {
+          firstAudioTime = Date.now() - t0;
+          console.log(`⚡⚡ [REAL-TIME STREAMING] Time-to-First-Audio: ${firstAudioTime}ms!`);
+        }
+        onAudioChunk(payload);
+      }
+      nextEmitIndex++;
+    }
+  };
+
+  const dispatchSentenceSynthesis = (sentenceText) => {
     const clean = cleanForVoice(sentenceText);
     if (!clean || clean.length < 2) return;
 
     const sIndex = sentenceIndex++;
     const sStart = Date.now();
 
-    try {
-      const audioPayload = await synthesizeSentenceAudio(clean, voiceModel);
-      if (audioPayload && onAudioChunk) {
-        if (!firstAudioTime) {
-          firstAudioTime = Date.now() - t0;
-          console.log(`⚡⚡ [REAL-TIME STREAMING] Time-to-First-Audio: ${firstAudioTime}ms!`);
+    const task = (async () => {
+      try {
+        const audioPayload = await synthesizeSentenceAudio(clean, voiceModel);
+        if (audioPayload && audioPayload.audioBase64) {
+          completedChunks.set(sIndex, {
+            index: sIndex,
+            text: clean,
+            audio: audioPayload.audioBase64,
+            format: audioPayload.format || "audio/wav",
+            latencyMs: Date.now() - sStart,
+            totalElapsedMs: Date.now() - t0,
+            model: audioPayload.model,
+          });
+        } else {
+          completedChunks.set(sIndex, null);
         }
+      } catch (err) {
+        console.warn(`⚠️ [STREAMING TTS] Failed chunk #${sIndex}:`, err.message);
+        completedChunks.set(sIndex, null);
+      } finally {
+        flushOrderedChunks();
+        if (onSentenceComplete) {
+          onSentenceComplete({ index: sIndex, text: clean });
+        }
+      }
+    })();
 
-        onAudioChunk({
-          index: sIndex,
-          text: clean,
-          audio: audioPayload.audioBase64,
-          format: audioPayload.format,
-          latencyMs: Date.now() - sStart,
-          totalElapsedMs: Date.now() - t0,
-        });
-      }
-      if (onSentenceComplete) {
-        onSentenceComplete({ index: sIndex, text: clean });
-      }
-    } catch (err) {
-      console.warn(`⚠️ [STREAMING TTS] Failed to synthesize chunk #${sIndex}:`, err.message);
-    }
+    inFlightTasks.push(task);
   };
 
   // 1. Try Groq Streaming first (Ultra-low latency ~80ms first token)
@@ -256,18 +307,11 @@ export async function streamVoiceResponse({
                   onTokenDelta(token);
                 }
 
-                // Check for sentence/clause boundary: '.', '?', '!', '\n', or ',' after >= 7 words
-                const wordCount = currentSentenceBuffer.trim().split(/\s+/).length;
-                const boundaryMatch = currentSentenceBuffer.match(/([.?!;\n])\s+/);
-                const clauseMatch = wordCount >= 7 && currentSentenceBuffer.match(/(,)\s+/);
-
-                if (boundaryMatch || clauseMatch) {
-                  const match = boundaryMatch || clauseMatch;
-                  const cutIdx = match.index + 1;
+                const cutIdx = findSentenceBoundary(currentSentenceBuffer);
+                if (cutIdx > 0) {
                   const complete = currentSentenceBuffer.substring(0, cutIdx).trim();
                   currentSentenceBuffer = currentSentenceBuffer.substring(cutIdx).trim();
-
-                  triggerSentenceSynthesis(complete);
+                  dispatchSentenceSynthesis(complete);
                 }
               }
             } catch (_) {}
@@ -309,12 +353,11 @@ export async function streamVoiceResponse({
 
             if (onTokenDelta) onTokenDelta(token);
 
-            const match = currentSentenceBuffer.match(/([.?!;\n])\s+/);
-            if (match) {
-              const cutIdx = match.index + 1;
+            const cutIdx = findSentenceBoundary(currentSentenceBuffer);
+            if (cutIdx > 0) {
               const complete = currentSentenceBuffer.substring(0, cutIdx).trim();
               currentSentenceBuffer = currentSentenceBuffer.substring(cutIdx).trim();
-              triggerSentenceSynthesis(complete);
+              dispatchSentenceSynthesis(complete);
             }
           }
         }
@@ -326,7 +369,17 @@ export async function streamVoiceResponse({
 
   // Flush remaining buffer
   if (currentSentenceBuffer.trim()) {
-    await triggerSentenceSynthesis(currentSentenceBuffer.trim());
+    dispatchSentenceSynthesis(currentSentenceBuffer.trim());
+    currentSentenceBuffer = "";
+  }
+
+  // CRITICAL: Await all in-flight sentence syntheses so all chunks are delivered before SSE finishes
+  if (inFlightTasks.length > 0) {
+    await Promise.race([
+      Promise.allSettled(inFlightTasks),
+      new Promise((resolve) => setTimeout(resolve, 8000)),
+    ]);
+    flushOrderedChunks();
   }
 
   const cleanFullText = cleanForVoice(fullGeneratedText);
