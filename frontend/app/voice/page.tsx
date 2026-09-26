@@ -9,6 +9,7 @@ import VisualizerCanvas, { VisualizerState } from "./components/VisualizerCanvas
 import { ThemeToggle } from "../components/ThemeToggle";
 import GroundingSourceDrawer, { GroundingDrawerData } from "./components/GroundingSourceDrawer";
 import DebateArenaModal from "./components/DebateArenaModal";
+import SettingsPanel from "./components/SettingsPanel";
 import { exportConversationTranscript, exportAudioFile } from "./utils/exportUtils";
 
 // Extend Window interface for Web Speech API
@@ -119,13 +120,24 @@ export interface VoiceOption {
   id: string;
   label: string;
   desc: string;
-  lang: "hi" | "en";
-  provider: "Sarvam Bulbul" | "Deepgram Aura" | "Deepgram Flux" | "Edge Neural";
-  gender: "Male" | "Female";
+  lang: "hi" | "en" | "all";
+  provider: "Sarvam Bulbul" | "Deepgram Aura" | "Deepgram Flux" | "Edge Neural" | "Auto Engine";
+  gender: "Male" | "Female" | "Dynamic";
   badge: string;
 }
 
 const VOICE_OPTIONS: VoiceOption[] = [
+  // 🌐 Smart Automatic Voice Routing (Deepgram for English, Sarvam for Hindi/Hinglish)
+  {
+    id: "auto",
+    label: "🌐 Auto-Adaptive (Smart Switch)",
+    desc: "English -> Deepgram Flux | Hindi/Hinglish -> Sarvam Bulbul",
+    lang: "all",
+    provider: "Auto Engine",
+    gender: "Dynamic",
+    badge: "SMART AUTO",
+  },
+
   // 🇮🇳 Hindi / Hinglish Voices (Sarvam Bulbul SOTA + Edge Neural Backup)
   {
     id: "sarvam-aditya",
@@ -638,14 +650,14 @@ export default function VoicePage() {
     if (typeof window !== "undefined") {
       localStorage.setItem("chatly_voice_language", lang);
     }
-    const matching = VOICE_OPTIONS.filter((v) => lang === "all" || v.lang === lang);
+    const matching = VOICE_OPTIONS.filter((v) => lang === "all" || v.lang === lang || v.lang === "all");
     if (!matching.some((v) => v.id === selectedVoice)) {
       const defaultVoiceForLang =
         lang === "hi"
           ? "sarvam-aditya"
           : lang === "en"
           ? "flux-alexis-en"
-          : matching[0]?.id || "sarvam-aditya";
+          : "auto";
       setSelectedVoice(defaultVoiceForLang);
       if (typeof window !== "undefined") {
         localStorage.setItem("chatly_voice", defaultVoiceForLang);
@@ -655,7 +667,7 @@ export default function VoicePage() {
 
   const filteredVoices = useMemo(() => {
     if (selectedLanguage === "all") return VOICE_OPTIONS;
-    return VOICE_OPTIONS.filter((v) => v.lang === selectedLanguage);
+    return VOICE_OPTIONS.filter((v) => v.lang === selectedLanguage || v.lang === "all");
   }, [selectedLanguage]);
 
   const handleVoiceChange = (voiceId: string) => {
@@ -1716,433 +1728,36 @@ export default function VoicePage() {
   const isAdmin = currentUser?.role === "admin" || currentUser?.email === "r19216871@gamil.com";
 
   // =========================================================
-  // REUSABLE DASHBOARD SETTINGS CONTENT
-  // Rendered in Desktop Sidebar and Mobile Hamburger Drawer
+  // SHARED SETTINGS PANEL PROPS
   // =========================================================
-  const renderDashboardSettings = (isMobile: boolean = false) => (
-    <div className="flex flex-col h-full space-y-6">
-      {/* Brand & Close Button (for mobile) */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-black font-bold shadow-md shadow-emerald-500/20">
-            🎙️
-          </div>
-          <div>
-            <span className="font-bold text-base tracking-tight text-slate-900 dark:text-white">
-              Chatly AI
-            </span>
-            <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">
-              Control Panel
-            </span>
-          </div>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          {/* Theme Quick Toggle */}
-          <ThemeToggle />
-
-          {isMobile && (
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(false)}
-              aria-label="Close settings drawer"
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* USER PROFILE & LIVE QUOTA CARD */}
-      <div className="rounded-2xl p-4 border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.03] dark:border-white/10 dark:shadow-none">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs border border-emerald-500/30">
-              {currentUser ? currentUser.name.slice(0, 2).toUpperCase() : "👤"}
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                {currentUser ? currentUser.name : "Guest User"}
-              </p>
-              <p className="text-[10px] text-slate-500 dark:text-zinc-500 truncate max-w-[140px]">
-                {currentUser ? currentUser.email : "Not signed in"}
-              </p>
-            </div>
-          </div>
-
-          {currentUser ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="text-[11px] text-slate-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition cursor-pointer font-medium"
-            >
-              Sign Out
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setShowLoginModal(true);
-                if (isMobile) setMobileDrawerOpen(false);
-              }}
-              className="text-xs px-2.5 py-1 rounded-full bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition cursor-pointer shadow-xs"
-            >
-              Sign In
-            </button>
-          )}
-        </div>
-
-        {/* Quota Counters */}
-        <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
-          {isAdmin ? (
-            <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-medium">
-              <span>Account Plan</span>
-              <span>👑 Admin (Unlimited)</span>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
-                <span>Hourly Quota</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                  {quota ? `${quota.remainingHourly} / 5 calls` : "5 / 5 calls"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
-                <span>Daily Quota</span>
-                <span className="font-semibold text-sky-600 dark:text-cyan-400">
-                  {quota ? `${quota.remainingDaily} / 10 calls` : "10 / 10 calls"}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Personal Semantic Memory Indicator */}
-        <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-200 dark:border-white/10 text-[11px]">
-          <span className="flex items-center gap-1.5 text-sky-600 dark:text-cyan-400 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-pulse" />
-            Semantic Memory
-          </span>
-          <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-medium">Active (Qdrant)</span>
-        </div>
-      </div>
-
-      {/* CONVERSATION MODE SELECTOR */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
-          Conversation Mode
-        </label>
-        <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl border text-xs font-medium bg-slate-100 border-slate-200 dark:bg-white/[0.02] dark:border-white/10">
-          <button
-            type="button"
-            onClick={() => handleModeChange("voice-only")}
-            className={`py-2 rounded-xl cursor-pointer text-center transition ${
-              conversationMode === "voice-only"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            🎙️ Voice
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeChange("voice-chat")}
-            className={`py-2 rounded-xl cursor-pointer text-center transition ${
-              conversationMode === "voice-chat"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            💬 Split
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeChange("text-only")}
-            className={`py-2 rounded-xl cursor-pointer text-center transition ${
-              conversationMode === "text-only"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-white dark:text-black font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            ⌨️ Text
-          </button>
-        </div>
-      </div>
-
-      {/* AI PERSONA & CADENCE SELECTOR */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
-          AI Persona & Cadence
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          {PERSONA_OPTIONS.map((p) => {
-            const isSelected = selectedPersona === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handlePersonaChange(p.id)}
-                className={`text-left p-2.5 rounded-xl border text-xs transition cursor-pointer flex flex-col justify-between ${
-                  isSelected
-                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs dark:border-white/5 dark:bg-white/[0.02] dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-sm select-none">{p.icon}</span>
-                  <span className="font-medium text-xs">{p.label}</span>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-zinc-500 leading-tight">{p.desc}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* LANGUAGE & NEURAL VOICE MODEL SELECTOR */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
-            Voice Model
-          </label>
-          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-            {filteredVoices.length} {filteredVoices.length === 1 ? "voice" : "voices"}
-          </span>
-        </div>
-
-        {/* Dynamic Language Selection Segmented Control */}
-        <div className="grid grid-cols-3 gap-1 p-1 mb-2.5 rounded-xl border text-[11px] font-medium bg-slate-100 border-slate-200 dark:bg-white/[0.03] dark:border-white/10">
-          <button
-            type="button"
-            onClick={() => handleLanguageFilterChange("all")}
-            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
-              selectedLanguage === "all"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-zinc-800 dark:text-white font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            🌐 All
-          </button>
-          <button
-            type="button"
-            onClick={() => handleLanguageFilterChange("hi")}
-            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
-              selectedLanguage === "hi"
-                ? "bg-white text-orange-700 shadow-xs dark:bg-orange-500/20 dark:text-orange-300 font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            🇮🇳 Hindi
-          </button>
-          <button
-            type="button"
-            onClick={() => handleLanguageFilterChange("en")}
-            className={`py-1.5 rounded-lg cursor-pointer text-center transition font-medium ${
-              selectedLanguage === "en"
-                ? "bg-white text-blue-700 shadow-xs dark:bg-blue-500/20 dark:text-blue-300 font-semibold"
-                : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            🇬🇧 English
-          </button>
-        </div>
-
-        {/* Filtered Voice Models List */}
-        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
-          {filteredVoices.map((v: VoiceOption) => {
-            const isSelected = selectedVoice === v.id;
-            return (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => handleVoiceChange(v.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl border text-xs transition cursor-pointer flex items-center justify-between gap-2 ${
-                  isSelected
-                    ? "border-emerald-600 bg-emerald-50/90 text-emerald-950 shadow-xs dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 font-semibold"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs dark:border-white/5 dark:bg-white/[0.02] dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <p className="font-medium truncate text-xs">{v.label}</p>
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase tracking-wider shrink-0 ${
-                        v.provider === "Sarvam Bulbul"
-                          ? "bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30"
-                          : v.provider === "Edge Neural"
-                          ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30"
-                          : "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30"
-                      }`}
-                    >
-                      {v.badge}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 dark:text-zinc-500 truncate">{v.desc}</p>
-                </div>
-                {isSelected && <span className="text-emerald-600 dark:text-emerald-400 text-sm shrink-0">✓</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* INTERACTIVE TOGGLES: HANDS-FREE, MUTE, THEME */}
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
-          Preferences
-        </label>
-
-        {/* Hands-Free Toggle */}
-        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
-          <div>
-            <p className="text-xs font-medium text-slate-900 dark:text-white">
-              ✨ Hands-Free Mode
-            </p>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Auto re-opens mic after AI speaks</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setHandsFree(!handsFree)}
-            className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ${
-              handsFree ? "bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
-            }`}
-          >
-            <div
-              className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                handsFree ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Voice Audio Volume & Mute */}
-        <div className="p-3.5 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base select-none">
-                {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
-              </span>
-              <div>
-                <p className="text-xs font-medium text-slate-900 dark:text-white">
-                  Audio Output Volume
-                </p>
-                <p className="text-[10px] text-slate-500 dark:text-zinc-500">
-                  {voiceMuted ? "Sound muted" : `Volume at ${Math.round(volume * 100)}%`}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleToggleMute}
-              className={`px-2.5 py-1 text-[11px] rounded-full border cursor-pointer font-medium transition ${
-                voiceMuted
-                  ? "border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 font-semibold"
-                  : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
-              }`}
-            >
-              {voiceMuted ? "🔇 Muted" : "Mute"}
-            </button>
-          </div>
-
-          {/* Volume Slider Bar */}
-          <div className="flex items-center gap-3 pt-1">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={voiceMuted ? 0 : volume}
-              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-              className="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
-              aria-label="Audio output volume"
-            />
-            <span className="text-xs font-mono font-semibold text-slate-700 dark:text-zinc-300 w-9 text-right shrink-0">
-              {Math.round((voiceMuted ? 0 : volume) * 100)}%
-            </span>
-          </div>
-        </div>
-
-        {/* Theme Toggle */}
-        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
-          <div>
-            <p className="text-xs font-medium text-slate-900 dark:text-white">
-              {isDark ? "🌙 Dark Mode" : "☀️ Light Mode"}
-            </p>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Switch color theme</p>
-          </div>
-          <ThemeToggle />
-        </div>
-      </div>
-
-      {/* ACTIVE AI TOOLS BADGES */}
-      <div className="p-3.5 rounded-2xl border bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500 mb-2">
-          Active AI Tools
-        </p>
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
-            <span className="flex items-center gap-1.5">
-              <span>🌐</span>
-              <span>Live Web Search</span>
-            </span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Enabled</span>
-          </div>
-          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
-            <span className="flex items-center gap-1.5">
-              <span>📄</span>
-              <span>Web Page Scraper</span>
-            </span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Enabled</span>
-          </div>
-          <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
-            <span className="flex items-center gap-1.5">
-              <span>🧠</span>
-              <span>Semantic Memory</span>
-            </span>
-            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">Qdrant Cloud</span>
-          </div>
-        </div>
-      </div>
-
-      {/* QUICK ACTIONS & LINKS */}
-      <div className="pt-2 border-t border-slate-200 dark:border-white/10 space-y-2 text-xs">
-        {/* Debate Arena Launcher Button */}
-        <button
-          type="button"
-          onClick={() => {
-            setIsDebateModalOpen(true);
-            if (isMobile) setMobileDrawerOpen(false);
-          }}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-700 dark:text-amber-300 font-semibold hover:from-amber-500/25 hover:to-orange-500/25 transition cursor-pointer shadow-xs active:scale-98"
-        >
-          <span>⚔️</span>
-          <span>Open AI Debate Arena</span>
-        </button>
-
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={clearHistory}
-            className="w-full text-center py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300 hover:bg-red-500/20 transition cursor-pointer font-medium"
-          >
-            🗑️ Clear Conversation History
-          </button>
-        )}
-
-        <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400 pt-2">
-          <Link href="/dashboard" className="hover:text-slate-900 dark:hover:text-white transition">
-            Dashboard →
-          </Link>
-          {isAdmin && (
-            <Link href="/admin" className="text-amber-600 dark:text-amber-400 hover:underline transition font-medium">
-              👑 Admin Console
-            </Link>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const settingsPanelProps = {
+    currentUser,
+    quota,
+    isAdmin,
+    onSignIn: () => setShowLoginModal(true),
+    onSignOut: handleLogout,
+    conversationMode,
+    onModeChange: handleModeChange,
+    selectedPersona,
+    onPersonaChange: handlePersonaChange,
+    selectedLanguage,
+    onLanguageChange: handleLanguageFilterChange,
+    selectedVoice,
+    onVoiceChange: handleVoiceChange,
+    filteredVoices,
+    voiceMuted,
+    volume,
+    onToggleMute: handleToggleMute,
+    onVolumeChange: handleVolumeChange,
+    handsFree,
+    onHandsFreeChange: setHandsFree,
+    isDark,
+    activeModel,
+    hasMessages: messages.length > 0,
+    onClearHistory: clearHistory,
+    onOpenDebateArena: () => setIsDebateModalOpen(true),
+    lastTtfa,
+  };
 
   return (
     <div
@@ -2261,8 +1876,8 @@ export default function VoicePage() {
       {/* =====================================================
           1. LAPTOP / DESKTOP SIDEBAR DASHBOARD (>= lg)
       ===================================================== */}
-      <aside className="hidden lg:flex w-80 flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-6 overflow-y-auto shrink-0 transition-colors shadow-sm dark:shadow-none">
-        {renderDashboardSettings(false)}
+      <aside className="hidden lg:flex w-[22rem] flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-5 shrink-0 transition-colors shadow-sm dark:shadow-none overflow-hidden">
+        <SettingsPanel {...settingsPanelProps} isMobile={false} />
       </aside>
 
       {/* =====================================================
@@ -2277,8 +1892,12 @@ export default function VoicePage() {
           />
 
           {/* Sliding sheet */}
-          <div className="fixed inset-y-0 right-0 w-full max-w-sm p-6 overflow-y-auto border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl transition-transform">
-            {renderDashboardSettings(true)}
+          <div className="fixed inset-y-0 right-0 w-full max-w-sm p-5 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl flex flex-col">
+            <SettingsPanel
+              {...settingsPanelProps}
+              isMobile={true}
+              onClose={() => setMobileDrawerOpen(false)}
+            />
           </div>
         </div>
       )}

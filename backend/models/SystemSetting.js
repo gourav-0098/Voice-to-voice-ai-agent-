@@ -27,10 +27,12 @@ const systemSettingSchema = new mongoose.Schema(
 
 systemSettingSchema.statics.getSetting = async function (key, defaultValue = null) {
   try {
-    const doc = await this.findOne({ key });
+    if (mongoose.connection.readyState !== 1) {
+      return defaultValue;
+    }
+    const doc = await this.findOne({ key }).maxTimeMS(1200);
     return doc ? doc.value : defaultValue;
   } catch (err) {
-    console.warn(`SystemSetting get error for ${key}:`, err.message);
     return defaultValue;
   }
 };

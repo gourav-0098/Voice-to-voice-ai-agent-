@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "description": "Configurable Source Authority Registry for Chatly RAG",
+  "default_tiers": {
+    "tier_1_constitutional_government": {
+      "authority_score": 0.98,
+      "description": "Official constitutional bodies, government ministries, primary statistical institutes, and court judgments"
+    },
+    "tier_2_established_wires_and_press": {
+      "authority_score": 0.82,
+      "description": "Recognized national news agencies, established broadsheets, and peer-reviewed academic publishers"
+    },
+    "tier_3_fact_checkers": {
+      "authority_score": 0.85,
+      "description": "IFCN-certified fact-checking organizations and official fact-check desks"
+    },
+    "tier_4_general_web": {
+      "authority_score": 0.45,
+      "description": "General web pages, blogs, and commentary"
+    }
+  },
+  "sources": [
+    {
+      "pattern": "mospi.gov.in",
+      "name": "Ministry of Statistics and Programme Implementation (MoSPI)",
+      "type": "government_official",
+      "authority_score": 0.99,
+      "primary_topics": ["employment", "gdp", "inflation", "cpi", "plfs", "statistics"]
+    },
+    {
+      "pattern": "rbi.org.in",
+      "name": "Reserve Bank of India (RBI)",
+      "type": "government_official",
+      "authority_score": 0.99,
+      "primary_topics": ["repo_rate", "banking", "currency", "monetary_policy", "reserves", "inflation"]
+    },
+    {
+      "pattern": "eci.gov.in",
+      "name": "Election Commission of India (ECI)",
+      "type": "constitutional_body",
+      "authority_score": 0.99,
+      "primary_topics": ["elections", "voter_turnout", "results", "model_code_of_conduct"]
+    },
+    {
+      "pattern": "main.sci.gov.in",
+      "name": "Supreme Court of India",
+      "type": "constitutional_court",
+      "authority_score": 0.99,
+      "primary_topics": ["judgments", "constitution", "article_370", "legal_rulings"]
+    },
+    {
+      "pattern": "pib.gov.in",
+      "name": "Press Information Bureau (PIB)",
+      "type": "government_press",
+      "authority_score": 0.95,
+      "primary_topics": ["cabinet_decisions", "schemes", "government_releases", "announcements"]
+    },
+    {
+      "pattern": "isro.gov.in",
+      "name": "Indian Space Research Organisation (ISRO)",
+      "type": "scientific_body",
+      "authority_score": 0.99,
+      "primary_topics": ["space", "chandrayaan", "gaganyaan", "aditya_l1", "satellites"]
+    },
+    {
+      "pattern": ".gov.in",
+      "name": "Government of India Portal",
+      "type": "government_official",
+      "authority_score": 0.92,
+      "primary_topics": ["governance", "public_policy"]
+    },
+    {
+      "pattern": ".nic.in",
+      "name": "National Informatics Centre (NIC)",
+      "type": "government_official",
+      "authority_score": 0.92,
+      "primary_topics": ["governance", "digital_india"]
+    },
+    {
+      "pattern": "who.int",
+      "name": "World Health Organization (WHO)",
+      "type": "international_body",
+      "authority_score": 0.95,
+      "primary_topics": ["health", "pandemic", "diseases"]
+    },
+    {
+      "pattern": "worldbank.org",
+      "name": "World Bank",
+      "type": "multilateral_institution",
+      "authority_score": 0.92,
+      "primary_topics": ["global_gdp", "poverty", "economic_indicators"]
+    },
+    {
+      "pattern": "imf.org",
+      "name": "International Monetary Fund (IMF)",
+      "type": "multilateral_institution",
+      "authority_score": 0.92,
+      "primary_topics": ["economic_growth", "forecasts", "debt"]
+    },
+    {
+      "pattern": "ptinews.com",
+      "name": "Press Trust of India (PTI)",
+      "type": "wire_service",
+      "authority_score": 0.85,
+      "primary_topics": ["national_news", "breaking", "politics"]
+    },
+    {
+      "pattern": "aniin.com",
+      "name": "Asian News International (ANI)",
+      "type": "wire_service",
+      "authority_score": 0.82,
+      "primary_topics": ["national_news", "politics", "interviews"]
+    },
+    {
+      "pattern": "thehindu.com",
+      "name": "The Hindu",
+      "type": "national_newspaper",
+      "authority_score": 0.83,
+      "primary_topics": ["national_news", "editorial", "judiciary"]
+    },
+    {
+      "pattern": "indianexpress.com",
+      "name": "The Indian Express",
+      "type": "national_newspaper",
+      "authority_score": 0.82,
+      "primary_topics": ["investigative", "governance", "politics"]
+    },
+    {
+      "pattern": "reuters.com",
+      "name": "Reuters",
+      "type": "wire_service",
+      "authority_score": 0.88,
+      "primary_topics": ["international", "markets", "economy"]
+    },
+    {
+      "pattern": "boomlive.in",
+      "name": "BOOM Live",
+      "type": "fact_checker",
+      "authority_score": 0.86,
+      "primary_topics": ["fact_checks", "viral_verification", "debunking"]
+    },
+    {
+      "pattern": "altnews.in",
+      "name": "Alt News",
+      "type": "fact_checker",
+      "authority_score": 0.85,
+      "primary_topics": ["fact_checks", "communal_claims", "misinformation"]
+    },
+    {
+      "pattern": "vishvasnews.com",
+      "name": "Vishvas News",
+      "type": "fact_checker",
+      "authority_score": 0.84,
+      "primary_topics": ["fact_checks", "social_media_claims"]
+    }
+  ]
+}

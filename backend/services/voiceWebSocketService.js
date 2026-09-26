@@ -6,6 +6,10 @@ import memoryService from "./memoryService.js";
 import adaptiveRagService from "./adaptiveRagService.js";
 import aiService, { DEFAULT_SYSTEM_INSTRUCTION } from "./aiService.js";
 import streamingVoiceService from "./streamingVoiceService.js";
+import { routeQuery } from "./queryRouter.js";
+import { buildEvidencePack } from "./evidencePackBuilder.js";
+import toolService from "./toolService.js";
+import groqMemoryWorker from "./groqMemoryWorker.js";
 
 /**
  * Attaches the real-time Voice WebSocket Server to the Node HTTP server.
@@ -51,12 +55,68 @@ export function setupVoiceWebSocket(httpServer) {
 
           console.log(`🗣️ [WS VOICE TURN] "${prompt.slice(0, 60)}" (Persona: ${persona}, Voice: ${voiceModel})`);
 
-          // Fast RAG Grounding & History
-          const [adaptiveRag, qdrantMemories, dbHistory] = await Promise.all([
-            adaptiveRagService.getPersonaGrounding(prompt, persona).catch(() => ({ contextPrompt: "", ragSource: null })),
-            memoryService.searchUserMemory(prompt, userIdentifier, 2).catch(() => []),
-            authenticatedUser ? Conversation.getRecentTurns(authenticatedUser._id, 8).catch(() => []) : Promise.resolve([]),
-          ]);
+          // Fast Deterministic Query Intelligence Router (< 2ms)
+          const route = routeQuery(prompt, { persona, historyLength: (data.history || []).length });
+          console.log(`🧭 [WS ROUTE] Intent: ${route.intent} | Mode: ${route.mode} | NeedsRAG: ${route.needsRag} | NeedsLiveSearch: ${route.needsLiveSearch} (${route.routerLatencyMs}ms)`);
+
+          let adaptiveRag = { contextPrompt: "", ragSource: null, groundingDetails: null, latencyMs: 0 };
+          let qdrantMemories = [];
+          let dbHistory = [];
+          let liveWebResult = null;
+          let evidencePack = null;
+
+          const retrievalTasks = [];
+
+          // 1. History retrieval
+          retrievalTasks.push(
+            (Array.isArray(data.history) && data.history.length > 0)
+              ? Promise.resolve([])
+              : (authenticatedUser ? Conversation.getRecentTurns(authenticatedUser._id, 8).catch(() => []) : Promise.resolve([]))
+          );
+
+          // 2. Memory retrieval (if not simple chit-chat)
+          if (route.intent === "MEMORY" || route.needsRag) {
+            retrievalTasks.push(memoryService.searchUserMemory(prompt, userIdentifier, 2).catch(() => []));
+          } else {
+            retrievalTasks.push(Promise.resolve([]));
+          }
+
+          // 3. Qdrant RAG Grounding (if needed)
+          if (route.needsRag) {
+            retrievalTasks.push(adaptiveRagService.getPersonaGrounding(prompt, persona).catch(() => ({ contextPrompt: "", ragSource: null })));
+          } else {
+            retrievalTasks.push(Promise.resolve({ contextPrompt: "", ragSource: null }));
+          }
+
+          // 4. Parallel Live Web Search (if current events / statement today)
+          if (route.needsLiveSearch) {
+            retrievalTasks.push(
+              toolService.webSearch(prompt).then((res) => ({ text: res, title: "Live Web Search" })).catch(() => null)
+            );
+          } else {
+            retrievalTasks.push(Promise.resolve(null));
+          }
+
+          // Execute all retrieval in PARALLEL
+          const [fetchedHistory, fetchedMemories, fetchedRag, fetchedWeb] = await Promise.all(retrievalTasks);
+          dbHistory = fetchedHistory || [];
+          qdrantMemories = fetchedMemories || [];
+          adaptiveRag = fetchedRag || adaptiveRag;
+          liveWebResult = fetchedWeb || null;
+
+          // Format clean Evidence Pack if RAG or Live Search was retrieved
+          const qdrantChunks = adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : [];
+          const webChunks = liveWebResult ? [liveWebResult] : [];
+
+          if (qdrantChunks.length > 0 || webChunks.length > 0) {
+            evidencePack = buildEvidencePack({
+              query: prompt,
+              topic: route.detectedTopic,
+              qdrantResults: qdrantChunks,
+              webResults: webChunks,
+              intent: route.intent,
+            });
+          }
 
           // Prefer real-time client history if provided, falling back to database turns
           const recentHistory = (Array.isArray(data.history) && data.history.length > 0)
@@ -67,8 +127,10 @@ export function setupVoiceWebSocket(httpServer) {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: "rag_grounded",
-              ragSource: adaptiveRag.ragSource,
-              latencyMs: adaptiveRag.latencyMs,
+              ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
+              latencyMs: adaptiveRag.latencyMs || route.routerLatencyMs,
+              citations: evidencePack?.uiCitations || [],
+              confidence: evidencePack?.confidenceLevel || "HIGH",
             }));
           }
 
@@ -77,7 +139,9 @@ export function setupVoiceWebSocket(httpServer) {
             ? aiService.getSystemInstruction(persona, voiceModel)
             : DEFAULT_SYSTEM_INSTRUCTION;
 
-          if (adaptiveRag.contextPrompt) {
+          if (evidencePack && evidencePack.spokenEvidenceContext) {
+            dynamicInstruction += `\n\n${evidencePack.spokenEvidenceContext}`;
+          } else if (adaptiveRag.contextPrompt) {
             dynamicInstruction += adaptiveRag.contextPrompt;
           }
           if (qdrantMemories && qdrantMemories.length > 0) {
@@ -110,7 +174,7 @@ export function setupVoiceWebSocket(httpServer) {
             },
           });
 
-          // Send Turn Completion
+          // Send Turn Completion with Full Latency Telemetry
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: "turn_complete",
@@ -118,15 +182,32 @@ export function setupVoiceWebSocket(httpServer) {
               firstAudioTimeMs: streamResult.firstAudioTimeMs,
               totalLatencyMs: streamResult.totalLatencyMs,
               sentenceCount: streamResult.sentenceCount,
-              ragSource: adaptiveRag.ragSource,
+              ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
+              telemetry: {
+                routeMs: route.routerLatencyMs,
+                ragMs: adaptiveRag.latencyMs || 0,
+                llmFirstTokenMs: streamResult.firstTokenTimeMs,
+                firstAudioMs: streamResult.firstAudioTimeMs,
+                totalMs: streamResult.totalLatencyMs,
+                confidence: evidencePack?.confidenceLevel || "HIGH",
+              },
             }));
           }
 
           // Persist conversation in MongoDB asynchronously
           if (authenticatedUser) {
             Conversation.appendTurn(authenticatedUser._id, prompt, streamResult.fullText).catch(() => {});
-            memoryService.saveUserMemory(`User: ${prompt} | Chatly: ${streamResult.fullText}`, userIdentifier).catch(() => {});
           }
+
+          // Asynchronously extract distilled, durable user memories in the background via Groq (Zero blocking latency)
+          setImmediate(() => {
+            groqMemoryWorker.extractMemoriesAsync({
+              userPrompt: prompt,
+              aiResponse: streamResult.fullText,
+              userId: userIdentifier,
+              intent: route.intent,
+            }).catch(() => {});
+          });
         }
       } catch (err) {
         console.error("❌ [WS MESSAGE ERROR]:", err.message);

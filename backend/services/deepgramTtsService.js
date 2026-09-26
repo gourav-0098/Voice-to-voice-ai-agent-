@@ -76,7 +76,20 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
     return null;
   }
 
-  const targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
+  let targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
+
+  // 0. Automatic Language-Adaptive Voice Routing
+  // If voiceModel is "auto", "auto-detect", or undefined, dynamically route based on Hindi/Hinglish markers
+  if (!targetModel || targetModel === "auto" || targetModel === "auto-detect" || targetModel === "default") {
+    const isHindi = isHindiOrHinglishSarvam(text);
+    if (isHindi) {
+      targetModel = "sarvam-aditya";
+      console.log(`🌐 [AUTO LANGUAGE TTS] Detected Hindi/Hinglish text -> Routing automatically to Sarvam AI Bulbul ('aditya')`);
+    } else {
+      targetModel = "flux-alexis-en";
+      console.log(`🌐 [AUTO LANGUAGE TTS] Detected English text -> Routing automatically to Deepgram ('flux-alexis-en')`);
+    }
+  }
 
   const isSarvamVoice = targetModel.startsWith("sarvam-") || ["aditya", "shubh", "priya", "ritu", "ashutosh"].includes(targetModel);
   const isEdgeVoice = targetModel.startsWith("hi-IN-") || targetModel.startsWith("en-IN-");

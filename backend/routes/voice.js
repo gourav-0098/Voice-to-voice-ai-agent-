@@ -7,6 +7,10 @@ import adaptiveRagService from "../services/adaptiveRagService.js";
 import deepgramTts from "../services/deepgramTtsService.js";
 import aiService, { DEFAULT_SYSTEM_INSTRUCTION } from "../services/aiService.js";
 import semanticCache from "../services/semanticCacheService.js";
+import { routeQuery } from "../services/queryRouter.js";
+import { buildEvidencePack } from "../services/evidencePackBuilder.js";
+import toolService from "../services/toolService.js";
+import groqMemoryWorker from "../services/groqMemoryWorker.js";
 
 const router = express.Router();
 
@@ -116,27 +120,83 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       return;
     }
 
-    // 1. Adaptive RAG Grounding + Memories
+    // 1. Fast Deterministic Query Intelligence Router (< 2ms)
+    const route = routeQuery(userText, { persona: selectedPersona, historyLength: (req.body.history || []).length });
+    console.log(`🧭 [SSE ROUTE] Intent: ${route.intent} | Mode: ${route.mode} | NeedsRAG: ${route.needsRag} | NeedsLiveSearch: ${route.needsLiveSearch} (${route.routerLatencyMs}ms)`);
+
+    let adaptiveRag = { contextPrompt: "", ragSource: null, groundingDetails: null, latencyMs: 0 };
+    let qdrantMemories = [];
+    let dbHistory = [];
+    let liveWebResult = null;
+    let evidencePack = null;
+
     const clientHistory = Array.isArray(req.body.history) && req.body.history.length > 0 ? req.body.history : null;
-    const [adaptiveRag, qdrantMemories, dbHistory] = await Promise.all([
-      adaptiveRagService.getPersonaGrounding(userText, selectedPersona).catch(() => ({ contextPrompt: "", ragSource: null })),
-      memoryService.searchUserMemory(userText, userIdentifier, 2).catch(() => []),
-      clientHistory ? Promise.resolve([]) : Conversation.getRecentTurns(user._id, 8).catch(() => []),
-    ]);
+    const retrievalTasks = [];
+
+    // History retrieval
+    retrievalTasks.push(clientHistory ? Promise.resolve([]) : Conversation.getRecentTurns(user._id, 8).catch(() => []));
+
+    // Memory retrieval
+    if (route.intent === "MEMORY" || route.needsRag) {
+      retrievalTasks.push(memoryService.searchUserMemory(userText, userIdentifier, 2).catch(() => []));
+    } else {
+      retrievalTasks.push(Promise.resolve([]));
+    }
+
+    // Qdrant RAG Grounding
+    if (route.needsRag) {
+      retrievalTasks.push(adaptiveRagService.getPersonaGrounding(userText, selectedPersona).catch(() => ({ contextPrompt: "", ragSource: null })));
+    } else {
+      retrievalTasks.push(Promise.resolve({ contextPrompt: "", ragSource: null }));
+    }
+
+    // Parallel Live Web Search
+    if (route.needsLiveSearch) {
+      retrievalTasks.push(
+        toolService.webSearch(userText).then((res) => ({ text: res, title: "Live Web Search" })).catch(() => null)
+      );
+    } else {
+      retrievalTasks.push(Promise.resolve(null));
+    }
+
+    // Execute all retrieval concurrently
+    const [fetchedDbHistory, fetchedMemories, fetchedRag, fetchedWeb] = await Promise.all(retrievalTasks);
+    dbHistory = fetchedDbHistory || [];
+    qdrantMemories = fetchedMemories || [];
+    adaptiveRag = fetchedRag || adaptiveRag;
+    liveWebResult = fetchedWeb || null;
+
+    // Build structured Evidence Pack
+    const qdrantChunks = adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : [];
+    const webChunks = liveWebResult ? [liveWebResult] : [];
+
+    if (qdrantChunks.length > 0 || webChunks.length > 0) {
+      evidencePack = buildEvidencePack({
+        query: userText,
+        topic: route.detectedTopic,
+        qdrantResults: qdrantChunks,
+        webResults: webChunks,
+        intent: route.intent,
+      });
+    }
 
     const recentHistory = clientHistory || dbHistory;
 
     sendEvent("rag", {
-      ragSource: adaptiveRag.ragSource,
+      ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
-      latencyMs: adaptiveRag.latencyMs,
+      latencyMs: adaptiveRag.latencyMs || route.routerLatencyMs,
+      citations: evidencePack?.uiCitations || [],
+      confidence: evidencePack?.confidenceLevel || "HIGH",
     });
 
     let dynamicInstruction = typeof aiService.getSystemInstruction === "function"
       ? aiService.getSystemInstruction(selectedPersona, selectedVoiceModel)
       : DEFAULT_SYSTEM_INSTRUCTION;
 
-    if (adaptiveRag.contextPrompt) {
+    if (evidencePack && evidencePack.spokenEvidenceContext) {
+      dynamicInstruction += `\n\n${evidencePack.spokenEvidenceContext}`;
+    } else if (adaptiveRag.contextPrompt) {
       dynamicInstruction += adaptiveRag.contextPrompt;
     }
     if (qdrantMemories && qdrantMemories.length > 0) {
@@ -173,8 +233,17 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       firstAudioTimeMs: result.firstAudioTimeMs,
       totalLatencyMs: result.totalLatencyMs,
       sentenceCount: result.sentenceCount,
-      ragSource: adaptiveRag.ragSource,
+      ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
+      citations: evidencePack?.uiCitations || [],
+      confidence: evidencePack?.confidenceLevel || "HIGH",
+      telemetry: {
+        routeMs: route.routerLatencyMs,
+        ragMs: adaptiveRag.latencyMs || 0,
+        llmFirstTokenMs: result.firstTokenTimeMs,
+        firstAudioMs: result.firstAudioTimeMs,
+        totalMs: result.totalLatencyMs,
+      },
     });
 
     // Save to Semantic Cache for instant reuse (keyed with voice model)
@@ -186,9 +255,18 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       groundingDetails: adaptiveRag.groundingDetails,
     });
 
-    // Save exchange to MongoDB
+    // Save full verbatim turn to MongoDB conversation history
     Conversation.appendTurn(user._id, userText, result.fullText).catch(() => {});
-    memoryService.saveUserMemory(`User: ${userText} | Chatly: ${result.fullText}`, userIdentifier).catch(() => {});
+
+    // Asynchronously extract distilled, durable user memories in the background via Groq (Zero latency penalty)
+    setImmediate(() => {
+      groqMemoryWorker.extractMemoriesAsync({
+        userPrompt: userText,
+        aiResponse: result.fullText,
+        userId: userIdentifier,
+        intent: route.intent,
+      }).catch(() => {});
+    });
 
     res.end();
   } catch (err) {
