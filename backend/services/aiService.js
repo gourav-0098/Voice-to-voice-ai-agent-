@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import toolService, { GROQ_TOOLS, GEMINI_FUNCTION_DECLARATIONS, executeTool } from "./toolService.js";
+import { geminiKeyManager } from "./geminiKeyManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
@@ -157,20 +158,9 @@ const GEMINI_CANDIDATE_MODELS = [
   "gemini-2.5-flash",
 ];
 
-// Initialize Gemini client
-let geminiClient = null;
+// Initialize Gemini client (uses multi-key manager)
 function getGeminiClient() {
-  if (!geminiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || "";
-    if (apiKey) {
-      try {
-        geminiClient = new GoogleGenAI({ apiKey });
-      } catch (err) {
-        console.warn("⚠️ [AI SERVICE] Gemini client init warning:", err.message);
-      }
-    }
-  }
-  return geminiClient;
+  return geminiKeyManager.getClient()?.client || null;
 }
 
 /**
@@ -208,11 +198,6 @@ function cleanForVoice(text) {
  * @returns {Promise<{reply: string, model: string, toolUsed?: Object}>}
  */
 async function callGemini({ prompt, history = [], systemInstruction }) {
-  const client = getGeminiClient();
-  if (!client) {
-    throw new Error("Gemini AI client is not available.");
-  }
-
   const contents = [];
   for (const turn of history.slice(-8)) {
     const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
@@ -226,82 +211,87 @@ async function callGemini({ prompt, history = [], systemInstruction }) {
   }
   contents.push({ role: "user", parts: [{ text: prompt }] });
 
-  let lastError = null;
+  return await geminiKeyManager.executeWithFailover(async (client, activeKey) => {
+    let lastError = null;
 
-  for (const model of GEMINI_CANDIDATE_MODELS) {
-    try {
-      console.log(`🤖 [GEMINI PRIMARY] Trying model: ${model}...`);
-      let toolUsed = null;
+    for (const model of GEMINI_CANDIDATE_MODELS) {
+      try {
+        console.log(`🤖 [GEMINI PRIMARY] Trying model: ${model}...`);
+        let toolUsed = null;
 
-      const response = await client.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
-          tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
-        },
-      });
-
-      const candidate = response.candidates?.[0];
-      const functionCalls = candidate?.content?.parts?.filter((p) => p.functionCall) || [];
-
-      if (functionCalls.length > 0) {
-        contents.push(candidate.content);
-
-        const toolParts = [];
-        for (const fc of functionCalls) {
-          const toolName = fc.functionCall.name;
-          const toolArgs = fc.functionCall.args || {};
-          console.log(`⚡ [GEMINI TOOL CALL] ${model} triggered: ${toolName}`, toolArgs);
-
-          if (!toolUsed) {
-            toolUsed = {
-              name: toolName,
-              detail: toolArgs.location || toolArgs.query || toolArgs.expression || toolArgs.url || "",
-              args: toolArgs,
-            };
-          }
-
-          const toolResult = await executeTool(toolName, toolArgs);
-          toolParts.push({
-            functionResponse: {
-              name: toolName,
-              response: { result: toolResult },
-            },
-          });
-        }
-
-        contents.push({ role: "user", parts: toolParts });
-
-        const followUp = await client.models.generateContent({
+        const response = await client.models.generateContent({
           model,
           contents,
           config: {
             systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
+            tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
           },
         });
 
-        let reply = followUp.text || followUp.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const candidate = response.candidates?.[0];
+        const functionCalls = candidate?.content?.parts?.filter((p) => p.functionCall) || [];
+
+        if (functionCalls.length > 0) {
+          contents.push(candidate.content);
+
+          const toolParts = [];
+          for (const fc of functionCalls) {
+            const toolName = fc.functionCall.name;
+            const toolArgs = fc.functionCall.args || {};
+            console.log(`⚡ [GEMINI TOOL CALL] ${model} triggered: ${toolName}`, toolArgs);
+
+            if (!toolUsed) {
+              toolUsed = {
+                name: toolName,
+                detail: toolArgs.location || toolArgs.query || toolArgs.expression || toolArgs.url || "",
+                args: toolArgs,
+              };
+            }
+
+            const toolResult = await executeTool(toolName, toolArgs);
+            toolParts.push({
+              functionResponse: {
+                name: toolName,
+                response: { result: toolResult },
+              },
+            });
+          }
+
+          contents.push({ role: "user", parts: toolParts });
+
+          const followUp = await client.models.generateContent({
+            model,
+            contents,
+            config: {
+              systemInstruction: systemInstruction || DEFAULT_SYSTEM_INSTRUCTION,
+            },
+          });
+
+          let reply = followUp.text || followUp.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          reply = cleanForVoice(reply);
+          if (!reply) {
+            throw new Error("Empty response returned from Gemini follow-up.");
+          }
+          return { reply, model, toolUsed };
+        }
+
+        let reply = response.text || candidate?.content?.parts?.[0]?.text || "";
         reply = cleanForVoice(reply);
         if (!reply) {
-          throw new Error("Empty response returned from Gemini follow-up.");
+          throw new Error("Empty response returned from Gemini.");
         }
         return { reply, model, toolUsed };
+      } catch (err) {
+        console.warn(`⚠️ [GEMINI] Model ${model} encountered an issue (${err.status || err.message}). Failing over...`);
+        lastError = err;
+        const msg = String(err?.message || "");
+        if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
+          throw err; // Trigger key failover immediately in geminiKeyManager
+        }
       }
-
-      let reply = response.text || candidate?.content?.parts?.[0]?.text || "";
-      reply = cleanForVoice(reply);
-      if (!reply) {
-        throw new Error("Empty response returned from Gemini.");
-      }
-      return { reply, model, toolUsed };
-    } catch (err) {
-      console.warn(`⚠️ [GEMINI] Model ${model} encountered an issue (${err.status || err.message}). Failing over to next Gemini candidate...`);
-      lastError = err;
     }
-  }
-
-  throw lastError || new Error("All Gemini candidate models failed.");
+    throw lastError || new Error("All Gemini candidate models failed.");
+  });
 }
 
 /**

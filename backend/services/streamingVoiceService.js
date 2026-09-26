@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_SYSTEM_INSTRUCTION } from "./aiService.js";
+import { geminiKeyManager } from "./geminiKeyManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
@@ -326,9 +327,7 @@ export async function streamVoiceResponse({
   // 2. Gemini Stream Fallback if Groq was unavailable
   if (!groqSuccess) {
     try {
-      const geminiApiKey = process.env.GEMINI_API_KEY;
-      if (geminiApiKey) {
-        const client = new GoogleGenAI({ apiKey: geminiApiKey });
+      await geminiKeyManager.executeWithFailover(async (client, activeKey) => {
         const contents = [];
         for (const turn of history.slice(-8)) {
           const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
@@ -364,9 +363,9 @@ export async function streamVoiceResponse({
             }
           }
         }
-      }
+      });
     } catch (geminiErr) {
-      console.error("❌ [STREAMING] Gemini fallback error:", geminiErr.message);
+      console.error("❌ [STREAMING] Gemini fallback error across all keys:", geminiErr.message);
     }
   }
 

@@ -1,5 +1,6 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { GoogleGenAI } from "@google/genai";
+import { geminiKeyManager } from "./geminiKeyManager.js";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import path from "path";
@@ -17,10 +18,7 @@ const qdrantApiKey =
   process.env.QDRANT_API_KEY ||
   process.env.Qdrant_api;
 
-const geminiApiKey = process.env.GEMINI_API_KEY;
-
 let qdrantClient = null;
-let aiClient = null;
 
 try {
   if (qdrantUrl && qdrantApiKey) {
@@ -34,30 +32,24 @@ try {
   console.warn("⚠️ Qdrant client initialization warning:", err.message);
 }
 
-try {
-  if (geminiApiKey) {
-    aiClient = new GoogleGenAI({ apiKey: geminiApiKey });
-  }
-} catch (err) {
-  console.warn("⚠️ Gemini embedding client warning:", err.message);
-}
-
 /**
  * Generate 3072-dimensional vector embedding using Gemini
  */
 export async function getEmbedding(text) {
-  if (!aiClient || !text || !text.trim()) return null;
+  if (!text || !text.trim()) return null;
 
   try {
-    const res = await aiClient.models.embedContent({
-      model: "gemini-embedding-001",
-      contents: text.trim(),
-    });
+    return await geminiKeyManager.executeWithFailover(async (client) => {
+      const res = await client.models.embedContent({
+        model: "gemini-embedding-001",
+        contents: text.trim(),
+      });
 
-    const values = res.embeddings?.[0]?.values || res.embedding?.values;
-    return values || null;
+      const values = res.embeddings?.[0]?.values || res.embedding?.values;
+      return values || null;
+    });
   } catch (err) {
-    console.warn("⚠️ Embedding generation error:", err.message);
+    console.warn("⚠️ Embedding generation error across keys:", err.message);
     return null;
   }
 }
