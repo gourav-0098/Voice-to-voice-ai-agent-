@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import toolService, { GROQ_TOOLS, GEMINI_FUNCTION_DECLARATIONS, executeTool } from "./toolService.js";
 import { geminiKeyManager } from "./geminiKeyManager.js";
+import { systemSettingsService } from "./systemSettingsService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
@@ -487,49 +488,71 @@ export async function generateAIResponse({
   const startTime = Date.now();
   const effectiveInstruction = systemInstruction || getSystemInstruction(persona);
 
-  // 1. PRIORITY 1: Google Gemini (High Intelligence, Multi-Model Failover, Multi-Tool Support)
-  try {
-    console.log("🌟 [AI ORCHESTRATOR] Calling Priority 1 AI: Google Gemini...");
-    const geminiStart = Date.now();
-    const geminiResult = await callGemini({
-      prompt,
-      history,
-      systemInstruction: effectiveInstruction,
-    });
-    const latencyMs = Date.now() - startTime;
-    console.log(`✅ [AI ORCHESTRATOR] Gemini replied in ${latencyMs}ms (${geminiResult.model}): "${geminiResult.reply.slice(0, 80)}..."`);
-    return {
-      reply: geminiResult.reply,
-      provider: "gemini",
-      model: geminiResult.model,
-      latencyMs,
-      toolUsed: geminiResult.toolUsed || null,
-    };
-  } catch (geminiErr) {
-    console.warn("⚠️ [AI ORCHESTRATOR] Google Gemini primary failed over all candidate models:", geminiErr.message || geminiErr);
-  }
+  const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"
+    ? systemSettingsService.getPrimaryModel()
+    : "gemini";
 
-  // 2. PRIORITY 2 / BACKUP: Groq (Ultra-fast, High throughput)
-  try {
-    console.log("🔄 [AI ORCHESTRATOR] Failing over to Backup AI: Groq Cloud...");
-    const groqStart = Date.now();
-    const groqResult = await callGroq({
-      prompt,
-      history,
-      systemInstruction: effectiveInstruction,
-      model: "qwen/qwen3.8-27b",
-    });
-    const latencyMs = Date.now() - startTime;
-    console.log(`✅ [AI ORCHESTRATOR] Groq backup replied in ${Date.now() - groqStart}ms: "${groqResult.reply.slice(0, 80)}..."`);
-    return {
-      reply: groqResult.reply,
-      provider: "groq",
-      model: groqResult.model,
-      latencyMs,
-      toolUsed: groqResult.toolUsed || null,
-    };
-  } catch (groqErr) {
-    console.error("❌ [AI ORCHESTRATOR] Groq backup also failed:", groqErr.message || groqErr);
+  const tryGemini = async () => {
+    try {
+      console.log("🌟 [AI ORCHESTRATOR] Calling Google Gemini...");
+      const geminiResult = await callGemini({
+        prompt,
+        history,
+        systemInstruction: effectiveInstruction,
+      });
+      const latencyMs = Date.now() - startTime;
+      console.log(`✅ [AI ORCHESTRATOR] Gemini replied in ${latencyMs}ms (${geminiResult.model}): "${geminiResult.reply.slice(0, 80)}..."`);
+      return {
+        reply: geminiResult.reply,
+        provider: "gemini",
+        model: geminiResult.model,
+        latencyMs,
+        toolUsed: geminiResult.toolUsed || null,
+      };
+    } catch (geminiErr) {
+      console.warn("⚠️ [AI ORCHESTRATOR] Google Gemini failed across all candidate models/keys:", geminiErr.message || geminiErr);
+      return null;
+    }
+  };
+
+  const tryGroq = async () => {
+    try {
+      console.log("⚡ [AI ORCHESTRATOR] Calling Groq Cloud...");
+      const groqStart = Date.now();
+      const groqResult = await callGroq({
+        prompt,
+        history,
+        systemInstruction: effectiveInstruction,
+        model: "qwen/qwen3.8-27b",
+      });
+      const latencyMs = Date.now() - startTime;
+      console.log(`✅ [AI ORCHESTRATOR] Groq replied in ${Date.now() - groqStart}ms: "${groqResult.reply.slice(0, 80)}..."`);
+      return {
+        reply: groqResult.reply,
+        provider: "groq",
+        model: groqResult.model,
+        latencyMs,
+        toolUsed: groqResult.toolUsed || null,
+      };
+    } catch (groqErr) {
+      console.warn("⚠️ [AI ORCHESTRATOR] Groq failed:", groqErr.message || groqErr);
+      return null;
+    }
+  };
+
+  // Run in order of admin-selected primary engine
+  if (primaryEngine === "gemini") {
+    const res = await tryGemini();
+    if (res) return res;
+    console.warn("🔄 [AI ORCHESTRATOR] Failing over to Backup AI: Groq Cloud...");
+    const backupRes = await tryGroq();
+    if (backupRes) return backupRes;
+  } else {
+    const res = await tryGroq();
+    if (res) return res;
+    console.warn("🔄 [AI ORCHESTRATOR] Failing over to Backup AI: Google Gemini...");
+    const backupRes = await tryGemini();
+    if (backupRes) return backupRes;
   }
 
   // 3. FINAL RESILIENT FALLBACK: Never crash the voice turn

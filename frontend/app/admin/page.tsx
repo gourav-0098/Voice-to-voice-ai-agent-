@@ -28,10 +28,37 @@ interface UserItem {
   remainingDaily: number | string;
 }
 
+interface LlmConfig {
+  primaryModel: "gemini" | "groq";
+  geminiKeysCount: number;
+  groqAvailable: boolean;
+  models: {
+    gemini: {
+      name: string;
+      defaultModel: string;
+      keysActive: number;
+      totalRpm: number;
+      totalRpd: number;
+      strengths: string;
+    };
+    groq: {
+      name: string;
+      defaultModel: string;
+      keysActive: number;
+      totalRpm: number;
+      totalRpd: number;
+      strengths: string;
+    };
+  };
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
+  const [selectedPrimary, setSelectedPrimary] = useState<string>("gemini");
+  const [savingLlm, setSavingLlm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -69,6 +96,18 @@ export default function AdminDashboard() {
       if (usersData.users) {
         setUsers(usersData.users);
       }
+
+      // 3. Fetch LLM Config
+      try {
+        const llmRes = await fetch(`${API_BASE}/api/admin/llm-config`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const llmData = await llmRes.json();
+        if (llmData.config) {
+          setLlmConfig(llmData.config);
+          setSelectedPrimary(llmData.config.primaryModel);
+        }
+      } catch (_) {}
     } catch (err) {
       console.error("Admin fetch error:", err);
     } finally {
@@ -134,6 +173,40 @@ export default function AdminDashboard() {
       setActionMessage("⚠️ Error toggling role.");
     } finally {
       setActionLoadingId(null);
+      setTimeout(() => setActionMessage(null), 4000);
+    }
+  };
+
+  // Update Primary LLM Engine
+  const handleSavePrimaryModel = async (model: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("chatly_token") : null;
+    if (!token) return;
+
+    setSavingLlm(true);
+    setActionMessage(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/llm-config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ primaryModel: model }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedPrimary(model);
+        if (data.config) setLlmConfig(data.config);
+        setActionMessage(`✅ Primary LLM Engine switched to ${model.toUpperCase()} successfully!`);
+      } else {
+        setActionMessage(`⚠️ ${data.error || "Failed to update LLM configuration"}`);
+      }
+    } catch (_) {
+      setActionMessage("⚠️ Error saving LLM settings.");
+    } finally {
+      setSavingLlm(false);
       setTimeout(() => setActionMessage(null), 4000);
     }
   };
@@ -304,6 +377,164 @@ export default function AdminDashboard() {
           >
             🔄 Refresh Data
           </button>
+        </div>
+
+        {/* =====================================================
+            LLM ENGINE & INTELLIGENCE CONTROLLER
+        ===================================================== */}
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🧠</span>
+                <h2 className="text-xl font-bold tracking-tight">Primary LLM Reasoning Engine</h2>
+                <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300 uppercase">
+                  ACTIVE: {llmConfig?.primaryModel?.toUpperCase() || "GEMINI"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-400">
+                Choose which model family serves as the primary reasoning engine for live voice speech, complex tasks, and multi-turn conversations.
+              </p>
+            </div>
+
+            {selectedPrimary !== llmConfig?.primaryModel && (
+              <button
+                type="button"
+                disabled={savingLlm}
+                onClick={() => handleSavePrimaryModel(selectedPrimary)}
+                className="self-start sm:self-auto rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-xs font-bold text-black transition hover:opacity-90 disabled:opacity-50 cursor-pointer shadow-lg shadow-amber-500/20 active:scale-95"
+              >
+                {savingLlm ? "Applying Changes..." : "Apply & Save Engine"}
+              </button>
+            )}
+          </div>
+
+          {/* Model Selection Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* GOOGLE GEMINI OPTION */}
+            <div
+              onClick={() => setSelectedPrimary("gemini")}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer relative ${
+                selectedPrimary === "gemini"
+                  ? "border-amber-400 bg-amber-500/10 shadow-[0_0_25px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/50"
+                  : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">🌟</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white">Google Gemini</h3>
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                        Best for Complex Tasks
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 font-mono">
+                      gemini-flash-latest / flash-lite
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition ${
+                  selectedPrimary === "gemini" ? "border-amber-400 bg-amber-400 text-black" : "border-zinc-600 bg-transparent"
+                }`}>
+                  {selectedPrimary === "gemini" && <span className="text-[11px] font-bold">✓</span>}
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-300 leading-relaxed mb-4">
+                Superior reasoning, 1M context token buffer, state-of-the-art Hindi & Hinglish multilingual depth, and accurate RAG tool execution. Ideal for complex multi-turn dialogue.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5 text-[10px]">
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300 font-medium">
+                  🔑 Pool: {llmConfig?.geminiKeysCount ?? 3} Active Keys
+                </span>
+                <span className="rounded-md bg-emerald-500/10 text-emerald-300 px-2 py-1 font-medium">
+                  ⚡ Quota: {llmConfig?.models?.gemini?.totalRpm ?? 45} RPM ({llmConfig?.models?.gemini?.totalRpd?.toLocaleString() ?? "4,500"} RPD)
+                </span>
+                <span className="rounded-md bg-purple-500/10 text-purple-300 px-2 py-1 font-medium">
+                  🔄 Auto-Failover: Enabled
+                </span>
+              </div>
+
+              {selectedPrimary !== "gemini" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSavePrimaryModel("gemini");
+                  }}
+                  className="mt-3.5 w-full text-center py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-200 transition cursor-pointer"
+                >
+                  Switch to Gemini as Primary
+                </button>
+              )}
+            </div>
+
+            {/* GROQ CLOUD OPTION */}
+            <div
+              onClick={() => setSelectedPrimary("groq")}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer relative ${
+                selectedPrimary === "groq"
+                  ? "border-amber-400 bg-amber-500/10 shadow-[0_0_25px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/50"
+                  : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">⚡</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white">Groq Cloud LPU</h3>
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
+                        Ultra-Fast
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 font-mono">
+                      qwen/qwen3.8-27b / llama-3.3-70b
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition ${
+                  selectedPrimary === "groq" ? "border-amber-400 bg-amber-400 text-black" : "border-zinc-600 bg-transparent"
+                }`}>
+                  {selectedPrimary === "groq" && <span className="text-[11px] font-bold">✓</span>}
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-300 leading-relaxed mb-4">
+                Blazing fast sub-80ms first token delivery powered by Groq LPUs. Best suited for quick conversational chit-chat and low-complexity tasks where instant response speed is paramount.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5 text-[10px]">
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300 font-medium">
+                  ⚡ First Token: ~80ms
+                </span>
+                <span className="rounded-md bg-cyan-500/10 text-cyan-300 px-2 py-1 font-medium">
+                  🎯 Quota: 30 RPM (14,400 RPD)
+                </span>
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-400 font-medium">
+                  🛡️ Backup: Gemini Pool
+                </span>
+              </div>
+
+              {selectedPrimary !== "groq" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSavePrimaryModel("groq");
+                  }}
+                  className="mt-3.5 w-full text-center py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-200 transition cursor-pointer"
+                >
+                  Switch to Groq as Primary
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* USER MANAGEMENT SECTION */}

@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_SYSTEM_INSTRUCTION } from "./aiService.js";
 import { geminiKeyManager } from "./geminiKeyManager.js";
+import { systemSettingsService } from "./systemSettingsService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
@@ -247,9 +248,8 @@ export async function streamVoiceResponse({
     inFlightTasks.push(task);
   };
 
-  // 1. Try Groq Streaming first (Ultra-low latency ~80ms first token)
-  let groqSuccess = false;
-  if (GROQ_API_KEY) {
+  const streamWithGroq = async () => {
+    if (!GROQ_API_KEY) return false;
     try {
       const messages = [{ role: "system", content: systemInstruction }];
       for (const turn of history.slice(-8)) {
@@ -275,57 +275,57 @@ export async function streamVoiceResponse({
         }),
       });
 
-      if (resp.ok) {
-        groqSuccess = true;
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let streamBuffer = "";
+      if (!resp.ok) return false;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          streamBuffer += decoder.decode(value, { stream: true });
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
 
-          const lines = streamBuffer.split("\n");
-          streamBuffer = lines.pop() || "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        streamBuffer += decoder.decode(value, { stream: true });
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            if (trimmed === "data: [DONE]") break;
+        const lines = streamBuffer.split("\n");
+        streamBuffer = lines.pop() || "";
 
-            try {
-              const json = JSON.parse(trimmed.slice(5).trim());
-              const token = json.choices?.[0]?.delta?.content || "";
-              if (token) {
-                if (!firstTokenTime) {
-                  firstTokenTime = Date.now() - t0;
-                }
-                fullGeneratedText += token;
-                currentSentenceBuffer += token;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          if (trimmed === "data: [DONE]") break;
 
-                if (onTokenDelta) {
-                  onTokenDelta(token);
-                }
-
-                const cutIdx = findSentenceBoundary(currentSentenceBuffer);
-                if (cutIdx > 0) {
-                  const complete = currentSentenceBuffer.substring(0, cutIdx).trim();
-                  currentSentenceBuffer = currentSentenceBuffer.substring(cutIdx).trim();
-                  dispatchSentenceSynthesis(complete);
-                }
+          try {
+            const json = JSON.parse(trimmed.slice(5).trim());
+            const token = json.choices?.[0]?.delta?.content || "";
+            if (token) {
+              if (!firstTokenTime) {
+                firstTokenTime = Date.now() - t0;
               }
-            } catch (_) {}
-          }
+              fullGeneratedText += token;
+              currentSentenceBuffer += token;
+
+              if (onTokenDelta) {
+                onTokenDelta(token);
+              }
+
+              const cutIdx = findSentenceBoundary(currentSentenceBuffer);
+              if (cutIdx > 0) {
+                const complete = currentSentenceBuffer.substring(0, cutIdx).trim();
+                currentSentenceBuffer = currentSentenceBuffer.substring(cutIdx).trim();
+                dispatchSentenceSynthesis(complete);
+              }
+            }
+          } catch (_) {}
         }
       }
+      return true;
     } catch (groqErr) {
-      console.warn("⚠️ [STREAMING] Groq stream error, falling back to Gemini:", groqErr.message);
+      console.warn("⚠️ [STREAMING] Groq stream error:", groqErr.message);
+      return false;
     }
-  }
+  };
 
-  // 2. Gemini Stream Fallback if Groq was unavailable
-  if (!groqSuccess) {
+  const streamWithGemini = async () => {
     try {
       await geminiKeyManager.executeWithFailover(async (client, activeKey) => {
         const contents = [];
@@ -364,8 +364,36 @@ export async function streamVoiceResponse({
           }
         }
       });
+      return true;
     } catch (geminiErr) {
-      console.error("❌ [STREAMING] Gemini fallback error across all keys:", geminiErr.message);
+      console.warn("⚠️ [STREAMING] Gemini streaming error across keys:", geminiErr.message);
+      return false;
+    }
+  };
+
+  // Determine Primary Engine from System Settings (Gemini vs Groq)
+  const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"
+    ? systemSettingsService.getPrimaryModel()
+    : "gemini";
+
+  console.log(`🎙️ [STREAMING PIPELINE] Primary Engine: ${primaryEngine.toUpperCase()}`);
+
+  let streamSuccess = false;
+  if (primaryEngine === "gemini") {
+    // 1. Primary: Google Gemini (3-key failover pool, superior reasoning)
+    streamSuccess = await streamWithGemini();
+    // 2. Backup: Groq Cloud
+    if (!streamSuccess) {
+      console.warn("🔄 [STREAMING] Gemini primary failed, falling back to Groq backup...");
+      streamSuccess = await streamWithGroq();
+    }
+  } else {
+    // 1. Primary: Groq Cloud (Ultra-low latency)
+    streamSuccess = await streamWithGroq();
+    // 2. Backup: Google Gemini
+    if (!streamSuccess) {
+      console.warn("🔄 [STREAMING] Groq primary failed, falling back to Gemini backup...");
+      streamSuccess = await streamWithGemini();
     }
   }
 

@@ -226,5 +226,45 @@ router.post("/scraper/trigger", async (req, res) => {
   }
 });
 
+// =========================================================
+// GET /api/admin/llm-config - Fetch LLM Engine Configuration
+// =========================================================
+router.get("/llm-config", async (req, res) => {
+  try {
+    const { systemSettingsService } = await import("../services/systemSettingsService.js");
+    return res.json({
+      status: "success",
+      config: systemSettingsService.getConfig(),
+    });
+  } catch (err) {
+    console.error("Admin llm-config get error:", err);
+    return res.status(500).json({ error: "Failed to fetch LLM configuration.", details: err.message });
+  }
+});
+
+// =========================================================
+// POST /api/admin/llm-config - Update Primary LLM Engine
+// =========================================================
+router.post("/llm-config", async (req, res) => {
+  try {
+    const { primaryModel } = req.body || {};
+    if (!primaryModel || !["gemini", "groq"].includes(primaryModel)) {
+      return res.status(400).json({ error: "Invalid primaryModel. Allowed values: 'gemini', 'groq'." });
+    }
+
+    const { systemSettingsService } = await import("../services/systemSettingsService.js");
+    const updated = await systemSettingsService.setPrimaryModel(primaryModel, req.user?._id);
+
+    return res.json({
+      status: "success",
+      message: `Primary LLM Engine switched to ${primaryModel.toUpperCase()} successfully!`,
+      config: updated,
+    });
+  } catch (err) {
+    console.error("Admin llm-config update error:", err);
+    return res.status(500).json({ error: "Failed to update LLM configuration.", details: err.message });
+  }
+});
+
 export default router;
 
