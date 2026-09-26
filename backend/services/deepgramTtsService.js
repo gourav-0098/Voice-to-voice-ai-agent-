@@ -80,12 +80,12 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
 
   const isSarvamVoice = targetModel.startsWith("sarvam-") || ["aditya", "shubh", "priya", "ritu", "ashutosh"].includes(targetModel);
   const isEdgeVoice = targetModel.startsWith("hi-IN-") || targetModel.startsWith("en-IN-");
-  const isHindi = isHindiOrHinglishSarvam(text) || isHindiOrHinglishEdge(text);
 
-  // 1. Primary Hindi/Hinglish Engine: Sarvam AI Bulbul (SOTA natural Indian inflection)
-  if (isSarvamVoice || (isHindi && (targetModel === MODEL_NAME || targetModel === "sarvam-aditya"))) {
-    const speaker = isSarvamVoice ? targetModel.replace(/^sarvam-/, "") : "aditya";
-    console.log(`🎙️ [TTS ROUTER] Routing to Sarvam AI Bulbul-v3 (speaker: '${speaker}') for: "${text.slice(0, 40)}..."`);
+  // 1. User selected Sarvam AI Bulbul (SOTA natural Indian inflection)
+  if (isSarvamVoice) {
+    const rawSpeaker = targetModel.replace(/^sarvam-/, "").toLowerCase();
+    const speaker = ["aditya", "shubh", "priya", "ritu", "ashutosh"].includes(rawSpeaker) ? rawSpeaker : "aditya";
+    console.log(`🎙️ [TTS ROUTER] Routing to user-selected Sarvam AI Bulbul voice '${speaker}' for: "${text.slice(0, 40)}..."`);
     const sarvamAudio = await generateSarvamSpeech(text, speaker, "hi-IN");
     if (sarvamAudio && sarvamAudio.audioBase64) {
       return {
@@ -95,24 +95,34 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
         modelUuid: "sarvam-bulbul-v3",
       };
     }
-    console.warn("⚠️ [TTS ROUTER] Sarvam failed or timed out, trying Edge-TTS fallback...");
-  }
-
-  // 2. Secondary Hindi fallback: Microsoft Edge Neural Hindi
-  if (isEdgeVoice || isHindi) {
-    const selectedEdgeVoice = isEdgeVoice ? targetModel : "hi-IN-MadhurNeural";
-    console.log(`🎙️ [TTS ROUTER] Routing to Microsoft Edge Neural Hindi (${selectedEdgeVoice}) for: "${text.slice(0, 40)}..."`);
-    const edgeAudio = await generateEdgeSpeech(text, selectedEdgeVoice);
+    console.warn(`⚠️ [TTS ROUTER] Sarvam '${speaker}' failed, using gender-matched Edge-TTS fallback...`);
+    const fallbackEdgeVoice = ["priya", "ritu"].includes(speaker) ? "hi-IN-SwaraNeural" : "hi-IN-MadhurNeural";
+    const edgeAudio = await generateEdgeSpeech(text, fallbackEdgeVoice);
     if (edgeAudio && edgeAudio.audioBase64) {
       return {
         audioBase64: edgeAudio.audioBase64,
         format: edgeAudio.format || "audio/mp3",
-        model: selectedEdgeVoice,
+        model: fallbackEdgeVoice,
+        modelUuid: "edge-neural-fallback",
+      };
+    }
+  }
+
+  // 2. User selected Microsoft Edge Neural voice
+  if (isEdgeVoice) {
+    console.log(`🎙️ [TTS ROUTER] Routing to user-selected Edge Neural voice '${targetModel}' for: "${text.slice(0, 40)}..."`);
+    const edgeAudio = await generateEdgeSpeech(text, targetModel);
+    if (edgeAudio && edgeAudio.audioBase64) {
+      return {
+        audioBase64: edgeAudio.audioBase64,
+        format: edgeAudio.format || "audio/mp3",
+        model: targetModel,
         modelUuid: "edge-neural-hi",
       };
     }
   }
 
+  // 3. User selected Deepgram voice (or fallback)
   let cleanText = text.replace(/[*_#`~]/g, "").trim();
   cleanText = transliterateDevanagariToLatin(cleanText);
   if (!cleanText) return null;

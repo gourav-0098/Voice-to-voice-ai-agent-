@@ -46,27 +46,32 @@ class SemanticQueryCache {
    * @param {string} [persona] - Active persona
    * @returns {Object|null} Cached response entry or null
    */
-  get(queryText, queryVector = null, persona = "conversational") {
+  get(queryText, queryVector = null, persona = "conversational", voiceModel = "") {
     if (!queryText) return null;
     let vector = queryVector;
     let personaKey = persona || "conversational";
+    let voiceKey = voiceModel || "";
     if (typeof queryVector === "string") {
       personaKey = queryVector;
       vector = null;
     }
 
     const norm = normalizeQuery(queryText);
-    const exactKey = `${personaKey}:::${norm}`;
+    const exactKey = voiceKey ? `${personaKey}:::${voiceKey}:::${norm}` : `${personaKey}:::${norm}`;
     const now = Date.now();
 
     // 1. Fast-Path: Exact normalized key lookup (0.1ms)
     if (this.cache.has(exactKey)) {
       const entry = this.cache.get(exactKey);
       if (now - entry.timestamp < this.ttlMs) {
+        let audio = entry.data?.audio;
+        if (voiceKey && entry.voiceModel && entry.voiceModel !== voiceKey) {
+          audio = null; // Do not serve wrong voice model audio
+        }
         this.stats.hits += 1;
         this.stats.savedTokensEstimate += 120;
-        console.log(`⚡ [SEMANTIC CACHE] Exact match hit in 1ms! Query: "${queryText.slice(0, 50)}"`);
-        return { ...entry.data, cachedAt: entry.timestamp, matchType: "exact" };
+        console.log(`⚡ [SEMANTIC CACHE] Exact match hit in 1ms! Query: "${queryText.slice(0, 50)}" (voice: ${voiceKey || "any"})`);
+        return { ...entry.data, audio, cachedAt: entry.timestamp, matchType: "exact" };
       } else {
         this.cache.delete(exactKey);
       }
@@ -85,6 +90,7 @@ class SemanticQueryCache {
 
         // Must match persona to maintain ideological tone integrity
         if (entry.persona !== personaKey) continue;
+        if (voiceKey && entry.voiceModel && entry.voiceModel !== voiceKey) continue;
 
         if (entry.vector) {
           const sim = cosineSimilarity(queryVector, entry.vector);
@@ -100,8 +106,13 @@ class SemanticQueryCache {
         this.stats.hits += 1;
         this.stats.savedTokensEstimate += 120;
         console.log(`⚡ [SEMANTIC CACHE] High-confidence semantic match hit! (Cosine: ${highestSim.toFixed(3)})`);
+        let audio = bestMatch.data?.audio;
+        if (voiceKey && bestMatch.voiceModel && bestMatch.voiceModel !== voiceKey) {
+          audio = null;
+        }
         return {
           ...bestMatch.data,
+          audio,
           cachedAt: bestMatch.timestamp,
           matchType: "semantic",
           similarity: highestSim,
@@ -116,21 +127,26 @@ class SemanticQueryCache {
   /**
    * Save a newly computed query response into the semantic cache
    */
-  set(queryText, queryVector, persona, data) {
+  set(queryText, queryVector, persona, voiceModel, data) {
     let vector = queryVector;
     let personaKey = persona || "conversational";
+    let voiceKey = typeof voiceModel === "string" ? voiceModel : "";
     let payload = data;
 
-    if (typeof queryVector === "string" && data === undefined) {
+    if (typeof voiceModel === "object" && data === undefined) {
+      payload = voiceModel;
+      voiceKey = "";
+    } else if (typeof queryVector === "string" && data === undefined && typeof persona === "object") {
       personaKey = queryVector;
       vector = null;
       payload = persona;
+      voiceKey = "";
     }
 
     if (!queryText || !payload) return;
 
     const norm = normalizeQuery(queryText);
-    const exactKey = `${personaKey}:::${norm}`;
+    const exactKey = voiceKey ? `${personaKey}:::${voiceKey}:::${norm}` : `${personaKey}:::${norm}`;
 
     // Evict oldest entry if size limit reached
     if (this.cache.size >= this.maxSize) {
@@ -139,9 +155,10 @@ class SemanticQueryCache {
     }
 
     this.cache.set(exactKey, {
-      queryText,
+      text: queryText,
       vector,
       persona: personaKey,
+      voiceModel: voiceKey,
       data: payload,
       timestamp: Date.now(),
     });

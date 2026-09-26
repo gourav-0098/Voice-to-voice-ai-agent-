@@ -79,11 +79,11 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
 
   try {
     const selectedPersona = req.body?.persona || "conversational";
-    const selectedVoiceModel = req.body?.voiceModel || "aura-asteria-en";
+    const selectedVoiceModel = req.body?.voiceModel || "sarvam-aditya";
     const userIdentifier = user?.email || String(user?._id) || "general_user";
 
     // 0. Fast Semantic Query Cache Check (< 3ms response, zero LLM cost)
-    const cachedHit = semanticCache.get(userText, null, selectedPersona);
+    const cachedHit = semanticCache.get(userText, null, selectedPersona, selectedVoiceModel);
     if (cachedHit) {
       console.log(`⚡ [SEMANTIC CACHE] Serving cached response for "${userText.slice(0, 40)}" in ${Date.now() - startTotal}ms`);
       sendEvent("rag", {
@@ -130,7 +130,7 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
     });
 
     let dynamicInstruction = typeof aiService.getSystemInstruction === "function"
-      ? aiService.getSystemInstruction(selectedPersona)
+      ? aiService.getSystemInstruction(selectedPersona, selectedVoiceModel)
       : DEFAULT_SYSTEM_INSTRUCTION;
 
     if (adaptiveRag.contextPrompt) {
@@ -174,8 +174,8 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       groundingDetails: adaptiveRag.groundingDetails,
     });
 
-    // Save to Semantic Cache for instant reuse
-    semanticCache.set(userText, adaptiveRag.queryVector, selectedPersona, {
+    // Save to Semantic Cache for instant reuse (keyed with voice model)
+    semanticCache.set(userText, adaptiveRag.queryVector, selectedPersona, selectedVoiceModel, {
       reply: result.fullText,
       audio: firstAudioPayload?.audio || null,
       audioFormat: firstAudioPayload?.format || "audio/wav",
@@ -236,9 +236,10 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     console.log(`🗣️ [VOICE CHECKPOINT 3] User Prompt: "${prompt.slice(0, 80)}..."`);
 
     const selectedPersona = req.body?.persona || "conversational";
+    const selectedVoice = req.body?.voiceModel || req.body?.voice || "sarvam-aditya";
 
     // 1.5. Fast Semantic Query Cache Check (< 3ms response, zero LLM cost)
-    const cachedHit = semanticCache.get(prompt, null, selectedPersona);
+    const cachedHit = semanticCache.get(prompt, null, selectedPersona, selectedVoice);
     if (cachedHit) {
       console.log(`⚡ [SEMANTIC CACHE] Exact match hit in ${Date.now() - startTotal}ms for "${prompt.slice(0, 40)}"`);
       return res.json({
@@ -301,7 +302,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     }
 
     let dynamicInstruction = typeof aiService.getSystemInstruction === "function" 
-      ? aiService.getSystemInstruction(selectedPersona) 
+      ? aiService.getSystemInstruction(selectedPersona, selectedVoice) 
       : DEFAULT_SYSTEM_INSTRUCTION;
 
     if (adaptiveRag.contextPrompt) {
@@ -350,7 +351,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     }
 
     // 8. Store in Semantic Cache for zero-cost subsequent hits
-    semanticCache.set(prompt, adaptiveRag.queryVector, selectedPersona, {
+    semanticCache.set(prompt, adaptiveRag.queryVector, selectedPersona, selectedVoiceModel, {
       reply: aiReply,
       audio: audioPayload?.audioBase64 || null,
       audioFormat: audioPayload?.format || "audio/wav",

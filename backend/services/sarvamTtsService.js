@@ -33,15 +33,25 @@ export const SARVAM_SPEAKERS = {
 export const DEFAULT_SARVAM_SPEAKER = "aditya";
 
 /**
- * Clean spoken text of markdown artifacts, URLs, and code brackets.
+ * Clean spoken text of markdown artifacts, URLs, emojis, and code brackets.
+ * Strips unicode emojis and quotes that cause audio buzzing/stuttering in Sarvam.
  */
 function cleanSpokenText(text) {
   if (!text) return "";
   return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/Toolcode:[^\n.]*/gi, "")
+    .replace(/\bprint\s*\([^)]*\)[.\s]*/gi, "")
+    // Strip emojis & unicode pictographs that cause static or pronunciation glitch in Sarvam
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "")
     .replace(/[*_#`~>]/g, "")
     .replace(/https?:\/\/\S+/g, "")
+    .replace(/\[.*?\]\(.*?\)/g, "")
     .replace(/\[.*?\]/g, "")
-    .replace(/\s+/g, " ")
+    .replace(/["“”«»]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -60,7 +70,7 @@ export function isHindiOrHinglish(text) {
 }
 
 /**
- * Synthesize speech audio using Sarvam AI's Bulbul-v3 API
+ * Synthesize speech audio using Sarvam AI's Bulbul-v3 API in Studio HD (44.1kHz)
  * @param {string} text - The input text (Hindi, Hinglish, or Indian English)
  * @param {string} [speakerName] - Voice name (aditya, shubh, priya, ritu, ashutosh)
  * @param {string} [languageCode] - Language code (default 'hi-IN')
@@ -88,7 +98,8 @@ export async function generateSarvamSpeech(text, speakerName = DEFAULT_SARVAM_SP
         language_code: languageCode,
         speaker: targetSpeaker,
         pace: 1.0,
-        speech_sample_rate: 24000,
+        speech_sample_rate: 44100, // Studio HD 44.1kHz audio quality
+        temperature: 0.3,           // Low temperature for crisp, stable phonetics without slurring
         output_audio_codec: "mp3",
       }),
     });

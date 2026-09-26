@@ -484,6 +484,21 @@ export default function VoicePage() {
   const isStartedRef = useRef(false);
   const currentUserRef = useRef<UserProfile | null>(null);
   const isAiSpeakingRef = useRef(false);
+  const selectedVoiceRef = useRef(selectedVoice);
+  const selectedPersonaRef = useRef(selectedPersona);
+  const selectedLanguageRef = useRef(selectedLanguage);
+
+  useEffect(() => {
+    selectedVoiceRef.current = selectedVoice;
+  }, [selectedVoice]);
+
+  useEffect(() => {
+    selectedPersonaRef.current = selectedPersona;
+  }, [selectedPersona]);
+
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+  }, [selectedLanguage]);
 
   // User speech accumulation & silence debouncing refs
   const silenceTimeoutRef = useRef<any>(null);
@@ -604,6 +619,7 @@ export default function VoicePage() {
 
   const handleVoiceChange = (voiceId: string) => {
     setSelectedVoice(voiceId);
+    selectedVoiceRef.current = voiceId;
     if (typeof window !== "undefined") {
       localStorage.setItem("chatly_voice", voiceId);
     }
@@ -1049,14 +1065,18 @@ export default function VoicePage() {
     };
 
     // 1. Try WebSocket Duplex Connection (Lowest Latency < 280ms)
+    const activeVoice = selectedVoiceRef.current || selectedVoice;
+    const activePersona = selectedPersonaRef.current || selectedPersona;
+    const activeLanguage = selectedLanguageRef.current || selectedLanguage;
+
     const ws = voiceWsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify({
           type: "user_speech",
           text: promptText,
-          persona: selectedPersona,
-          voiceModel: selectedVoice,
+          persona: activePersona,
+          voiceModel: activeVoice,
           token,
         }));
         return;
@@ -1077,9 +1097,9 @@ export default function VoicePage() {
         body: JSON.stringify({
           text: promptText,
           message: promptText,
-          voiceModel: selectedVoice,
-          persona: selectedPersona,
-          language: selectedLanguage,
+          voiceModel: activeVoice,
+          persona: activePersona,
+          language: activeLanguage,
         }),
       });
 
@@ -1169,8 +1189,9 @@ export default function VoicePage() {
           body: JSON.stringify({
             text: promptText,
             message: promptText,
-            voiceModel: selectedVoice,
-            persona: selectedPersona,
+            voiceModel: activeVoice,
+            persona: activePersona,
+            language: activeLanguage,
           }),
         });
 
