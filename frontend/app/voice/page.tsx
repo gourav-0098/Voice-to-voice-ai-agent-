@@ -116,14 +116,14 @@ const PERSONA_OPTIONS = [
 ];
 
 const VOICE_OPTIONS = [
-  { id: "hi-IN-MadhurNeural", label: "🇮🇳 Madhur (Hindi Male)", desc: "Natural Hindi/Hinglish (Best for Debates)" },
-  { id: "hi-IN-SwaraNeural", label: "🇮🇳 Swara (Hindi Female)", desc: "Natural & Clear Hindi" },
-  { id: "en-IN-PrabhatNeural", label: "🇮🇳 Prabhat (Indian Male)", desc: "Indian English Accent" },
-  { id: "en-IN-NeerjaNeural", label: "🇮🇳 Neerja (Indian Female)", desc: "Indian English Accent" },
-  { id: "flux-alexis-en", label: "Alexis (English)", desc: "Expressive & Conversational" },
-  { id: "aura-asteria-en", label: "Asteria (English)", desc: "Warm & Natural Female" },
-  { id: "aura-orion-en", label: "Orion (English)", desc: "Confident English Male" },
-  { id: "aura-luna-en", label: "Luna (English)", desc: "Calm & Friendly Female" },
+  { id: "sarvam-aditya", label: "🇮🇳 Sarvam Aditya (Hindi Male 🔥)", desc: "SOTA Authentic Indian Hindi (Sarvam Bulbul)" },
+  { id: "sarvam-shubh", label: "🇮🇳 Sarvam Shubh (Hindi Male)", desc: "Authoritative & Clear (Sarvam Bulbul)" },
+  { id: "sarvam-priya", label: "🇮🇳 Sarvam Priya (Hindi Female)", desc: "Warm & Natural Hindi (Sarvam Bulbul)" },
+  { id: "sarvam-ritu", label: "🇮🇳 Sarvam Ritu (Hindi Female)", desc: "Expressive & Conversational (Sarvam Bulbul)" },
+  { id: "flux-alexis-en", label: "Alexis (English)", desc: "Expressive & Conversational (Deepgram)" },
+  { id: "aura-asteria-en", label: "Asteria (English)", desc: "Warm & Natural Female (Deepgram)" },
+  { id: "aura-orion-en", label: "Orion (English)", desc: "Confident English Male (Deepgram)" },
+  { id: "hi-IN-MadhurNeural", label: "Madhur (Edge Neural)", desc: "Edge Neural Hindi Backup" },
 ];
 
 /**

@@ -61,12 +61,14 @@ function transliterateDevanagariToLatin(text) {
   return result.replace(/[\u0900-\u097F]/g, "").trim();
 }
 
-import { generateEdgeSpeech, isHindiOrHinglish } from "./edgeTtsService.js";
+import { generateSarvamSpeech, isHindiOrHinglish as isHindiOrHinglishSarvam } from "./sarvamTtsService.js";
+import { generateEdgeSpeech, isHindiOrHinglish as isHindiOrHinglishEdge } from "./edgeTtsService.js";
 
 /**
- * Generate speech audio from text using Edge-TTS (for Hindi/Hinglish) or Deepgram's TTS (for English)
+ * Generate speech audio from text using Sarvam AI Bulbul (for SOTA Hindi/Hinglish),
+ * Edge-TTS (as free fallback), or Deepgram TTS (for English).
  * @param {string} text - Text to synthesize into speech
- * @param {string} [voiceModel] - Voice model name (e.g., hi-IN-MadhurNeural, flux-alexis-en, aura-asteria-en)
+ * @param {string} [voiceModel] - Voice model name (e.g., sarvam-aditya, hi-IN-MadhurNeural, flux-alexis-en)
  * @returns {Promise<{audioBase64: string, format: string, model: string, modelUuid: string} | null>}
  */
 export async function generateSpeech(text, voiceModel = MODEL_NAME) {
@@ -76,11 +78,28 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
 
   const targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
 
-  // 1. If explicitly requested an Edge-TTS voice OR if text is Hindi/Hinglish (and not explicitly forced to English)
+  const isSarvamVoice = targetModel.startsWith("sarvam-") || ["aditya", "shubh", "priya", "ritu", "ashutosh"].includes(targetModel);
   const isEdgeVoice = targetModel.startsWith("hi-IN-") || targetModel.startsWith("en-IN-");
-  const isHindi = isHindiOrHinglish(text);
+  const isHindi = isHindiOrHinglishSarvam(text) || isHindiOrHinglishEdge(text);
 
-  if (isEdgeVoice || (isHindi && targetModel === MODEL_NAME)) {
+  // 1. Primary Hindi/Hinglish Engine: Sarvam AI Bulbul (SOTA natural Indian inflection)
+  if (isSarvamVoice || (isHindi && (targetModel === MODEL_NAME || targetModel === "sarvam-aditya"))) {
+    const speaker = isSarvamVoice ? targetModel.replace(/^sarvam-/, "") : "aditya";
+    console.log(`🎙️ [TTS ROUTER] Routing to Sarvam AI Bulbul-v3 (speaker: '${speaker}') for: "${text.slice(0, 40)}..."`);
+    const sarvamAudio = await generateSarvamSpeech(text, speaker, "hi-IN");
+    if (sarvamAudio && sarvamAudio.audioBase64) {
+      return {
+        audioBase64: sarvamAudio.audioBase64,
+        format: "audio/mp3",
+        model: `sarvam-${speaker}`,
+        modelUuid: "sarvam-bulbul-v3",
+      };
+    }
+    console.warn("⚠️ [TTS ROUTER] Sarvam failed or timed out, trying Edge-TTS fallback...");
+  }
+
+  // 2. Secondary Hindi fallback: Microsoft Edge Neural Hindi
+  if (isEdgeVoice || isHindi) {
     const selectedEdgeVoice = isEdgeVoice ? targetModel : "hi-IN-MadhurNeural";
     console.log(`🎙️ [TTS ROUTER] Routing to Microsoft Edge Neural Hindi (${selectedEdgeVoice}) for: "${text.slice(0, 40)}..."`);
     const edgeAudio = await generateEdgeSpeech(text, selectedEdgeVoice);

@@ -408,8 +408,8 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
     const speakerName = speaker === "andhbhakt" ? "Saffron Debater" : "Rationalist Analyst";
     const speakerAvatar = speaker === "andhbhakt" ? "🚩" : "⚖️";
 
-    // Alternate voices: Native Hindi Madhur for Saffron Debater, English Orion for Rationalist
-    const targetVoice = speaker === "andhbhakt" ? "hi-IN-MadhurNeural" : "aura-orion-en";
+    // Alternate voices: Sarvam Bulbul Aditya for Saffron Debater, English Orion for Rationalist
+    const targetVoice = speaker === "andhbhakt" ? "sarvam-aditya" : "aura-orion-en";
 
     // Extract last opposing statement if available
     const lastTurn = history && history.length > 0 ? history[history.length - 1] : null;
