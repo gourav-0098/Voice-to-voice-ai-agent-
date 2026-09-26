@@ -445,9 +445,9 @@ export default function VoicePage() {
   const [isGroundingDrawerOpen, setIsGroundingDrawerOpen] = useState(false);
   const [groundingDrawerData, setGroundingDrawerData] = useState<GroundingDrawerData | null>(null);
 
-  // Responsive Drawer & Settings states
+  // Responsive Drawer & Sidebar states
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
 
   // User & Quota states
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -1761,9 +1761,9 @@ export default function VoicePage() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col transition-colors duration-300 ${
+      className={`min-h-screen flex flex-row transition-colors duration-300 ${
         isDark
-          ? "bg-[#08090d] text-white selection:bg-emerald-500 selection:text-white"
+          ? "bg-[#07080a] text-white selection:bg-emerald-500 selection:text-white"
           : "bg-slate-50 text-slate-900 selection:bg-emerald-600 selection:text-white"
       }`}
     >
@@ -1874,37 +1874,24 @@ export default function VoicePage() {
       )}
 
       {/* =====================================================
-          1. DESKTOP / LAPTOP SETTINGS DIALOG (OpenAI / Groq Style)
+          1. LAPTOP / DESKTOP SIDEBAR DASHBOARD (>= lg)
       ===================================================== */}
-      {isSettingsOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={() => setIsSettingsOpen(false)}
-        >
-          <div
-            className={`relative w-full max-w-3xl h-[620px] max-h-[90vh] rounded-3xl border shadow-2xl overflow-hidden flex flex-col transition-all ${
-              isDark ? "bg-zinc-950 border-white/10 text-white" : "bg-white border-slate-200 text-slate-900"
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SettingsPanel
-              {...settingsPanelProps}
-              isMobile={false}
-              onClose={() => setIsSettingsOpen(false)}
-            />
-          </div>
-        </div>
-      )}
+      <aside className="hidden lg:flex w-[22rem] flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-5 shrink-0 transition-colors shadow-sm dark:shadow-none overflow-hidden">
+        <SettingsPanel {...settingsPanelProps} isMobile={false} />
+      </aside>
 
       {/* =====================================================
           2. MOBILE HAMBURGER SETTINGS DRAWER (< lg)
       ===================================================== */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop blur */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setMobileDrawerOpen(false)}
           />
+
+          {/* Sliding sheet */}
           <div className="fixed inset-y-0 right-0 w-full max-w-sm p-5 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl flex flex-col">
             <SettingsPanel
               {...settingsPanelProps}
@@ -1916,95 +1903,48 @@ export default function VoicePage() {
       )}
 
       {/* =====================================================
-          3. TOP NAVIGATION BAR (OpenAI / Gemini / Groq Style)
+          3. MAIN STAGE
       ===================================================== */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 dark:border-white/[0.08] bg-white/80 dark:bg-[#08090d]/80 backdrop-blur-xl transition-colors shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-15 sm:h-16 flex items-center justify-between gap-3">
-          {/* Left: Brand + Segmented Mode Switcher + Persona Badge */}
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <Link href="/" className="flex items-center gap-2 shrink-0 group">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-bold shadow-md shadow-emerald-500/20 text-base group-hover:scale-105 transition">
-                🎙️
-              </div>
-              <div className="hidden sm:block text-left">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-white">Chatly AI</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium tracking-wide">
-                  Voice-to-Voice
-                </span>
-              </div>
+      <div className="flex-1 flex flex-col min-h-screen max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
+        {/* Streamlined Main Header */}
+        <header className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4 gap-3 transition-colors">
+          {/* Left on mobile: Brand */}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="lg:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white transition"
+            >
+              🎙️ Chatly
             </Link>
 
-            {/* Mode Switcher Segmented Control (OpenAI / Groq style) */}
-            <div className="flex items-center rounded-xl p-0.5 border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/[0.04]">
-              <button
-                type="button"
-                onClick={() => handleModeChange("voice-chat")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  conversationMode === "voice-chat"
-                    ? isDark ? "bg-white text-black shadow-sm" : "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Split Hybrid Mode: Voice Waveform + Live Chat History"
-              >
-                ⚡ Split
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange("voice-only")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  conversationMode === "voice-only"
-                    ? isDark ? "bg-white text-black shadow-sm" : "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Voice Only Mode: Fullscreen Cinematic Reactive Orb"
-              >
-                🎙️ Voice
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange("text-only")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  conversationMode === "text-only"
-                    ? isDark ? "bg-white text-black shadow-sm" : "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Text Only Mode: Clean Transcript with Chatly Tools"
-              >
-                💬 Text
-              </button>
-            </div>
-
-            {/* Persona Pill (Quick status & click to configure) */}
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-white/10 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer"
-              title="Click to change Persona or AI Model in Settings"
-            >
-              <span className="text-xs">
-                {selectedPersona === "political_debater" ? "🚩" : selectedPersona === "rationalist_analyst" ? "⚖️" : selectedPersona === "concise_assistant" ? "⚡" : selectedPersona === "professional_tutor" ? "📚" : "🎯"}
-              </span>
-              <span className="capitalize text-[11px] truncate max-w-[110px]">
-                {selectedPersona.replace(/_/g, " ")}
-              </span>
-            </button>
+            <span className="hidden lg:inline text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
+              Voice Assistant Stage
+            </span>
           </div>
 
-          {/* Center: Live Pipeline Telemetry Chip (Groq Speed Badge) */}
-          <div className="hidden lg:flex items-center gap-2">
+          {/* Center/Right: Pipeline Status + Debate Arena + Mobile Theme Toggle + Hamburger */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* AI vs AI Debate Arena Launcher */}
+            <button
+              type="button"
+              onClick={() => setIsDebateModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20 active:scale-95 shadow-xs"
+              title="Launch AI vs AI Debate Arena: Saffron Debater vs Rationalist Analyst"
+            >
+              <span>⚔️</span>
+              <span className="hidden sm:inline">Debate Arena</span>
+            </button>
+            {/* Dynamic Status Indicator Chip */}
             <div
-              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
                 pipelineState === "listening"
-                  ? "border-red-500/50 bg-red-500/15 text-red-500 dark:text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.25)]"
+                  ? "border-red-500/50 bg-red-500/15 text-red-500 dark:text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.25)]"
                   : pipelineState === "transcribing"
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                  ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
                   : pipelineState === "synthesizing"
-                  ? "border-sky-500/50 bg-sky-500/15 text-sky-600 dark:text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]"
+                  ? "border-sky-500/50 bg-sky-500/15 text-sky-600 dark:text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
                   : pipelineState === "speaking"
-                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
                   : isDark
                   ? "border-white/10 bg-white/5 text-zinc-300"
                   : "border-slate-200 bg-white text-slate-700 shadow-xs"
@@ -2023,7 +1963,7 @@ export default function VoicePage() {
                     : "bg-emerald-500"
                 }`}
               />
-              <span className="capitalize text-xs font-medium">
+              <span className="capitalize">
                 {pipelineState === "idle"
                   ? "Ready"
                   : pipelineState === "synthesizing"
@@ -2036,125 +1976,34 @@ export default function VoicePage() {
               </span>
             </div>
 
-            {lastTtfa && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                ⚡ {lastTtfa}ms TTFA
-              </span>
-            )}
-          </div>
-
-          {/* Right: Actions, Arena, Volume, Theme, Settings, Account */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* AI vs AI Debate Arena Launcher */}
-            <button
-              type="button"
-              onClick={() => setIsDebateModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20 active:scale-95 shadow-xs"
-              title="Launch AI vs AI Debate Arena: Saffron Debater vs Rationalist Analyst"
-            >
-              <span>⚔️</span>
-              <span className="hidden sm:inline">Debate Arena</span>
-            </button>
-
-            {/* Quick Volume / Mute Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04]">
-              <button
-                type="button"
-                onClick={handleToggleMute}
-                className="text-xs cursor-pointer hover:scale-110 active:scale-95 transition"
-                title={voiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
-              >
-                {voiceMuted || volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={voiceMuted ? 0 : volume}
-                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-16 h-1 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                aria-label="Quick volume"
-              />
+            {/* Mobile Header Theme Toggle */}
+            <div className="lg:hidden">
+              <ThemeToggle />
             </div>
 
-            {/* Theme Toggle */}
-            <ThemeToggle />
-
-            {/* Settings Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined" && window.innerWidth < 1024) {
-                  setMobileDrawerOpen(true);
-                } else {
-                  setIsSettingsOpen(true);
-                }
-              }}
-              aria-label="Open Settings"
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-zinc-200 text-xs font-semibold transition cursor-pointer active:scale-95"
-              title="Open Settings & Preferences"
-            >
-              <span>⚙️</span>
-              <span className="hidden sm:inline">Settings</span>
-            </button>
-
-            {/* Account Pill / Sign in */}
-            {currentUser ? (
-              <div className="flex items-center gap-1.5 pl-1">
-                <div
-                  className="h-8 w-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-bold flex items-center justify-center text-xs shadow-xs"
-                  title={`${currentUser.name} (${currentUser.email})`}
-                >
-                  {currentUser.name ? currentUser.name[0].toUpperCase() : "U"}
-                </div>
-                {quota && (
-                  <span
-                    className="hidden xl:inline-block text-[11px] font-mono px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/[0.04] text-slate-600 dark:text-zinc-400"
-                    title="Hourly remaining calls"
-                  >
-                    {quota.remainingHourly} left
-                  </span>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowLoginModal(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition active:scale-95 cursor-pointer"
-              >
-                Sign In
-              </button>
-            )}
-
-            {/* Mobile Hamburger toggle (< lg) */}
+            {/* Mobile Hamburger Menu Toggle Button (< lg) */}
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
-              aria-label="Open mobile menu"
-              className="lg:hidden flex items-center justify-center p-2 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              aria-label="Open settings dashboard"
+              className="lg:hidden flex items-center justify-center p-2 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* =====================================================
-          4. MAIN STAGE CANVAS (OpenAI / Gemini / Groq Layout)
-      ===================================================== */}
-      <main className="flex-1 min-h-0 flex flex-col w-full max-w-5xl mx-auto px-3 sm:px-6 py-3 sm:py-4 overflow-hidden">
         {/* ERROR ALERT */}
         {error && (
-          <div className="mb-3 shrink-0 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 animate-in fade-in duration-200">
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 animate-in fade-in duration-200">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-2.5">
-                <span className="text-base">⚠️</span>
+              <div className="flex items-start gap-3">
+                <span className="text-lg">⚠️</span>
                 <div>
-                  <p className="text-xs font-semibold text-red-500 dark:text-red-400">Notice</p>
-                  <p className="mt-0.5 text-xs text-red-700 dark:text-red-200/90">{error}</p>
+                  <p className="text-sm font-semibold text-red-500 dark:text-red-400">Notice</p>
+                  <p className="mt-0.5 text-xs leading-5 text-red-700 dark:text-red-200/90">{error}</p>
                 </div>
               </div>
               <button
@@ -2167,157 +2016,14 @@ export default function VoicePage() {
           </div>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────
-            A. SPLIT MODE: COMPACT NEURAL AUDIO BAR
-        ───────────────────────────────────────────────────────────── */}
-        {conversationMode === "voice-chat" && (
-          <div className="shrink-0 mb-3 rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white/70 dark:bg-white/[0.03] backdrop-blur-md p-3 sm:p-4 shadow-xs transition-all">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              {/* Left: Compact Reactive Visualizer & Status */}
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="relative shrink-0 flex items-center justify-center" style={{ width: 68, height: 68 }}>
-                  <VisualizerCanvas
-                    state={pipelineState}
-                    analyserNode={activeAnalyser}
-                    isDark={isDark}
-                    size={68}
-                  />
-                  <div
-                    className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full text-base transition-all duration-300 shadow-md ${
-                      pipelineState === "listening"
-                        ? "bg-red-500 text-white shadow-red-500/50 scale-105"
-                        : pipelineState === "speaking"
-                        ? "bg-emerald-500 text-white shadow-emerald-500/50 scale-105 animate-pulse"
-                        : pipelineState === "synthesizing"
-                        ? "bg-cyan-500 text-white shadow-cyan-500/40 animate-pulse"
-                        : pipelineState === "transcribing"
-                        ? "bg-amber-500 text-white shadow-amber-500/40"
-                        : isDark
-                        ? "bg-white/10 text-white border border-white/10"
-                        : "bg-white text-slate-800 border border-slate-200 shadow-sm"
-                    }`}
-                  >
-                    {pipelineState === "listening"
-                      ? "🔴"
-                      : pipelineState === "speaking"
-                      ? "🔊"
-                      : pipelineState === "synthesizing"
-                      ? "✨"
-                      : pipelineState === "transcribing"
-                      ? "⚡"
-                      : "🎙️"}
-                  </div>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-xs sm:text-sm font-semibold truncate transition-colors ${
-                      pipelineState === "listening"
-                        ? "text-red-500 dark:text-red-400"
-                        : pipelineState === "transcribing"
-                        ? "text-amber-600 dark:text-amber-400"
-                        : pipelineState === "speaking"
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : pipelineState === "synthesizing"
-                        ? "text-sky-600 dark:text-cyan-400"
-                        : isDark
-                        ? "text-zinc-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {pipelineState === "listening"
-                      ? "Listening... (Barge-in active: speak anytime)"
-                      : pipelineState === "speaking"
-                      ? "Chatly speaking (Speak or click Interrupt to cut in)"
-                      : pipelineState === "synthesizing"
-                      ? "Thinking & synthesizing voice..."
-                      : pipelineState === "transcribing"
-                      ? "Transcribing your voice..."
-                      : !currentUser
-                      ? "Sign in to start voice chat"
-                      : "Voice connected & ready"}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                      Sub-300ms Voice
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                      Silero VAD
-                    </span>
-                    {lastTtfa && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                        ⚡ {lastTtfa}ms
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right: Primary Controls */}
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                {/* Continuous Hands-free Loop switch */}
-                <button
-                  type="button"
-                  onClick={() => setHandsFree(!handsFree)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer active:scale-95 ${
-                    handsFree
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs"
-                      : "border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/[0.03] text-slate-500 dark:text-zinc-400"
-                  }`}
-                  title={handsFree ? "Hands-free continuous conversation active" : "Push-to-talk mode active"}
-                >
-                  <span className={`h-1.5 w-1.5 rounded-full ${handsFree ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-                  <span>{handsFree ? "Auto Loop" : "Push to Talk"}</span>
-                </button>
-
-                {/* Primary Voice Mic Button */}
-                <button
-                  type="button"
-                  disabled={!isStarted}
-                  onClick={() => {
-                    if (!currentUser) {
-                      setShowLoginModal(true);
-                      return;
-                    }
-                    toggleListening();
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer active:scale-95 shadow-sm ${
-                    !isStarted
-                      ? "opacity-50 cursor-not-allowed bg-slate-200 dark:bg-zinc-800 text-slate-400"
-                      : listening
-                      ? "bg-red-600 hover:bg-red-700 text-white shadow-red-500/30 animate-pulse"
-                      : isDark
-                      ? "bg-white hover:bg-zinc-200 text-black"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  }`}
-                >
-                  <span>{listening ? "⏹️ Stop" : "🎙️ Speak"}</span>
-                </button>
-
-                {/* Barge-in interrupt button when AI is speaking */}
-                {isAiSpeaking && (
-                  <button
-                    type="button"
-                    onClick={stopAiSpeaking}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-500/20 text-xs font-semibold transition cursor-pointer active:scale-95"
-                    title="Interrupt Chatly voice immediately"
-                  >
-                    ⏹️ Interrupt
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ─────────────────────────────────────────────────────────────
-            B. VOICE-ONLY MODE: FULLSCREEN CINEMATIC ORB STAGE
-        ───────────────────────────────────────────────────────────── */}
-        {conversationMode === "voice-only" && (
-          <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-10 animate-in fade-in duration-300">
+        {/* =====================================================
+            STAGE: VOICE ONLY & SPLIT MODES (ORB VISUALIZER)
+        ===================================================== */}
+        {conversationMode !== "text-only" && (
+          <div className="flex flex-col items-center justify-center py-6 sm:py-8">
+            {/* Status Instruction */}
             <p
-              className={`mb-4 text-sm sm:text-base font-medium tracking-wide transition-colors ${
+              className={`mb-4 text-xs sm:text-sm font-medium tracking-wide transition-colors ${
                 pipelineState === "listening"
                   ? "text-red-500 dark:text-red-400"
                   : pipelineState === "transcribing"
@@ -2327,8 +2033,8 @@ export default function VoicePage() {
                   : pipelineState === "synthesizing"
                   ? "text-sky-600 dark:text-cyan-400"
                   : isDark
-                  ? "text-zinc-300"
-                  : "text-slate-700"
+                  ? "text-zinc-400"
+                  : "text-slate-600"
               }`}
             >
               {pipelineState === "listening"
@@ -2344,29 +2050,36 @@ export default function VoicePage() {
                 : "Click the microphone button to talk"}
             </p>
 
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {/* Real-time Streaming & VAD Telemetry Pill */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Sub-300ms Streaming Voice
               </span>
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
                 ⚡ Silero VAD Tuned
               </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                🎯 FlashRank Reranker + HyDE
+              </span>
               {lastTtfa && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                   ⚡ First Spoken: {lastTtfa}ms
                 </span>
               )}
             </div>
 
-            {/* Cinematic 260px Reactive Canvas + Glowing Core Orb */}
-            <div className="relative mb-8 flex items-center justify-center" style={{ width: 260, height: 260 }}>
+            {/* AUDIO REACTIVE CANVAS + ORB CONTAINER */}
+            <div className="relative mb-6 flex items-center justify-center" style={{ width: 280, height: 280 }}>
+              {/* Web Audio API Analyser Reactive Canvas */}
               <VisualizerCanvas
                 state={pipelineState}
                 analyserNode={activeAnalyser}
                 isDark={isDark}
-                size={260}
+                size={280}
               />
+
+              {/* Central Glowing Core Orb */}
               <div
                 className={`relative z-10 flex items-center justify-center rounded-full transition-all duration-300 shadow-2xl ${
                   pipelineState === "listening"
@@ -2378,7 +2091,7 @@ export default function VoicePage() {
                     : pipelineState === "transcribing"
                     ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-amber-600 to-yellow-500 shadow-amber-500/40"
                     : isDark
-                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-white/5 border border-white/10 shadow-lg"
+                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-white/5 border border-white/10"
                     : "w-22 h-22 sm:w-26 sm:h-26 bg-white border border-slate-200 shadow-lg"
                 }`}
               >
@@ -2396,30 +2109,8 @@ export default function VoicePage() {
               </div>
             </div>
 
-            {/* Subtitles pill in Voice-Only mode */}
-            {(interimText || aiResponse) && (
-              <div className="mb-8 w-full max-w-lg px-4 text-center animate-in fade-in duration-200">
-                <div className="rounded-2xl p-4 border backdrop-blur-md shadow-lg transition bg-white border-slate-200 dark:bg-white/[0.04] dark:border-white/10">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
-                    {interimText ? "You Spoke" : "Chatly AI"}
-                  </p>
-                  <p className="text-sm text-slate-800 dark:text-zinc-200">
-                    {interimText || aiResponse}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Cinematic Controls Dock */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleToggleMute}
-                className="flex items-center gap-2 px-4 py-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] text-xs font-semibold transition hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
-              >
-                <span>{voiceMuted ? "🔇 Unmute AI" : "🔊 Mute AI"}</span>
-              </button>
-
+            {/* CONTROLS (Speak, Stop, Interrupt) */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto px-4 sm:px-0">
               <button
                 type="button"
                 disabled={!isStarted}
@@ -2430,62 +2121,94 @@ export default function VoicePage() {
                   }
                   toggleListening();
                 }}
-                className={`flex items-center gap-2.5 px-8 py-3.5 rounded-full text-base font-semibold transition cursor-pointer active:scale-95 shadow-lg ${
+                className={`w-full sm:w-auto touch-manipulation select-none rounded-2xl sm:rounded-full px-8 py-3.5 font-semibold text-sm sm:text-base transition-all duration-150 cursor-pointer active:scale-95 text-center ${
                   !isStarted
-                    ? "opacity-50 cursor-not-allowed bg-slate-200 dark:bg-zinc-800 text-slate-400"
+                    ? "cursor-not-allowed opacity-50 border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-zinc-600"
                     : listening
-                    ? "bg-red-600 hover:bg-red-700 text-white shadow-red-500/40 animate-pulse"
+                    ? "border border-red-500 bg-red-600 text-white shadow-[0_0_30px_rgba(239,68,68,0.45)] hover:bg-red-700"
+                    : !currentUser
+                    ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30"
                     : isDark
-                    ? "bg-white hover:bg-zinc-200 text-black shadow-white/20"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30"
+                    ? "border border-white/20 bg-white text-black hover:bg-zinc-200 shadow-md"
+                    : "border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
                 }`}
               >
-                <span>{listening ? "⏹️ Stop Talking" : "🎙️ Tap to Speak"}</span>
+                <span className="flex items-center justify-center gap-2.5">
+                  <span className="text-base sm:text-lg">
+                    {listening ? "⏹️" : !currentUser ? "🔒" : "🎙️"}
+                  </span>
+                  <span>
+                    {listening
+                      ? "Click to Stop Talking"
+                      : !currentUser
+                      ? "Sign In to Talk"
+                      : "Click to Speak"}
+                  </span>
+                </span>
               </button>
 
               {isAiSpeaking && (
                 <button
                   type="button"
                   onClick={stopAiSpeaking}
-                  className="flex items-center gap-2 px-5 py-3 rounded-full border border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-500/20 text-xs font-semibold transition cursor-pointer active:scale-95"
+                  className="w-full sm:w-auto cursor-pointer rounded-2xl sm:rounded-full border border-red-500/40 bg-red-500/10 px-6 py-3.5 text-xs sm:text-sm font-semibold text-red-500 dark:text-red-400 transition hover:bg-red-500/20 active:scale-95 text-center"
                 >
-                  ⏹️ Interrupt
+                  ⏹️ Interrupt AI (Barge-in)
                 </button>
               )}
-
-              <button
-                type="button"
-                onClick={() => setHandsFree(!handsFree)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-full border text-xs font-semibold transition cursor-pointer active:scale-95 ${
-                  handsFree
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] text-slate-600 dark:text-zinc-400"
-                }`}
-              >
-                <span>{handsFree ? "🔁 Continuous Loop" : "👆 Push to Talk"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleModeChange("voice-chat")}
-                className="flex items-center gap-1.5 px-4 py-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white text-xs font-medium transition cursor-pointer"
-              >
-                <span>💬 Show Transcript</span>
-              </button>
             </div>
+
+            {/* Quick Volume Control Bar */}
+            <div className="mt-4 flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] backdrop-blur-md shadow-xs">
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                className="text-sm cursor-pointer hover:scale-110 active:scale-95 transition"
+                title={voiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+              >
+                {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={voiceMuted ? 0 : volume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-24 sm:w-28 h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
+                aria-label="Quick volume control"
+              />
+              <span className="text-[11px] font-mono font-medium text-slate-600 dark:text-zinc-400 w-8 text-right">
+                {Math.round((voiceMuted ? 0 : volume) * 100)}%
+              </span>
+            </div>
+
+            {/* Subtitles pill in Voice-Only mode */}
+            {conversationMode === "voice-only" && (interimText || aiResponse) && (
+              <div className="mt-6 w-full max-w-lg px-4 text-center">
+                <div className="rounded-2xl p-4 border backdrop-blur-md shadow-lg transition bg-white border-slate-200 dark:bg-white/[0.04] dark:border-white/10">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
+                    {interimText ? "You Spoke" : "Chatly AI"}
+                  </p>
+                  <p className="text-sm text-slate-800 dark:text-zinc-200">
+                    {interimText || aiResponse}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────
-            C. CONVERSATION TRANSCRIPT & CHAT FEED (Split & Text Modes)
-        ───────────────────────────────────────────────────────────── */}
+        {/* =====================================================
+            CONVERSATION HISTORY & CHAT PANEL
+        ===================================================== */}
         {conversationMode !== "voice-only" && (
-          <div className="flex-1 min-h-0 flex flex-col w-full">
-            {/* Transcript Sub-Header with Status & Export */}
-            <div className="flex items-center justify-between px-1 mb-2 shrink-0">
+          <div className="flex-1 flex flex-col mt-4 max-w-3xl w-full mx-auto">
+            {/* Transcript Header with Clear History & Export Options */}
+            <div className="flex flex-wrap items-center justify-between px-2 mb-3 gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
-                  Transcript ({messages.length})
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
+                  Conversation Transcript ({messages.length})
                 </span>
                 {isAiSpeaking && (
                   <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -2502,7 +2225,7 @@ export default function VoicePage() {
                       type="button"
                       onClick={() => exportConversationTranscript(messages)}
                       title="Download conversation transcript as formatted text file"
-                      className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 dark:text-zinc-300"
+                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 dark:text-zinc-300"
                     >
                       📄 Export
                     </button>
@@ -2516,7 +2239,7 @@ export default function VoicePage() {
                           }
                         }}
                         title="Download latest AI audio response as WAV file"
-                        className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                       >
                         🎵 Audio
                       </button>
@@ -2524,7 +2247,7 @@ export default function VoicePage() {
                     <button
                       type="button"
                       onClick={clearHistory}
-                      className="text-[11px] text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer ml-1"
+                      className="text-xs text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer ml-1"
                     >
                       Clear
                     </button>
@@ -2536,56 +2259,20 @@ export default function VoicePage() {
             {/* Scrollable Message Feed */}
             <div
               ref={chatScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto rounded-3xl border p-4 sm:p-5 space-y-4 transition-colors border-slate-200 bg-white/90 shadow-xs dark:border-white/[0.08] dark:bg-zinc-950/40 dark:shadow-none"
+              className="flex-1 overflow-y-auto rounded-3xl border p-4 sm:p-6 space-y-4 max-h-[420px] transition-colors border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-white/[0.02] dark:shadow-none"
             >
-              {/* Gemini / OpenAI Style Empty State with Suggestion Cards */}
               {messages.length === 0 && !isAiLoading && (
-                <div className="my-auto py-6 sm:py-10 text-center max-w-xl mx-auto animate-in fade-in duration-300">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-3xl shadow-inner shadow-emerald-500/20">
-                    🎙️
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    Chatly Voice Intelligence
-                  </h3>
-                  <p className="mt-1.5 text-xs sm:text-sm text-slate-500 dark:text-zinc-400 leading-relaxed">
-                    Real-time speech-to-speech AI powered by Deepgram Aura & Sarvam AI. Tap the microphone or try one of these:
+                <div className="py-12 text-center">
+                  <p className="text-3xl mb-2">💬</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-zinc-300">
+                    No messages yet.
                   </p>
-
-                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
-                    {[
-                      { icon: "🗣️", title: "Natural Hinglish Talk", prompt: "Aap kaise ho? Aaj ka mausam aur taaza khabrein batao." },
-                      { icon: "⚡", title: "Sub-300ms Voice Test", prompt: "Explain how sub-300ms streaming TTS works with Deepgram and Sarvam." },
-                      { icon: "⚔️", title: "AI vs AI Debate", prompt: "Compare React Native vs Flutter for mobile app development." },
-                      { icon: "🧠", title: "Semantic Memory", prompt: "What preferences and personal notes do you remember about me?" },
-                    ].map((item, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          if (!currentUser) {
-                            setShowLoginModal(true);
-                            return;
-                          }
-                          sendVoiceToBackend(item.prompt);
-                        }}
-                        className="group flex flex-col p-3 rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white/70 dark:bg-white/[0.02] hover:bg-emerald-500/5 hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 transition-all cursor-pointer text-left active:scale-[0.98] shadow-xs"
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-base group-hover:scale-110 transition-transform">{item.icon}</span>
-                          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            {item.title}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                          "{item.prompt}"
-                        </p>
-                      </button>
-                    ))}
-                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">
+                    Press the microphone button or type below to begin.
+                  </p>
                 </div>
               )}
 
-              {/* Messages Stream */}
               {messages.map((msg) => {
                 const isUser = msg.sender === "user";
                 const timeString = new Date(msg.timestamp).toLocaleTimeString([], {
@@ -2761,75 +2448,47 @@ export default function VoicePage() {
               )}
             </div>
 
-            {/* OpenAI / Gemini Style Unified Bottom Input Capsule */}
-            <div className="pt-2 shrink-0">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!currentUser) {
-                    setShowLoginModal(true);
-                    return;
-                  }
-                  if (!manualInput.trim()) return;
-                  const textToSend = manualInput.trim();
-                  setManualInput("");
-                  sendVoiceToBackend(textToSend);
-                }}
-                className="flex items-center gap-2 rounded-2xl border p-1.5 sm:p-2 backdrop-blur-xl transition border-slate-300 bg-white/95 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-md dark:border-white/10 dark:bg-zinc-900/90 dark:focus-within:border-white/30"
+            {/* FALLBACK MANUAL TEXT INPUT BAR */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!currentUser) {
+                  setShowLoginModal(true);
+                  return;
+                }
+                if (!manualInput.trim()) return;
+                const textToSend = manualInput.trim();
+                setManualInput("");
+                sendVoiceToBackend(textToSend);
+              }}
+              className="mt-3 flex items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
+            >
+              <input
+                type="text"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                placeholder={
+                  currentUser
+                    ? "Type a message to Chatly..."
+                    : "Please sign in to send messages..."
+                }
+                disabled={!currentUser}
+                className="flex-1 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
+              />
+              <button
+                type="submit"
+                disabled={!manualInput.trim() || isAiLoading}
+                className="cursor-pointer rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
               >
-                {/* Voice button inside input dock */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!currentUser) {
-                      setShowLoginModal(true);
-                      return;
-                    }
-                    toggleListening();
-                  }}
-                  className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center text-sm ${
-                    listening
-                      ? "bg-red-500 text-white animate-pulse"
-                      : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/10"
-                  }`}
-                  title={listening ? "Stop listening" : "Click to speak with microphone"}
-                >
-                  {listening ? "⏹️" : "🎙️"}
-                </button>
-
-                <input
-                  type="text"
-                  value={manualInput}
-                  onChange={(e) => setManualInput(e.target.value)}
-                  placeholder={
-                    currentUser
-                      ? "Message Chatly... (press Enter to send, or click 🎙️)"
-                      : "Please sign in to send messages..."
-                  }
-                  disabled={!currentUser}
-                  className="flex-1 bg-transparent px-2 py-1.5 text-sm outline-none disabled:opacity-50 text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
-                />
-
-                <button
-                  type="submit"
-                  disabled={!manualInput.trim() || isAiLoading}
-                  className="cursor-pointer rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-                >
-                  Send →
-                </button>
-              </form>
-
-              <div className="flex items-center justify-between px-2 pt-1.5 text-[10px] text-slate-400 dark:text-zinc-500">
-                <span>Enter to send • Barge-in active</span>
-                <span>Deepgram Aura + Sarvam AI • Sub-300ms</span>
-              </div>
-            </div>
+                Send →
+              </button>
+            </form>
           </div>
         )}
 
-        {/* Status Line Footer */}
-        <footer className="mt-auto pt-2 shrink-0 text-center text-[11px] text-slate-400 dark:text-zinc-500">
-          <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* FOOTER */}
+        <footer className="mt-auto pt-6 text-center text-xs text-slate-500 dark:text-zinc-500">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <span>Model: {activeModel}</span>
             <span>•</span>
             <span>Voice: {selectedVoice.replace("aura-", "").replace("-en", "")}</span>
@@ -2839,7 +2498,7 @@ export default function VoicePage() {
             <span>Loop: {handsFree ? "Continuous" : "Push-to-Talk"}</span>
           </div>
         </footer>
-      </main>
+      </div>
 
       {/* Clickable Grounding Source Sliding Drawer */}
       <GroundingSourceDrawer
