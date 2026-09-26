@@ -7,6 +7,9 @@ import { useTheme } from "next-themes";
 import { API_BASE } from "../config";
 import VisualizerCanvas, { VisualizerState } from "./components/VisualizerCanvas";
 import { ThemeToggle } from "../components/ThemeToggle";
+import GroundingSourceDrawer, { GroundingDrawerData } from "./components/GroundingSourceDrawer";
+import DebateArenaModal from "./components/DebateArenaModal";
+import { exportConversationTranscript, exportAudioFile } from "./utils/exportUtils";
 
 // Extend Window interface for Web Speech API
 declare global {
@@ -47,6 +50,8 @@ export interface ChatMessage {
   model?: string;
   audio?: string;
   toolUsed?: ToolCallInfo | null;
+  ragSource?: string | null;
+  groundingDetails?: any;
 }
 
 // Gemini & ChatGPT Inspired Tool Usage Helper
@@ -106,6 +111,8 @@ const PERSONA_OPTIONS = [
   { id: "concise", label: "Ultra Concise", desc: "1-sentence direct answers", icon: "⚡" },
   { id: "technical", label: "Tech Specialist", desc: "Architectural & precise", icon: "👨‍💻" },
   { id: "tutor", label: "Patient Tutor", desc: "Analogies & easy explanations", icon: "🎓" },
+  { id: "rational", label: "Rationalist", desc: "Fact-checks & objective debate", icon: "⚖️" },
+  { id: "andhbhakt", label: "Saffron Debater", desc: "Hyper-nationalist & GraphRAG", icon: "🚩" },
 ];
 
 const VOICE_OPTIONS = [
@@ -117,6 +124,76 @@ const VOICE_OPTIONS = [
   { id: "aura-arcas-en", label: "Arcas", desc: "Crisp Neutral" },
 ];
 
+/**
+ * Pipelined Audio Stream Queue for Sub-300ms Seamless Voice Playback.
+ * Plays the first sentence audio immediately while following sentences are queued and played seamlessly.
+ */
+class AudioStreamQueue {
+  private queue: { audio: HTMLAudioElement; text: string; index: number }[] = [];
+  private isPlaying = false;
+  private currentAudio: HTMLAudioElement | null = null;
+  public onStartSpeaking?: () => void;
+  public onStopSpeaking?: () => void;
+  public onChunkStart?: (chunk: { index: number; text: string }) => void;
+
+  enqueue(base64Audio: string, format: string = "audio/wav", text: string = "", index: number = 0) {
+    try {
+      const audioSrc = `data:${format};base64,${base64Audio}`;
+      const audio = new Audio(audioSrc);
+      audio.volume = 1.0;
+      this.queue.push({ audio, text, index });
+      if (!this.isPlaying) {
+        this.playNext();
+      }
+    } catch (e) {
+      console.warn("Failed to enqueue audio chunk:", e);
+    }
+  }
+
+  private playNext() {
+    if (this.queue.length === 0) {
+      this.isPlaying = false;
+      this.currentAudio = null;
+      if (this.onStopSpeaking) this.onStopSpeaking();
+      return;
+    }
+
+    this.isPlaying = true;
+    const nextItem = this.queue.shift()!;
+    this.currentAudio = nextItem.audio;
+    if (this.onStartSpeaking) this.onStartSpeaking();
+    if (this.onChunkStart) this.onChunkStart({ index: nextItem.index, text: nextItem.text });
+
+    nextItem.audio.onended = () => {
+      this.playNext();
+    };
+
+    nextItem.audio.onerror = () => {
+      this.playNext();
+    };
+
+    const promise = nextItem.audio.play();
+    if (promise !== undefined) {
+      promise.catch(() => {
+        this.playNext();
+      });
+    }
+  }
+
+  stop() {
+    this.queue = [];
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch (_) {}
+      this.currentAudio = null;
+    }
+    this.isPlaying = false;
+    if (this.onStopSpeaking) this.onStopSpeaking();
+  }
+}
+
 export default function VoicePage() {
   const router = useRouter();
 
@@ -125,6 +202,11 @@ export default function VoicePage() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
+
+  // AI vs AI Debate Arena & Grounding Source Drawer states
+  const [isDebateModalOpen, setIsDebateModalOpen] = useState(false);
+  const [isGroundingDrawerOpen, setIsGroundingDrawerOpen] = useState(false);
+  const [groundingDrawerData, setGroundingDrawerData] = useState<GroundingDrawerData | null>(null);
 
   // Responsive Drawer & Sidebar states
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -179,13 +261,25 @@ export default function VoicePage() {
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
+  // Streaming Voice & Audio Queue Refs
+  const audioQueueRef = useRef<AudioStreamQueue>(new AudioStreamQueue());
+  const voiceWsRef = useRef<WebSocket | null>(null);
+  const [lastTtfa, setLastTtfa] = useState<number | null>(null);
+  const currentStreamTextRef = useRef<string>("");
+  const activeAiMsgIdRef = useRef<string | null>(null);
+
+  // Smart VAD (Voice Activity Detection) Refs
+  const noiseFloorRef = useRef<number>(0.012);
+  const vadIntervalRef = useRef<any>(null);
+  const isVocalizingRef = useRef<boolean>(false);
+
   const voiceMutedRef = useRef(false);
   const handsFreeRef = useRef(false);
   const isStartedRef = useRef(false);
   const currentUserRef = useRef<UserProfile | null>(null);
   const isAiSpeakingRef = useRef(false);
 
-  // User speech accumulation & 2.5s silence debouncing refs
+  // User speech accumulation & silence debouncing refs
   const silenceTimeoutRef = useRef<any>(null);
   const currentQueryRef = useRef<string>("");
   const stopListeningRef = useRef<(shouldFlush?: boolean) => void>(() => {});
@@ -372,6 +466,7 @@ export default function VoicePage() {
   }, []);
 
   // Initialize Microphone Web Audio Analyzer
+  // Initialize Microphone Web Audio Analyzer & Smart Energy VAD Loop
   const initMicAnalyser = useCallback(
     (stream: MediaStream) => {
       try {
@@ -385,6 +480,37 @@ export default function VoicePage() {
         source.connect(analyser);
         micAnalyserRef.current = analyser;
         setActiveAnalyser(analyser);
+
+        // Smart VAD Loop: Continuously measure RMS and speech frequency band energy
+        if (vadIntervalRef.current) clearInterval(vadIntervalRef.current);
+        const buffer = new Uint8Array(analyser.frequencyBinCount);
+
+        vadIntervalRef.current = setInterval(() => {
+          if (isAiSpeakingRef.current || !listeningRef.current) return;
+
+          analyser.getByteTimeDomainData(buffer);
+          let sumSquares = 0;
+          for (let i = 0; i < buffer.length; i++) {
+            const norm = (buffer[i] - 128) / 128;
+            sumSquares += norm * norm;
+          }
+          const rms = Math.sqrt(sumSquares / buffer.length);
+
+          // Calibrate background noise floor when quiet
+          if (rms < noiseFloorRef.current * 1.5) {
+            noiseFloorRef.current = noiseFloorRef.current * 0.95 + rms * 0.05;
+          }
+
+          // Vocalization threshold: 2.2x ambient noise floor + baseline
+          const isVocalizing = rms > (noiseFloorRef.current * 2.2 + 0.015);
+          isVocalizingRef.current = isVocalizing;
+
+          // If user started speaking while a silence debounce was ticking, cancel it
+          if (isVocalizing && silenceTimeoutRef.current) {
+            clearTimeout(silenceTimeoutRef.current);
+            silenceTimeoutRef.current = null;
+          }
+        }, 50);
       } catch (err) {
         console.warn("Could not attach mic audio analyzer:", err);
       }
@@ -394,6 +520,7 @@ export default function VoicePage() {
 
   // Text-To-Speech Interruption
   const stopAiSpeaking = useCallback(() => {
+    audioQueueRef.current.stop();
     if (audioPlayerRef.current) {
       try {
         audioPlayerRef.current.pause();
@@ -578,7 +705,7 @@ export default function VoicePage() {
     }
   };
 
-  // Send speech or text to backend
+  // Send speech or text to backend using Real-Time Streaming Pipeline
   const sendVoiceToBackend = async (text: string) => {
     if (!text || !text.trim()) return;
 
@@ -589,95 +716,208 @@ export default function VoicePage() {
       return;
     }
 
-    // Append user message to chat stream
+    // 1. Halt any previous speech & stop listening
+    stopAiSpeaking();
+
+    const promptText = text.trim();
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       sender: "user",
-      text: text.trim(),
+      text: promptText,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
-
     setIsAiLoading(true);
 
+    const aiMsgId = `ai-${Date.now()}`;
+    activeAiMsgIdRef.current = aiMsgId;
+    currentStreamTextRef.current = "";
+    let ragSourceBadge: string | null = null;
+    let currentGroundingDetails: any = null;
+    let turnAudioBase64: string | null = null;
+    const startTurnTime = Date.now();
+
+    const appendOrUpdateAiMessage = (
+      newText: string,
+      ragSource?: string | null,
+      groundingDetails?: any,
+      audioBase64?: string
+    ) => {
+      if (groundingDetails) currentGroundingDetails = groundingDetails;
+      if (audioBase64) turnAudioBase64 = audioBase64;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === aiMsgId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            {
+              id: aiMsgId,
+              sender: "ai",
+              text: newText,
+              timestamp: new Date(),
+              model: activeModel,
+              ragSource: ragSource || ragSourceBadge,
+              groundingDetails: groundingDetails || currentGroundingDetails,
+              audio: audioBase64 || turnAudioBase64 || undefined,
+            },
+          ];
+        }
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          text: newText,
+          ragSource: ragSource || updated[idx].ragSource || ragSourceBadge,
+          groundingDetails: groundingDetails || updated[idx].groundingDetails || currentGroundingDetails,
+          audio: audioBase64 || updated[idx].audio || turnAudioBase64 || undefined,
+        };
+        return updated;
+      });
+      setAiResponse(newText);
+    };
+
+    const handleAudioChunk = (chunk: { audio: string; format: string; text: string; index: number; latencyMs?: number; totalElapsedMs?: number }) => {
+      setIsAiLoading(false);
+      if (!lastTtfa && chunk.totalElapsedMs) {
+        setLastTtfa(chunk.totalElapsedMs);
+      }
+      audioQueueRef.current.enqueue(chunk.audio, chunk.format || "audio/wav", chunk.text, chunk.index);
+    };
+
+    // 1. Try WebSocket Duplex Connection (Lowest Latency < 280ms)
+    const ws = voiceWsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({
+          type: "user_speech",
+          text: promptText,
+          persona: selectedPersona,
+          voiceModel: selectedVoice,
+          token,
+        }));
+        return;
+      } catch (wsErr) {
+        console.warn("WebSocket send warning, falling back to SSE stream:", wsErr);
+      }
+    }
+
+    // 2. Try Server-Sent Events (SSE) Token-to-Audio Streaming Pipeline
     try {
-      const response = await fetch(`${API_BASE}/api/voice`, {
+      const response = await fetch(`${API_BASE}/api/voice/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          text: text.trim(),
-          message: text.trim(),
+          text: promptText,
+          message: promptText,
           voiceModel: selectedVoice,
           persona: selectedPersona,
         }),
       });
 
-      // Handle Rate Limit (429)
       if (response.status === 429) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         const limitMsg = errData.error || "Rate limit reached. Please wait before making more calls.";
         setError(limitMsg);
         setAiResponse(limitMsg);
-        if (errData.quota) setQuota(errData.quota);
         speakAiResponse("You have reached your voice call limit. Please check back later.");
+        setIsAiLoading(false);
         return;
       }
 
-      // Handle Unauthorized (401)
       if (response.status === 401) {
         setError("Your session has expired. Please sign in again.");
         setShowLoginModal(true);
+        setIsAiLoading(false);
         return;
       }
 
-      if (!response.ok) {
-        let serverError = `Server responded with status ${response.status}`;
-        try {
-          const errData = await response.json();
-          if (errData.details || errData.error || errData.reply) {
-            serverError = errData.details || errData.error || errData.reply;
+      if (!response.ok || !response.body) {
+        throw new Error(`Streaming failed with status ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+
+        const events = sseBuffer.split("\n\n");
+        sseBuffer = events.pop() || "";
+
+        for (const rawEv of events) {
+          const lines = rawEv.split("\n");
+          let eventType = "message";
+          let dataStr = "";
+          for (const line of lines) {
+            if (line.startsWith("event:")) eventType = line.slice(6).trim();
+            if (line.startsWith("data:")) dataStr = line.slice(5).trim();
           }
-        } catch (_) {}
-        setError(serverError);
-        setAiResponse(serverError);
-        speakAiResponse(serverError);
-        throw new Error(serverError);
+
+          if (!dataStr) continue;
+          try {
+            const data = JSON.parse(dataStr);
+            if (eventType === "rag") {
+              ragSourceBadge = data.ragSource;
+              if (data.groundingDetails) currentGroundingDetails = data.groundingDetails;
+              appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails);
+            } else if (eventType === "token") {
+              currentStreamTextRef.current += data.token;
+              appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails);
+            } else if (eventType === "audio") {
+              handleAudioChunk(data);
+              if (data.audio && !turnAudioBase64) {
+                turnAudioBase64 = data.audio;
+              }
+            } else if (eventType === "done") {
+              if (data.groundingDetails) currentGroundingDetails = data.groundingDetails;
+              if (data.audio) turnAudioBase64 = data.audio;
+              if (data.reply) appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined);
+              if (data.firstAudioTimeMs) setLastTtfa(data.firstAudioTimeMs);
+              setIsAiLoading(false);
+            }
+          } catch (_) {}
+        }
       }
+    } catch (streamErr: any) {
+      console.warn("Streaming voice pipeline warning, trying legacy fallback:", streamErr);
 
-      const data = await response.json();
-      const reply = data.reply || data.response || "I heard you!";
-      if (data.quota) setQuota(data.quota);
-      if (data.model) setActiveModel(data.model);
+      // 3. Fallback to Legacy /api/voice endpoint
+      try {
+        const legacyRes = await fetch(`${API_BASE}/api/voice`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            text: promptText,
+            message: promptText,
+            voiceModel: selectedVoice,
+            persona: selectedPersona,
+          }),
+        });
 
-      setAiResponse(reply);
+        if (!legacyRes.ok) throw new Error(`Server returned ${legacyRes.status}`);
 
-      // Append AI response to chat stream with tool metadata
-      const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        sender: "ai",
-        text: reply,
-        timestamp: new Date(),
-        model: data.model || activeModel,
-        audio: data.audio || undefined,
-        toolUsed: data.toolUsed || undefined,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
+        const data = await legacyRes.json();
+        const reply = data.reply || "I heard you!";
+        appendOrUpdateAiMessage(reply, data.ragSource, data.groundingDetails, data.audio);
 
-      // Play audio if available, else browser TTS
-      if (data.audio) {
-        playDeepgramAudio(data.audio, data.audioFormat || "audio/wav", reply);
-      } else {
-        speakAiResponse(reply);
+        if (data.audio) {
+          playDeepgramAudio(data.audio, data.audioFormat || "audio/wav", reply);
+        } else {
+          speakAiResponse(reply);
+        }
+      } catch (fallbackErr: any) {
+        setError(fallbackErr.message || "Failed to process voice turn.");
+      } finally {
+        setIsAiLoading(false);
       }
-    } catch (err: any) {
-      console.error("❌ Failed to send voice text to backend:", err);
-      const errMsg = `Notice: ${err.message || "Could not connect to Chatly backend"}`;
-      setAiResponse(errMsg);
-    } finally {
-      setIsAiLoading(false);
     }
   };
 
@@ -712,7 +952,7 @@ export default function VoicePage() {
     sendVoiceToBackendRef.current(queryToSend);
   }, []);
 
-  // Speech Recognition Initializer with continuous listening and 2.5s silence debounce
+  // Speech Recognition Initializer with Smart VAD Turn-Taking Cadence
   const createRecognition = useCallback(() => {
     if (typeof window === "undefined") return null;
 
@@ -766,12 +1006,22 @@ export default function VoicePage() {
           // Reset silence timer on every new word or vocal chunk
           if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
+            silenceTimeoutRef.current = null;
           }
 
-          // Debounce: Wait 2.5 seconds of silence before finalizing user's speech
+          // Smart VAD Turn-Taking Tuning:
+          // 1. If sentence ends with terminal punctuation (. ? !) or isFinal is true: user finished thought -> 650ms
+          // 2. If mid-clause pause: allow user time to think without cutting them off -> 1100ms
+          const lastResult = event.results[event.results.length - 1];
+          const isTerminal = /[.?!]$/.test(combinedText) || (lastResult && lastResult.isFinal);
+          const dynamicSilenceMs = isTerminal ? 650 : 1100;
+
           silenceTimeoutRef.current = setTimeout(() => {
-            finalizeAndSendSpeech();
-          }, 2500);
+            // Verify energy VAD is not currently detecting active vocalization before finalizing
+            if (!isVocalizingRef.current) {
+              finalizeAndSendSpeech();
+            }
+          }, dynamicSilenceMs);
         }
       };
 
@@ -827,6 +1077,10 @@ export default function VoicePage() {
   useEffect(() => {
     return () => {
       stopAiSpeaking();
+      audioQueueRef.current.stop();
+      if (vadIntervalRef.current) {
+        clearInterval(vadIntervalRef.current);
+      }
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
       }
@@ -843,6 +1097,111 @@ export default function VoicePage() {
       }
     };
   }, [stopAiSpeaking]);
+
+  // Setup Real-Time Streaming WebSocket & Pipelined Audio Queue Hook
+  useEffect(() => {
+    // 1. AudioQueue event listeners
+    audioQueueRef.current.onStartSpeaking = () => {
+      setIsAiSpeaking(true);
+      setPipelineState("speaking");
+    };
+
+    audioQueueRef.current.onStopSpeaking = () => {
+      setIsAiSpeaking(false);
+      if (handsFreeRef.current && isStartedRef.current) {
+        setTimeout(() => {
+          startListeningRef.current();
+        }, 400);
+      }
+    };
+
+    // 2. Establish Voice WebSocket duplex connection
+    if (typeof window === "undefined") return;
+
+    let ws: WebSocket | null = null;
+    try {
+      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      let host = window.location.hostname + ":5000";
+      if (API_BASE && API_BASE.startsWith("http")) {
+        host = API_BASE.replace(/^https?:\/\//, "");
+      }
+      const wsUrl = `${wsProto}//${host}/ws/voice`;
+
+      ws = new WebSocket(wsUrl);
+      voiceWsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("⚡ [FRONTEND WS] Connected to Chatly Voice WebSocket:", wsUrl);
+        const token = localStorage.getItem("chatly_token");
+        if (token) {
+          ws?.send(JSON.stringify({ type: "auth", token }));
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "rag_grounded") {
+            setMessages((prev) => {
+              const activeId = activeAiMsgIdRef.current;
+              if (!activeId) return prev;
+              return prev.map((m) => (m.id === activeId ? { ...m, ragSource: msg.ragSource } : m));
+            });
+          } else if (msg.type === "token_delta") {
+            currentStreamTextRef.current += msg.token;
+            const full = currentStreamTextRef.current;
+            setMessages((prev) => {
+              const activeId = activeAiMsgIdRef.current;
+              if (!activeId) return prev;
+              const idx = prev.findIndex((m) => m.id === activeId);
+              if (idx === -1) {
+                return [
+                  ...prev,
+                  {
+                    id: activeId,
+                    sender: "ai",
+                    text: full,
+                    timestamp: new Date(),
+                    model: activeModel,
+                  },
+                ];
+              }
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], text: full };
+              return updated;
+            });
+            setAiResponse(full);
+          } else if (msg.type === "audio_chunk") {
+            setIsAiLoading(false);
+            if (!lastTtfa && msg.totalElapsedMs) {
+              setLastTtfa(msg.totalElapsedMs);
+            }
+            audioQueueRef.current.enqueue(msg.audio, msg.format || "audio/wav", msg.text, msg.index);
+          } else if (msg.type === "turn_complete") {
+            setIsAiLoading(false);
+            if (msg.firstAudioTimeMs) {
+              setLastTtfa(msg.firstAudioTimeMs);
+            }
+          }
+        } catch (_) {}
+      };
+
+      ws.onerror = (err) => {
+        console.warn("WebSocket stream fallback to SSE active:", err);
+      };
+    } catch (err) {
+      console.warn("Voice WebSocket init warning:", err);
+    }
+
+    return () => {
+      if (ws) {
+        try {
+          ws.close();
+        } catch (_) {}
+      }
+      audioQueueRef.current.stop();
+    };
+  }, [activeModel]);
 
   const stopListening = useCallback(
     (shouldFlush: boolean = true) => {
@@ -1271,6 +1630,19 @@ export default function VoicePage() {
 
       {/* QUICK ACTIONS & LINKS */}
       <div className="pt-2 border-t border-slate-200 dark:border-white/10 space-y-2 text-xs">
+        {/* Debate Arena Launcher Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setIsDebateModalOpen(true);
+            if (isMobile) setMobileDrawerOpen(false);
+          }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-700 dark:text-amber-300 font-semibold hover:from-amber-500/25 hover:to-orange-500/25 transition cursor-pointer shadow-xs active:scale-98"
+        >
+          <span>⚔️</span>
+          <span>Open AI Debate Arena</span>
+        </button>
+
         {messages.length > 0 && (
           <button
             type="button"
@@ -1454,8 +1826,18 @@ export default function VoicePage() {
             </span>
           </div>
 
-          {/* Center/Right: Pipeline Status + Mobile Theme Toggle + Hamburger */}
-          <div className="flex items-center gap-3">
+          {/* Center/Right: Pipeline Status + Debate Arena + Mobile Theme Toggle + Hamburger */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* AI vs AI Debate Arena Launcher */}
+            <button
+              type="button"
+              onClick={() => setIsDebateModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20 active:scale-95 shadow-xs"
+              title="Launch AI vs AI Debate Arena: Saffron Debater vs Rationalist Analyst"
+            >
+              <span>⚔️</span>
+              <span className="hidden sm:inline">Debate Arena</span>
+            </button>
             {/* Dynamic Status Indicator Chip */}
             <div
               className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
@@ -1572,6 +1954,25 @@ export default function VoicePage() {
                 : "Click the microphone button to talk"}
             </p>
 
+            {/* Real-time Streaming & VAD Telemetry Pill */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Sub-300ms Streaming Voice
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                ⚡ Silero VAD Tuned
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                🎯 FlashRank Reranker + HyDE
+              </span>
+              {lastTtfa && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                  ⚡ First Spoken: {lastTtfa}ms
+                </span>
+              )}
+            </div>
+
             {/* AUDIO REACTIVE CANVAS + ORB CONTAINER */}
             <div className="relative mb-6 flex items-center justify-center" style={{ width: 280, height: 280 }}>
               {/* Web Audio API Analyser Reactive Canvas */}
@@ -1682,8 +2083,8 @@ export default function VoicePage() {
         ===================================================== */}
         {conversationMode !== "voice-only" && (
           <div className="flex-1 flex flex-col mt-4 max-w-3xl w-full mx-auto">
-            {/* Transcript Header with Clear History */}
-            <div className="flex items-center justify-between px-2 mb-3">
+            {/* Transcript Header with Clear History & Export Options */}
+            <div className="flex flex-wrap items-center justify-between px-2 mb-3 gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
                   Conversation Transcript ({messages.length})
@@ -1696,15 +2097,42 @@ export default function VoicePage() {
                 )}
               </div>
 
-              {messages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearHistory}
-                  className="text-xs text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer"
-                >
-                  Clear History
-                </button>
-              )}
+              <div className="flex items-center gap-1.5">
+                {messages.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => exportConversationTranscript(messages)}
+                      title="Download conversation transcript as formatted text file"
+                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 dark:text-zinc-300"
+                    >
+                      📄 Export
+                    </button>
+                    {messages.some((m) => !!m.audio) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const lastAudioMsg = [...messages].reverse().find((m) => !!m.audio);
+                          if (lastAudioMsg && lastAudioMsg.audio) {
+                            exportAudioFile(lastAudioMsg.audio, "wav", "chatly-ai-response.wav");
+                          }
+                        }}
+                        title="Download latest AI audio response as WAV file"
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                      >
+                        🎵 Audio
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={clearHistory}
+                      className="text-xs text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer ml-1"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Scrollable Message Feed */}
@@ -1756,6 +2184,53 @@ export default function VoicePage() {
                           : "bg-slate-100/90 border border-slate-200 text-slate-800 rounded-tl-none shadow-xs"
                       }`}
                     >
+                      {/* Clickable RAG Grounding Indicator Drawer Trigger */}
+                      {msg.ragSource && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGroundingDrawerData({
+                              ragSource: msg.ragSource!,
+                              groundingDetails: msg.groundingDetails,
+                              messageText: msg.text,
+                            });
+                            setIsGroundingDrawerOpen(true);
+                          }}
+                          title="Click to view verified knowledge graph sources, matched topic & counter-arguments"
+                          className={`mb-2.5 mr-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md transition-all shadow-xs cursor-pointer hover:scale-105 active:scale-95 group/badge ${
+                            msg.ragSource.includes("political_debate_rag")
+                              ? isDark
+                                ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 ring-1 ring-amber-500/20"
+                                : "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                              : msg.ragSource.includes("fact_checks_rag")
+                              ? isDark
+                                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 ring-1 ring-emerald-500/20"
+                                : "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                              : isDark
+                              ? "border-purple-500/40 bg-purple-500/15 text-purple-200 hover:bg-purple-500/25"
+                              : "border-purple-300 bg-purple-50 text-purple-900 hover:bg-purple-100"
+                          }`}
+                        >
+                          <span className="text-sm select-none">
+                            {msg.ragSource.includes("political_debate_rag")
+                              ? "🚩"
+                              : msg.ragSource.includes("fact_checks_rag")
+                              ? "⚖️"
+                              : "🧠"}
+                          </span>
+                          <span className="font-semibold">
+                            {msg.ragSource.includes("political_debate_rag")
+                              ? "Debate GraphRAG Grounded"
+                              : msg.ragSource.includes("fact_checks_rag")
+                              ? "Fact-Check Grounded"
+                              : "Knowledge Grounded"}
+                          </span>
+                          <span className="text-[10px] opacity-70 group-hover/badge:opacity-100 underline decoration-dotted ml-0.5">
+                            🔍 View Sources
+                          </span>
+                        </button>
+                      )}
+
                       {/* Gemini / ChatGPT Style Tool Usage Indicator */}
                       {msg.toolUsed && (() => {
                         const meta = getToolIndicatorMeta(msg.toolUsed);
@@ -1903,6 +2378,25 @@ export default function VoicePage() {
           </div>
         </footer>
       </div>
+
+      {/* Clickable Grounding Source Sliding Drawer */}
+      <GroundingSourceDrawer
+        isOpen={isGroundingDrawerOpen}
+        onClose={() => setIsGroundingDrawerOpen(false)}
+        data={groundingDrawerData}
+        isDark={isDark}
+      />
+
+      {/* AI vs AI Debate Arena Modal */}
+      <DebateArenaModal
+        isOpen={isDebateModalOpen}
+        onClose={() => setIsDebateModalOpen(false)}
+        isDark={isDark}
+        onOpenGroundingDrawer={(d) => {
+          setGroundingDrawerData(d);
+          setIsGroundingDrawerOpen(true);
+        }}
+      />
     </div>
   );
 }

@@ -130,11 +130,28 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 6. Server Initialization (Skip app.listen when running inside Vercel Serverless Functions)
+// 6. Server Initialization & WebSocket Attachment
 const PORT = process.env.PORT || 5000;
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`🚀 [CHECKPOINT SERVER] Chatly Backend running on port ${PORT}`);
+  import("http").then(({ default: http }) => {
+    import("./services/voiceWebSocketService.js").then(({ setupVoiceWebSocket }) => {
+      import("./services/scraperCronService.js").then(({ startScraperCron }) => {
+        const server = http.createServer(app);
+        setupVoiceWebSocket(server);
+
+        server.listen(PORT, () => {
+          console.log(`🚀 [CHECKPOINT SERVER] Chatly Backend running on port ${PORT}`);
+          console.log(`⚡ [WEBSOCKET] Real-Time Voice WebSocket active on ws://localhost:${PORT}/ws/voice`);
+          // Start automated scraper cron (every 12 hours)
+          startScraperCron(12);
+
+          // Automate Embedder Daemon Lifecycle (starts Python daemon on port 5005 & cleans up on exit)
+          import("./services/embedderLifecycle.js").then(({ ensureEmbedderDaemon }) => {
+            ensureEmbedderDaemon().catch((e) => console.warn("⚠️ Embedder daemon startup notice:", e.message));
+          });
+        });
+      });
+    });
   });
 } else {
   console.log("☁️ [CHECKPOINT SERVER] Vercel Serverless environment detected. Exporting app handler.");
@@ -142,3 +159,4 @@ if (!process.env.VERCEL) {
 
 // Export default app for Vercel Serverless Function runtime
 export default app;
+

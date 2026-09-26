@@ -1,0 +1,137 @@
+[
+  {
+    "id": "misleading_10",
+    "leader": "Narendra Modi",
+    "type": "speech",
+    "claim": "DBT and certain flagship schemes started under NDA",
+    "context": "Various speeches claiming originality of Direct Benefit Transfer",
+    "fact_check_summary": "Partially misleading. DBT was launched in January 2013 under UPA. Scale expanded significantly later.",
+    "source_type": "Fact-check by The Wire and government records"
+  },
+  {
+    "id": "misleading_09",
+    "leader": "Sambit Patra / Amit Malviya",
+    "type": "tweet / TV debate",
+    "claim": "Nehru said ‘I am English by education, Muslim by culture and Hindu by accident of birth’",
+    "context": "Multiple occasions including TV debates and social media",
+    "fact_check_summary": "No historical evidence. Historians and archives found no such statement by Nehru.",
+    "source_type": "Multiple fact-checks including Alt News and The Wire"
+  },
+  {
+    "id": "misleading_05",
+    "leader": "Narendra Modi / BJP",
+    "type": "speech / manifesto",
+    "claim": "Massive job creation (e.g., 2 crore jobs per year or far higher than UPA)",
+    "context": "Repeated economic claims 2014–2024",
+    "fact_check_summary": "Contested. Official figures often differ from CMIE and NSSO data showing high unemployment periods and definitional issues (minimal work counted as employed).",
+    "source_type": "CMIE, NSSO, FactChecker.in analyses"
+  },
+  {
+    "id": "misleading_12",
+    "leader": "BJP campaign / leaders",
+    "type": "advertisement / speech",
+    "claim": "Congress manifesto is for Pakistan or prioritises Muslims exclusively",
+    "context": "2024 Lok Sabha campaign (Himanta Biswa Sarma and others)",
+    "fact_check_summary": "Misleading interpretation. Manifesto focused on raising reservation cap for SC/ST/OBC and did not propose religion-based exclusive benefits as claimed.",
+    "source_type": "Fact-check by The Quint"
+  },
+  {
+    "id": "misleading_13",
+    "leader": "Narendra Modi",
+    "type": "speech",
+    "claim": "Congress stopped criticising Adani-Ambani after election notification (implying a deal)",
+    "context": "May 2024 campaign speeches",
+    "fact_check_summary": "False. Congress and Rahul Gandhi continued criticism after the notification.",
+    "source_type": "Fact-check by The Wire and The Quint"
+  },
+  {
+    "id": "misleading_14",
+    "leader": "Amit Malviya",
+    "type": "tweet",
+    "claim": "PM Modi is the first head of state to visit Kumbh",
+    "context": "January 2019 after Modi’s Kumbh visit",
+    "fact_check_summary": "False. Previous prime ministers and heads of state had visited Kumbh Melas.",
+    "source_type": "Alt News and historical records"
+  },
+  {
+    "id": "misleading_01",
+    "leader": "Narendra Modi",
+    "type": "speech",
+    "claim": "Vajpayee was a passenger on India’s first ever metro",
+    "context": "Speech inaugurating Delhi Metro Magenta line, December 2017",
+    "fact_check_summary": "False. Kolkata Metro was India’s first (foundation 1972, operations 1984). Delhi Metro was the second.",
+    "source_type": "Fact-check by The Wire and others"
+  },
+  {
+    "id": "misleading_04",
+    "leader": "Narendra Modi / BJP",
+    "type": "speech / claim",
+    "claim": "Demonetisation eliminated black money and curbed terrorism",
+    "context": "Post-2016 justifications and later claims",
+    "fact_check_summary": "Largely contradicted by RBI data showing approximately 99% of demonetised currency returned to the system. Limited evidence of sustained impact on black money or terrorism funding.",
+    "source_type": "RBI reports and multiple fact-checks"
+  },
+  {
+    "id": "misleading_08",
+    "leader": "Sambit Patra",
+    "type": "tweet / statement",
+    "claim": "Rajasthan government halted student buses from Kota until UP paid Rs 19 lakh fuel dues",
+    "context": "COVID-19 lockdown period, 2020",
+    "fact_check_summary": "False. Cheque was dated after the last buses had already left. Timing did not match.",
+    "source_type": "Alt News / The Wire fact-check"
+  },
+  {
+    "id": "misleading_11",
+    "leader": "Narendra Modi",
+    "type": "speech",
+    "claim": "Power supply discrimination (electricity during Ramzan but not Diwali)",
+    "context": "2017 speech",
+    "fact_check_summary": "Contradicted by official power supply data showing higher or comparable supply during Diwali period.",
+    "source_type": "Fact-check by The Wire using official statistics"
+  },
+  {
+    "id": "misleading_03",
+    "leader": "BJP / Narendra Modi",
+    "type": "advertisement / speech",
+    "claim": "Modi stopped the Russia-Ukraine war (‘War rukwa di’)",
+    "context": "2024 election advertisements and campaign material",
+    "fact_check_summary": "Misleading exaggeration. India conducted evacuations and pursued strategic autonomy, but the war continued. MEA clarified the claim overstated India’s role.",
+    "source_type": "Fact-check by The Quint and MEA statements"
+  },
+  {
+    "id": "misleading_02",
+    "leader": "Narendra Modi",
+    "type": "speech / campaign",
+    "claim": "Manmohan Singh said Muslims have the first right over India’s resources",
+    "context": "Repeated in 2024 election speeches (e.g., Banswara)",
+    "fact_check_summary": "Out of context. Full 2009 statement referred to SCs, STs, OBCs and minorities (particularly Muslims) having first claim on resources for development plans.",
+    "source_type": "Fact-check by The Quint, Alt News, archived PMO text"
+  },
+  {
+    "id": "misleading_07",
+    "leader": "Amit Malviya",
+    "type": "tweet",
+    "claim": "Protesters raised ‘Pakistan Zindabad’ slogans in Lucknow anti-CAA rally",
+    "context": "December 2019 tweet with video",
+    "fact_check_summary": "False. Audio analysis showed protesters saying ‘Kashif saab zindabad’, not Pakistan Zindabad.",
+    "source_type": "Alt News fact-check"
+  },
+  {
+    "id": "misleading_06",
+    "leader": "Amit Malviya",
+    "type": "tweet",
+    "claim": "Shaheen Bagh protesters were paid and given biryani",
+    "context": "January 2020 tweets during anti-CAA protests",
+    "fact_check_summary": "Baseless. Collaborative investigation by Alt News and Newslaundry found no evidence supporting the claim.",
+    "source_type": "Alt News / Newslaundry fact-check"
+  },
+  {
+    "id": "misleading_15",
+    "leader": "BJP / multiple leaders",
+    "type": "speech / claim",
+    "claim": "Ayushman Bharat covered 50 crore Indians (early claims)",
+    "context": "2019 manifesto and speeches",
+    "fact_check_summary": "Inflated at the time. Early official data showed far fewer actual treatments and cards issued than claimed.",
+    "source_type": "FactChecker.in analysis of 2019 manifesto"
+  }
+]

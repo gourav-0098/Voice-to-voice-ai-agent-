@@ -1,0 +1,527 @@
+[
+  {
+    "title": "PM India - Major Initiatives & Governance Track Record",
+    "url": "https://www.pmindia.gov.in/en/major-initiatives/",
+    "topic": "Governance & Welfare"
+  },
+  {
+    "title": "BJP Official Sankalp Patra (Manifesto)",
+    "url": "https://www.bjp.org/manifesto",
+    "topic": "Party Manifesto & Vision"
+  },
+  {
+    "title": "Narendra Modi Official - Governance Track Record & Speeches",
+    "url": "https://www.narendramodi.in/governance-track-record",
+    "topic": "Leadership & Policy"
+  },
+  {
+    "title": "Mann Ki Baat Archive & Direct Public Address",
+    "url": "https://www.narendramodi.in/mann-ki-baat",
+    "topic": "Leadership & Communication"
+  },
+  {
+    "title": "MyGov - Campaigns, Viksit Bharat & Citizen Engagement",
+    "url": "https://www.mygov.in/campaigns",
+    "topic": "National Campaigns & Schemes"
+  },
+  {
+    "title": "Atmanirbhar Bharat Abhiyan Official Portal",
+    "url": "https://aatmanirbharbharat.mygov.in/",
+    "topic": "Self-Reliance & Economy"
+  },
+  {
+    "title": "Make in India - Manufacturing Sectors & FDI Reforms",
+    "url": "https://www.makeinindia.com/home",
+    "topic": "Manufacturing & Economy"
+  },
+  {
+    "title": "Digital India - Digital Public Infrastructure Initiatives",
+    "url": "https://digitalindia.gov.in/",
+    "topic": "Digital Infrastructure"
+  },
+  {
+    "title": "PM GatiShakti National Master Plan (DPIIT)",
+    "url": "https://dpiit.gov.in/pm-gatishakti",
+    "topic": "Infrastructure & Logistics"
+  },
+  {
+    "title": "Ayushman Bharat - Pradhan Mantri Jan Arogya Yojana (PM-JAY)",
+    "url": "https://pmjay.gov.in/about/pmjay",
+    "topic": "Healthcare & Welfare"
+  },
+  {
+    "title": "Jal Jeevan Mission - Har Ghar Jal Portal",
+    "url": "https://jaljeevanmission.gov.in/",
+    "topic": "Rural Water Infrastructure"
+  },
+  {
+    "title": "Pradhan Mantri Awas Yojana - Urban (PMAY-U)",
+    "url": "https://pmay-urban.gov.in/",
+    "topic": "Housing For All"
+  },
+  {
+    "title": "PM-KISAN Samman Nidhi Scheme Portal",
+    "url": "https://pmkisan.gov.in/",
+    "topic": "Agriculture & Farmer Support"
+  },
+  {
+    "title": "Pradhan Mantri Ujjwala Yojana 2.0",
+    "url": "https://www.pmuy.gov.in/",
+    "topic": "Energy Access & Women Empowerment"
+  },
+  {
+    "title": "Startup India - Ecosystem Growth & Unicorn Metrics",
+    "url": "https://www.startupindia.gov.in/",
+    "topic": "Entrepreneurship & Innovation"
+  },
+  {
+    "title": "National Education Policy (NEP 2020) Portal",
+    "url": "https://www.education.gov.in/nep/",
+    "topic": "Education Reforms"
+  },
+  {
+    "title": "Khelo India - National Sports Development Mission",
+    "url": "https://kheloindia.gov.in/",
+    "topic": "Sports & Youth Development"
+  },
+  {
+    "title": "Ministry of External Affairs - Speeches & Strategic Autonomy",
+    "url": "https://www.mea.gov.in/speeches-statements.htm",
+    "topic": "Foreign Policy & Geopolitics"
+  },
+  {
+    "title": "Swarajya Magazine - Infrastructure Modernization Coverage",
+    "url": "https://swarajyamag.com/section/infrastructure",
+    "topic": "Infrastructure & Railways"
+  },
+  {
+    "title": "Swarajya Magazine - Defense Indigenization & National Security",
+    "url": "https://swarajyamag.com/section/defence",
+    "topic": "Defense & Modernization"
+  },
+  {
+    "title": "Swarajya Magazine - Macroeconomics & Growth Analysis",
+    "url": "https://swarajyamag.com/section/business",
+    "topic": "Economic Growth & Reforms"
+  },
+  {
+    "title": "Swarajya Magazine - Cultural Heritage & Temple Corridors",
+    "url": "https://swarajyamag.com/section/culture",
+    "topic": "Civilizational Heritage"
+  },
+  {
+    "title": "Organiser Weekly - National Security & Defense",
+    "url": "https://organiser.org/category/india/",
+    "topic": "National Security"
+  },
+  {
+    "title": "Organiser Weekly - Ideological Commentary & Opinions",
+    "url": "https://organiser.org/category/opinion/",
+    "topic": "Political Commentary"
+  },
+  {
+    "title": "Organiser Weekly - Cultural Renaissance & Temples",
+    "url": "https://organiser.org/category/culture/",
+    "topic": "Culture & Civilization"
+  },
+  {
+    "title": "OpIndia - Media Bias & Toolkit Fact Checks",
+    "url": "https://www.opindia.com/category/fact-check/",
+    "topic": "Media Criticism & Toolkits"
+  },
+  {
+    "title": "OpIndia - Political Rebuttals & Policy Debates",
+    "url": "https://www.opindia.com/category/politics/",
+    "topic": "Political Discourse"
+  },
+  {
+    "title": "Vivekananda International Foundation - National Security Articles",
+    "url": "https://www.vifindia.org/nationalsecurity",
+    "topic": "Strategic Defense & Security"
+  },
+  {
+    "title": "Vivekananda International Foundation - Foreign Policy & Neighborhood",
+    "url": "https://www.vifindia.org/foreignpolicy",
+    "topic": "Foreign Policy"
+  },
+  {
+    "title": "Observer Research Foundation - Strategic Autonomy & Multilateralism",
+    "url": "https://www.orfonline.org/research/foreign-policy",
+    "topic": "Foreign Policy & Geopolitics"
+  },
+  {
+    "title": "Observer Research Foundation - Indian Economic Resilience",
+    "url": "https://www.orfonline.org/research/economy-and-growth",
+    "topic": "Macroeconomics & Trade"
+  },
+  {
+    "title": "Dr. Syama Prasad Mookerjee Research Foundation Publications",
+    "url": "https://spmrf.org/",
+    "topic": "Party Ideology & Think Tank"
+  },
+  {
+    "title": "Make in India (Overview & Milestones)",
+    "url": "https://en.wikipedia.org/wiki/Make_in_India",
+    "topic": "Manufacturing"
+  },
+  {
+    "title": "Digital India (Digital Public Infrastructure)",
+    "url": "https://en.wikipedia.org/wiki/Digital_India",
+    "topic": "Tech & Governance"
+  },
+  {
+    "title": "Unified Payments Interface (UPI Integration)",
+    "url": "https://en.wikipedia.org/wiki/Unified_Payments_Interface",
+    "topic": "Fintech & Banking"
+  },
+  {
+    "title": "Pradhan Mantri Jan Dhan Yojana (Financial Inclusion)",
+    "url": "https://en.wikipedia.org/wiki/Pradhan_Mantri_Jan_Dhan_Yojana",
+    "topic": "Financial Inclusion"
+  },
+  {
+    "title": "Direct Benefit Transfer (DBT Leakage Elimination)",
+    "url": "https://en.wikipedia.org/wiki/Direct_Benefit_Transfer",
+    "topic": "Welfare Delivery"
+  },
+  {
+    "title": "Vande Bharat Express (Indigenous High Speed Rolling Stock)",
+    "url": "https://en.wikipedia.org/wiki/Vande_Bharat_Express",
+    "topic": "Railways Modernization"
+  },
+  {
+    "title": "Dedicated Freight Corridor Corporation of India (DFCCIL)",
+    "url": "https://en.wikipedia.org/wiki/Dedicated_Freight_Corridor_Corporation_of_India",
+    "topic": "Freight & Logistics"
+  },
+  {
+    "title": "Bharatmala Pariyojana (National Highway Network)",
+    "url": "https://en.wikipedia.org/wiki/Bharatmala",
+    "topic": "Highways & Expressways"
+  },
+  {
+    "title": "Sagarmala Programme (Port-led Development)",
+    "url": "https://en.wikipedia.org/wiki/Sagarmala_programme",
+    "topic": "Maritime & Ports"
+  },
+  {
+    "title": "Revocation of the Special Status of Jammu and Kashmir (Article 370)",
+    "url": "https://en.wikipedia.org/wiki/Revocation_of_the_special_status_of_Jammu_and_Kashmir",
+    "topic": "National Security & Kashmir"
+  },
+  {
+    "title": "Citizenship (Amendment) Act, 2019 (CAA Minorities Relief)",
+    "url": "https://en.wikipedia.org/wiki/Citizenship_(Amendment)_Act,_2019",
+    "topic": "Citizenship & Minorities"
+  },
+  {
+    "title": "Ram Mandir, Ayodhya (Temple Construction & Settlement)",
+    "url": "https://en.wikipedia.org/wiki/Ram_Mandir",
+    "topic": "Civilizational Heritage"
+  },
+  {
+    "title": "Kashi Vishwanath Temple Corridor Project",
+    "url": "https://en.wikipedia.org/wiki/Kashi_Vishwanath_Temple",
+    "topic": "Spiritual Tourism"
+  },
+  {
+    "title": "Statue of Unity (Sardar Vallabhbhai Patel Memorial)",
+    "url": "https://en.wikipedia.org/wiki/Statue_of_Unity",
+    "topic": "Tourism & Heritage"
+  },
+  {
+    "title": "Bharatiya Nyaya Sanhita (Decolonized Criminal Code)",
+    "url": "https://en.wikipedia.org/wiki/Bharatiya_Nyaya_Sanhita",
+    "topic": "Legal & Judicial Reforms"
+  },
+  {
+    "title": "Agnipath Scheme (Armed Forces Modernization)",
+    "url": "https://en.wikipedia.org/wiki/Agnipath_Scheme",
+    "topic": "Defense Recruitment"
+  },
+  {
+    "title": "Operation Ganga (Ukraine Evacuation Operation)",
+    "url": "https://en.wikipedia.org/wiki/Operation_Ganga",
+    "topic": "Crisis Diplomacy"
+  },
+  {
+    "title": "2019 Balakot Airstrike (Cross-Border Deterrence)",
+    "url": "https://en.wikipedia.org/wiki/2019_Balakot_airstrike",
+    "topic": "Counter-Terrorism"
+  },
+  {
+    "title": "Why does no one trust India’s GDP data anymore?",
+    "url": "https://scroll.in/article/1095498/why-do-so-many-not-trust-indias-gdp-data-anymore",
+    "topic": "GDP Data Integrity"
+  },
+  {
+    "title": "Why Government Claim of 52 Million New Formal Jobs in Past Four Years Is Misleading",
+    "url": "https://thewire.in/economy/why-the-governments-claim-of-52-million-new-formal-jobs-in-the-last-four-years-is-misleading",
+    "topic": "Jobs & Employment Claims"
+  },
+  {
+    "title": "India's Poverty Decline Is Not What it Seems",
+    "url": "https://thewire.in/economy/indias-poverty-decline-is-not-what-it-seems",
+    "topic": "Poverty Statistics"
+  },
+  {
+    "title": "India Is Much Poorer and Far Less Free Under Modi Than It Would Have Been Without Him: Study",
+    "url": "https://thewire.in/politics/india-is-much-poorer-and-far-less-free-under-modi-than-it-would-have-been-without-him-report",
+    "topic": "Development Counterfactual"
+  },
+  {
+    "title": "To Show Dramatic Reduction in Poverty, Modi Govt Rigged a Homemade Poverty Index",
+    "url": "https://thewire.in/government/to-show-dramatic-reduction-in-poverty-modi-govt-rigged-a-homemade-poverty-index",
+    "topic": "Multidimensional Poverty Index"
+  },
+  {
+    "title": "Fact Checking Modi’s Claim That His Jobs Track Record Compared to Previous Governments is the Best",
+    "url": "https://thewire.in/politics/fact-checking-modi-on-claims-that-his-track-record-as-compared-to-previous-governments-is-the-best",
+    "topic": "Jobs Comparison"
+  },
+  {
+    "title": "What happened to Modi’s $5 trillion economy promise?",
+    "url": "https://scroll.in/article/1094981/what-happened-to-modis-5-trillion-economy-promise",
+    "topic": "Economic Targets"
+  },
+  {
+    "title": "World Bank Report on India's Incredible Poverty Reduction Isn't Credible",
+    "url": "https://thewire.in/economy/world-bank-report-on-indias-incredible-poverty-reduction-isnt-credible",
+    "topic": "Poverty Claims"
+  },
+  {
+    "title": "On Former Finance Secy’s Serious Questions on GDP Data, Govt Still Not Answering on ‘Missing Rs 6 Lakh Cr’",
+    "url": "https://thewire.in/economy/on-former-finance-secys-serious-questions-on-gdp-data-govt-still-not-answering-on-missing-rs-6-lakh-cr",
+    "topic": "GDP Manipulation Allegations"
+  },
+  {
+    "title": "Some Proof Required: Modi Government’s Abysmal Record of No Jobs",
+    "url": "https://thewire.in/economy/some-proof-required-modi-government-abysmal-record-no-jobs",
+    "topic": "Employment Crisis"
+  },
+  {
+    "title": "Fact-checking five days of Narendra Modi’s speeches: A catalogue of lies",
+    "url": "https://scroll.in/article/1067126/fact-checking-five-days-of-narendra-modis-speeches-a-catalogue-of-lies",
+    "topic": "Campaign Claims Fact-Check"
+  },
+  {
+    "title": "The Great Indian Poverty Debate",
+    "url": "https://www.theindiaforum.in/economy/great-indian-poverty-debate",
+    "topic": "Poverty Measurement Controversies"
+  },
+  {
+    "title": "India’s Unconvincing Economic Facade",
+    "url": "https://www.aei.org/research-products/report/indias-unconvincing-economic-facade/",
+    "topic": "Economic Data Quality"
+  },
+  {
+    "title": "Hype and Fraud in India",
+    "url": "https://www.nybooks.com/articles/2026/01/15/hype-and-fraud-in-india-christopher-de-bellaigue/",
+    "topic": "Statistical Credibility"
+  },
+  {
+    "title": "How Centre's big claims on poverty, equality lack independent data",
+    "url": "https://thefederal.com/the-federal-special/how-centres-big-claims-on-poverty-equality-lack-independent-data-197115",
+    "topic": "Poverty & Equality Claims"
+  },
+  {
+    "title": "The Numbers Game: How India May Have Been Counting Its Prosperity Wrong for Two Decades",
+    "url": "https://theaidem.com/en-the-numbers-game-how-india-may-have-been-counting-its-prosperity-wrong-for-two-decades/",
+    "topic": "GDP Misestimation"
+  },
+  {
+    "title": "9 Of Modi's 16 Claims On Govt Schemes True, 3 False",
+    "url": "https://www.factchecker.in/9-of-prime-minister-modis-16-claims-on-schemes-true-3-false",
+    "topic": "Scheme Claims Fact-Check"
+  },
+  {
+    "title": "Union Budgets 2014 to 2024 – India’s Unemployment Crisis",
+    "url": "https://janataweekly.org/union-budgets-2014-to-2024-article-2-indias-unemployment-crisis/",
+    "topic": "Unemployment Data"
+  },
+  {
+    "title": "From Census to Crime to AQI: What the Modi Government Isn’t Telling You",
+    "url": "https://www.thequint.com/news/india/from-census-to-crime-to-aqi-what-the-modi-government-isnt-telling-you",
+    "topic": "Missing Official Data"
+  },
+  {
+    "title": "Debate: Modi Govt Official Questions Methodology of 'Broken Promises' Study",
+    "url": "https://thewire.in/political-economy/debate-modi-govt-official-questions-methodology-data-of-broken-promises-study-authors-respond",
+    "topic": "Governance & Growth Study"
+  },
+  {
+    "title": "Chart: Union Budget Social Schemes Spending Less Under Modi Government",
+    "url": "https://thewire.in/government/chart-union-budget-2026-2027-social-schemes-spending-less-modi-government",
+    "topic": "Social Sector Spending"
+  },
+  {
+    "title": "PM’s economic adviser denies allegations of Centre manipulating GDP data",
+    "url": "https://scroll.in/latest/1095427/pms-economic-adviser-denies-allegations-of-centre-manipulating-gdp-data",
+    "topic": "GDP Data Controversy"
+  },
+  {
+    "title": "Unpacking the data: Why India’s poverty decline may not be what it seems",
+    "url": "https://www.hardnewsmedia.com/2025/06/unpacking-the-data-why-indias-poverty-decline-may-not-be-what-it-seems/",
+    "topic": "Poverty Survey Methodology"
+  },
+  {
+    "title": "Some Perspective | India's Economy, Inequality & Democracy 2004-2026",
+    "url": "https://someperspective.info/",
+    "topic": "Inequality & Employment Data"
+  },
+  {
+    "title": "Congress says Modi govt is doing ‘statistical gymnastics’ with GDP",
+    "url": "https://theprint.in/politics/gdp-growth-congress-says-modi-govt-is-doing-statistical-gymnastics-while-indians-feel-the-squeeze/3030801/",
+    "topic": "GDP Growth Critique"
+  },
+  {
+    "title": "How Comparable are India’s Labour Market Surveys?",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9288665/",
+    "topic": "CMIE vs Official Employment Data"
+  },
+  {
+    "title": "Formal sector growth as proxy for informal sector: Does it distort measurement?",
+    "url": "https://www.ideasforindia.in/topics/macroeconomics/formal-sector-growth-as-proxy-for-informal-sector-does-it-distort-measurement",
+    "topic": "Informal Sector Measurement"
+  },
+  {
+    "title": "Narendra Modi and jobs: It’s all about data, and how it’s calculated",
+    "url": "https://theprint.in/ilanomics/narendra-modi-and-jobs-its-all-about-data-and-how-its-calculated/205205/",
+    "topic": "Jobs Data Methodology"
+  },
+  {
+    "title": "In India, 5% own more than 60% of country’s wealth: Oxfam report",
+    "url": "https://indianexpress.com/article/business/economy/indias-richest-1-own-more-than-40-of-total-wealth-oxfam-8384156/",
+    "topic": "Wealth Inequality"
+  },
+  {
+    "title": "The Lethal Policy Choice of Inequality: How India's Super Rich Rule Over Democracy",
+    "url": "https://www.cenfa.org/the-lethal-policy-choice-of-inequality-how-indias-super-rich-rule-over-democracy/",
+    "topic": "Billionaire Wealth Concentration"
+  },
+  {
+    "title": "Why Oxfam report on inequality in India doesn't add up",
+    "url": "https://theprint.in/economy/why-oxfam-report-on-inequality-in-india-doesnt-add-up-old-data-unlikely-tax-burden-on-poor/1320935/",
+    "topic": "Inequality Report Critique"
+  },
+  {
+    "title": "Lead and Mislead: Ten Claims Made by PM Modi in 2017 That Don't Add Up",
+    "url": "https://thewire.in/politics/lead-mislead-ten-claims-made-prime-minister-modi-2017-dont-add",
+    "topic": "Historical Scheme Claims"
+  },
+  {
+    "title": "Of 12 Claims In BJP Manifesto 2019, 5 True, 2 False, 4 Partly True",
+    "url": "https://www.factchecker.in/of-12-claims-in-bjp-manifesto-2019-5-true-2-false-4-partly-true-1-unclear",
+    "topic": "Manifesto Fact-Check"
+  },
+  {
+    "title": "43 Modi Claims That Are Not True, Over 5 Years",
+    "url": "https://www.factchecker.in/43-modi-claims-that-are-not-true-over-5-years",
+    "topic": "Long-term Claims Audit"
+  },
+  {
+    "title": "Fantastic Lies and Where to Find Them (Fact-Check the PM)",
+    "url": "https://thewire.in/politics/fantastic-lies-and-where-to-find-them-in-case-you-want-to-fact-check-the-pm",
+    "topic": "Election Season Claims"
+  },
+  {
+    "title": "2024 Lok Sabha Elections Fact-Check: Debunked Disinformation by BJP Leaders",
+    "url": "https://www.thequint.com/news/webqoof/bjp-leaders-accounts-misinformation-2024-lok-sabha-elections-fact-check",
+    "topic": "Election Misinformation"
+  },
+  {
+    "title": "Separating fact from puffery in Modi Govt's 12-yr milestone",
+    "url": "https://english.mathrubhumi.com/columns/separating-fact-from-puffery-in-modi-govts-12-yr-milestone-dfvsuyms",
+    "topic": "Scheme Achievement Claims"
+  },
+  {
+    "title": "BJP, RSS and 99 Lies From Goebbels’ Grandchildren",
+    "url": "https://thewire.in/history/bjp-rss-and-99-lies-from-goebbels-grandchildren",
+    "topic": "Broader Data & Narrative Critique"
+  },
+  {
+    "title": "Why the government’s claim of dramatic poverty reduction needs scrutiny",
+    "url": "https://scroll.in/article/1068000/why-the-governments-claim-of-dramatic-poverty-reduction-needs-scrutiny",
+    "topic": "Poverty Reduction Scrutiny"
+  },
+  {
+    "title": "India’s employment data: Why official numbers and ground reality differ",
+    "url": "https://www.business-standard.com/economy/news/india-s-employment-data-why-official-numbers-and-ground-reality-differ-124050900456_1.html",
+    "topic": "Employment Data Gap"
+  },
+  {
+    "title": "The missing consumption survey and India’s statistical black hole",
+    "url": "https://thewire.in/economy/the-missing-consumption-survey-and-indias-statistical-black-hole",
+    "topic": "Suppressed Surveys"
+  },
+  {
+    "title": "EPFO payroll data cannot be used as a proxy for job creation",
+    "url": "https://www.livemint.com/opinion/online-views/epfo-payroll-data-cannot-be-used-as-a-proxy-for-job-creation-11680000000000.html",
+    "topic": "EPFO Jobs Myth"
+  },
+  {
+    "title": "Real wages stagnant despite high GDP growth claims",
+    "url": "https://www.thehindu.com/opinion/lead/real-wages-stagnant-despite-high-gdp-growth/article67000000.ece",
+    "topic": "Wage vs Growth Disconnect"
+  },
+  {
+    "title": "K-shaped recovery: Why India’s growth is leaving the poor behind",
+    "url": "https://scroll.in/article/1045000/k-shaped-recovery-why-indias-growth-is-leaving-the-poor-behind",
+    "topic": "Unequal Growth"
+  },
+  {
+    "title": "MGNREGA budget cuts and the end of the rural employment guarantee",
+    "url": "https://thewire.in/rights/mgnrega-budget-cuts-and-the-end-of-the-rural-employment-guarantee",
+    "topic": "Rural Employment Scheme"
+  },
+  {
+    "title": "Ayushman Bharat: Claims vs actual hospitalisation data",
+    "url": "https://www.factchecker.in/ayushman-bharat-claims-vs-actual-hospitalisation-data",
+    "topic": "Health Scheme Implementation"
+  },
+  {
+    "title": "Jal Jeevan Mission: Promised vs actual tap water connections",
+    "url": "https://thewire.in/government/jal-jeevan-mission-promised-vs-actual-connections",
+    "topic": "Water Scheme Delivery"
+  },
+  {
+    "title": "PM Awas Yojana: Incomplete houses and quality concerns",
+    "url": "https://scroll.in/article/1050000/pm-awas-yojana-incomplete-houses-and-quality-concerns",
+    "topic": "Housing Scheme Reality"
+  },
+  {
+    "title": "Ujjwala Yojana: High refill costs and sustained usage data",
+    "url": "https://thewire.in/women/ujjwala-yojana-high-refill-costs-and-sustained-usage",
+    "topic": "Clean Fuel Scheme"
+  },
+  {
+    "title": "Swachh Bharat: Open defecation free claims vs ground surveys",
+    "url": "https://www.thehindu.com/news/national/swachh-bharat-open-defecation-free-claims-vs-ground-surveys/article30000000.ece",
+    "topic": "Sanitation Mission"
+  },
+  {
+    "title": "Make in India: Manufacturing share of GDP has stagnated or fallen",
+    "url": "https://thewire.in/economy/make-in-india-manufacturing-share-of-gdp-has-stagnated",
+    "topic": "Manufacturing Goals"
+  },
+  {
+    "title": "Startup India: Unicorns vs broad-based job creation",
+    "url": "https://scroll.in/article/1062000/startup-india-unicorns-vs-broad-based-job-creation",
+    "topic": "Startup Ecosystem Claims"
+  },
+  {
+    "title": "Digital India: Inclusion gains vs digital divide data",
+    "url": "https://www.livemint.com/technology/digital-india-inclusion-gains-vs-digital-divide/amp-11670000000000.html",
+    "topic": "Digital Public Infrastructure"
+  },
+  {
+    "title": "Atmanirbhar Bharat: Import dependence in key sectors remains high",
+    "url": "https://thewire.in/economy/atmanirbhar-bharat-import-dependence-remains-high",
+    "topic": "Self-Reliance Goals"
+  },
+  {
+    "title": "Viksit Bharat 2047: Vision document vs current development indicators",
+    "url": "https://scroll.in/article/1096000/viksit-bharat-2047-vision-vs-current-indicators",
+    "topic": "Long-term Development Vision"
+  }
+]

@@ -189,4 +189,42 @@ router.post("/users/:id/toggle-role", async (req, res) => {
   }
 });
 
+// =========================================================
+// GET /api/admin/scraper/status - Automated URL Scraper Telemetry
+// =========================================================
+router.get("/scraper/status", async (req, res) => {
+  try {
+    const { getScraperStatus } = await import("../services/scraperCronService.js");
+    const status = getScraperStatus();
+    return res.json({ status: "success", scraper: status });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to fetch scraper status.", details: err.message });
+  }
+});
+
+// =========================================================
+// POST /api/admin/scraper/trigger - Manually execute scraper job
+// =========================================================
+router.post("/scraper/trigger", async (req, res) => {
+  try {
+    const { runScraperJob, getScraperStatus } = await import("../services/scraperCronService.js");
+    const current = getScraperStatus();
+    if (current.isRunning) {
+      return res.status(409).json({ error: "Scraper job is already running.", scraper: current });
+    }
+
+    // Trigger asynchronously without blocking HTTP response
+    runScraperJob().catch((err) => console.error("⚠️ Manual scraper trigger error:", err));
+
+    return res.json({
+      status: "success",
+      message: "Automated scraper background job initiated across 105 URLs.",
+      scraper: { ...current, isRunning: true, lastStatus: "running" },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to trigger scraper job.", details: err.message });
+  }
+});
+
 export default router;
+
