@@ -138,9 +138,13 @@ export default function UserDashboard() {
             {isAdmin && (
               <Link
                 href="/admin"
-                className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs hover:bg-amber-500/25 transition"
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium text-slate-700 dark:text-zinc-300 shadow-xs hover:bg-slate-200/70 dark:hover:bg-white/10 transition"
               >
-                👑 Admin →
+                <svg className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span>Admin</span>
+                <span className="text-slate-400 dark:text-zinc-500 text-[10px]">→</span>
               </Link>
             )}
 
@@ -177,8 +181,8 @@ export default function UserDashboard() {
                     Welcome back, {user?.name || "User"}
                   </h1>
                   {isAdmin && (
-                    <span className="rounded-full bg-amber-500/15 border border-amber-500/40 px-2.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
-                      ADMIN
+                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
+                      Admin
                     </span>
                   )}
                 </div>
@@ -233,8 +237,9 @@ export default function UserDashboard() {
             )}
 
             {isAdmin && (
-              <p className="mt-4 text-xs text-amber-600 dark:text-amber-300 font-medium">
-                👑 Admin bypasses all hourly rate limits
+              <p className="mt-4 text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Admin account bypasses hourly rate limits
               </p>
             )}
           </div>
@@ -272,8 +277,9 @@ export default function UserDashboard() {
             )}
 
             {isAdmin && (
-              <p className="mt-4 text-xs text-amber-600 dark:text-amber-300 font-medium">
-                👑 Admin bypasses all daily rate limits
+              <p className="mt-4 text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Admin account bypasses daily rate limits
               </p>
             )}
           </div>

@@ -68,9 +68,12 @@ export default function Home() {
                 currentUser?.email?.toLowerCase() === "r19216871@gmail.com") && (
                 <Link
                   href="/admin"
-                  className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs hover:bg-amber-500/25 transition"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 shadow-xs hover:bg-slate-200/70 dark:hover:bg-white/10 transition"
                 >
-                  👑 Admin
+                  <svg className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <span>Admin</span>
                 </Link>
               )}
 

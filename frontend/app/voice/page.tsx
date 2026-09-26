@@ -1850,6 +1850,19 @@ export default function VoicePage() {
               </p>
             </div>
 
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowStartPopup(false);
+                setIsStarted(true);
+              }}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5"
+              aria-label="Close dialog"
+            >
+              ✕
+            </button>
+
             {error && (
               <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
                 {error}
@@ -1865,7 +1878,18 @@ export default function VoicePage() {
               Enable Audio & Begin
             </button>
 
-            <div className="mt-5 flex items-center justify-center gap-2 text-xs text-zinc-500">
+            <button
+              type="button"
+              onClick={() => {
+                setShowStartPopup(false);
+                setIsStarted(true);
+              }}
+              className="w-full text-center mt-2.5 text-xs text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 transition cursor-pointer py-1"
+            >
+              Continue to voice studio
+            </button>
+
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-500">
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               Two-way neural voice pipeline ready
             </div>
@@ -1876,7 +1900,7 @@ export default function VoicePage() {
       {/* =====================================================
           1. LAPTOP / DESKTOP SIDEBAR DASHBOARD (>= lg)
       ===================================================== */}
-      <aside className="hidden lg:flex w-[22rem] flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-5 shrink-0 transition-colors shadow-sm dark:shadow-none overflow-hidden">
+      <aside className="hidden lg:flex w-[23.5rem] flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-4 sm:p-5 shrink-0 transition-colors shadow-sm dark:shadow-none overflow-hidden">
         <SettingsPanel {...settingsPanelProps} isMobile={false} />
       </aside>
 

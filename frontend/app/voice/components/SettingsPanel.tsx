@@ -87,18 +87,19 @@ type CategoryId = "account" | "voice_audio" | "ai_chat" | "appearance" | "memory
 interface Category {
   id: CategoryId;
   label: string;
+  shortLabel: string;
   icon: string;
   description: string;
   accent: string;
 }
 
 const CATEGORIES: Category[] = [
-  { id: "account",    label: "Account",      icon: "👤", description: "Profile & quota",         accent: "emerald" },
-  { id: "voice_audio",label: "Voice & Audio",icon: "🎙️", description: "Voice model, volume",     accent: "orange"  },
-  { id: "ai_chat",    label: "AI & Chat",    icon: "🤖", description: "Persona, mode, language",  accent: "sky"     },
-  { id: "appearance", label: "Appearance",   icon: "🎨", description: "Theme & display",          accent: "violet"  },
-  { id: "memory",     label: "Memory",       icon: "🧠", description: "Semantic memory & RAG",    accent: "purple"  },
-  { id: "about",      label: "About & Help", icon: "ℹ️", description: "Tools, version & links",  accent: "slate"   },
+  { id: "account",    label: "Account",       shortLabel: "Account", icon: "👤", description: "Profile & quota",         accent: "emerald" },
+  { id: "voice_audio",label: "Voice & Audio", shortLabel: "Voice",   icon: "🎙️", description: "Voice model & audio",     accent: "orange"  },
+  { id: "ai_chat",    label: "AI & Chat",     shortLabel: "AI Chat", icon: "🤖", description: "Persona, mode, language",  accent: "sky"     },
+  { id: "appearance", label: "Appearance",    shortLabel: "Look",    icon: "🎨", description: "Theme & display",          accent: "violet"  },
+  { id: "memory",     label: "Memory",        shortLabel: "Memory",  icon: "🧠", description: "Semantic memory & RAG",    accent: "purple"  },
+  { id: "about",      label: "About & Help",  shortLabel: "About",   icon: "ℹ️", description: "Tools, version & links",  accent: "slate"   },
 ];
 
 const ACCENT: Record<string, { bg: string; text: string; border: string; iconBg: string }> = {
@@ -210,7 +211,16 @@ function AccountPane({ p }: { p: SettingsPanelProps }) {
         <SectionLabel>Usage Quota</SectionLabel>
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.02] overflow-hidden">
           {p.isAdmin ? (
-            <SettingRow icon="👑" label="Account Plan" right={<StatusBadge color="amber">Admin – Unlimited</StatusBadge>} />
+            <SettingRow
+              icon="🛡️"
+              label="Account Plan"
+              description="Administrator full access"
+              right={
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-zinc-300">
+                  Admin • Unlimited
+                </span>
+              }
+            />
           ) : (
             <>
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5">
@@ -246,9 +256,14 @@ function AccountPane({ p }: { p: SettingsPanelProps }) {
             <span className="text-slate-300 dark:text-zinc-600">→</span>
           </Link>
           {p.isAdmin && (
-            <Link href="/admin" className="flex items-center justify-between px-4 py-3.5 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 transition">
-              <span className="flex items-center gap-2.5 font-medium"><span className="text-base">👑</span> Admin Console</span>
-              <span className="text-amber-300 dark:text-amber-600">→</span>
+            <Link href="/admin" className="flex items-center justify-between px-4 py-3 text-sm text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-white/5 transition">
+              <span className="flex items-center gap-2.5 font-medium text-xs">
+                <svg className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Admin Console
+              </span>
+              <span className="text-slate-400 dark:text-zinc-500 text-xs">→</span>
             </Link>
           )}
         </div>
@@ -622,36 +637,62 @@ export default function SettingsPanel(props: SettingsPanelProps) {
   // ── DESKTOP ──────────────────────────────────────────────────
   if (!isMobile) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         {Header}
-        <div className="flex flex-1 min-h-0 gap-3">
-          {/* Left category nav */}
-          <div className="w-[136px] shrink-0">
-            {CategoryNav(false)}
+
+        {/* Clean Segmented Category Switcher (3 cols x 2 rows) */}
+        <div className="mb-3 shrink-0">
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/70 dark:bg-white/[0.03]">
+            {CATEGORIES.map((cat) => {
+              const isActive = activeCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-xl text-xs cursor-pointer transition-all duration-200 ${
+                    isActive
+                      ? "bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-semibold"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 font-medium"
+                  }`}
+                  title={cat.description}
+                >
+                  <span className="text-sm select-none shrink-0">{cat.icon}</span>
+                  <span className="truncate">{cat.shortLabel}</span>
+                </button>
+              );
+            })}
           </div>
-          {/* Divider */}
-          <div className="w-px bg-slate-200 dark:bg-white/[0.07] shrink-0" />
-          {/* Right content */}
-          <div className="flex-1 min-w-0 overflow-y-auto pb-6">
-            {activeCategory ? (
-              <div key={activeCategory} className="animate-in fade-in slide-in-from-right-1 duration-200">
-                {/* Pane title */}
-                {(() => {
-                  const cat = CATEGORIES.find((c) => c.id === activeCategory)!;
-                  const a = ACCENT[cat.accent];
-                  return (
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${a.iconBg} text-sm`}>{cat.icon}</span>
-                      <h2 className={`text-sm font-bold ${a.text}`}>{cat.label}</h2>
-                    </div>
-                  );
-                })()}
-                {renderContent(activeCategory)}
+        </div>
+
+        {/* Active Category Header */}
+        {activeCategory && (() => {
+          const cat = CATEGORIES.find((c) => c.id === activeCategory)!;
+          const a = ACCENT[cat.accent];
+          return (
+            <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100 dark:border-white/5 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${a.iconBg} text-xs select-none`}>{cat.icon}</span>
+                <div>
+                  <h2 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{cat.label}</h2>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-tight">{cat.description}</p>
+                </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-24 text-slate-300 dark:text-zinc-700 text-sm">Select a category</div>
-            )}
-          </div>
+            </div>
+          );
+        })()}
+
+        {/* Content Pane - Spans full width of the sidebar with ample breathing room */}
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+          {activeCategory ? (
+            <div key={activeCategory} className="animate-in fade-in duration-200">
+              {renderContent(activeCategory)}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-24 text-slate-400 text-xs">
+              Select a category
+            </div>
+          )}
         </div>
       </div>
     );
