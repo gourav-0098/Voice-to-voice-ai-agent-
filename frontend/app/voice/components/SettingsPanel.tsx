@@ -585,7 +585,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
       </Link>
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        {isMobile && onClose && (
+        {onClose && (
           <button type="button" onClick={onClose} aria-label="Close settings"
             className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5"
           >✕</button>
@@ -626,7 +626,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
         {Header}
         <div className="flex flex-1 min-h-0 gap-3">
           {/* Left category nav */}
-          <div className="w-[136px] shrink-0">
+          <div className="w-[150px] shrink-0">
             {CategoryNav(false)}
           </div>
           {/* Divider */}
