@@ -61,10 +61,12 @@ function transliterateDevanagariToLatin(text) {
   return result.replace(/[\u0900-\u097F]/g, "").trim();
 }
 
+import { generateEdgeSpeech, isHindiOrHinglish } from "./edgeTtsService.js";
+
 /**
- * Generate speech audio from text using Deepgram's TTS (supports Flux and Aura voices)
+ * Generate speech audio from text using Edge-TTS (for Hindi/Hinglish) or Deepgram's TTS (for English)
  * @param {string} text - Text to synthesize into speech
- * @param {string} [voiceModel] - Deepgram voice model name (e.g., flux-alexis-en, aura-asteria-en)
+ * @param {string} [voiceModel] - Voice model name (e.g., hi-IN-MadhurNeural, flux-alexis-en, aura-asteria-en)
  * @returns {Promise<{audioBase64: string, format: string, model: string, modelUuid: string} | null>}
  */
 export async function generateSpeech(text, voiceModel = MODEL_NAME) {
@@ -72,11 +74,30 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
     return null;
   }
 
+  const targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
+
+  // 1. If explicitly requested an Edge-TTS voice OR if text is Hindi/Hinglish (and not explicitly forced to English)
+  const isEdgeVoice = targetModel.startsWith("hi-IN-") || targetModel.startsWith("en-IN-");
+  const isHindi = isHindiOrHinglish(text);
+
+  if (isEdgeVoice || (isHindi && targetModel === MODEL_NAME)) {
+    const selectedEdgeVoice = isEdgeVoice ? targetModel : "hi-IN-MadhurNeural";
+    console.log(`🎙️ [TTS ROUTER] Routing to Microsoft Edge Neural Hindi (${selectedEdgeVoice}) for: "${text.slice(0, 40)}..."`);
+    const edgeAudio = await generateEdgeSpeech(text, selectedEdgeVoice);
+    if (edgeAudio && edgeAudio.audioBase64) {
+      return {
+        audioBase64: edgeAudio.audioBase64,
+        format: edgeAudio.format || "audio/mp3",
+        model: selectedEdgeVoice,
+        modelUuid: "edge-neural-hi",
+      };
+    }
+  }
+
   let cleanText = text.replace(/[*_#`~]/g, "").trim();
   cleanText = transliterateDevanagariToLatin(cleanText);
   if (!cleanText) return null;
 
-  const targetModel = (voiceModel && typeof voiceModel === "string") ? voiceModel.trim() : MODEL_NAME;
   const endpointVersion = targetModel.startsWith("aura-") ? "v1" : "v2";
 
   try {

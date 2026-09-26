@@ -116,12 +116,14 @@ const PERSONA_OPTIONS = [
 ];
 
 const VOICE_OPTIONS = [
-  { id: "flux-alexis-en", label: "Alexis", desc: "Expressive & Conversational (Default)" },
-  { id: "aura-asteria-en", label: "Asteria", desc: "Warm & Natural Female" },
-  { id: "aura-orion-en", label: "Orion", desc: "Confident English Male" },
-  { id: "aura-luna-en", label: "Luna", desc: "Calm & Friendly Female" },
-  { id: "aura-zeus-en", label: "Zeus", desc: "Deep Authority Male" },
-  { id: "aura-arcas-en", label: "Arcas", desc: "Crisp Neutral" },
+  { id: "hi-IN-MadhurNeural", label: "🇮🇳 Madhur (Hindi Male)", desc: "Natural Hindi/Hinglish (Best for Debates)" },
+  { id: "hi-IN-SwaraNeural", label: "🇮🇳 Swara (Hindi Female)", desc: "Natural & Clear Hindi" },
+  { id: "en-IN-PrabhatNeural", label: "🇮🇳 Prabhat (Indian Male)", desc: "Indian English Accent" },
+  { id: "en-IN-NeerjaNeural", label: "🇮🇳 Neerja (Indian Female)", desc: "Indian English Accent" },
+  { id: "flux-alexis-en", label: "Alexis (English)", desc: "Expressive & Conversational" },
+  { id: "aura-asteria-en", label: "Asteria (English)", desc: "Warm & Natural Female" },
+  { id: "aura-orion-en", label: "Orion (English)", desc: "Confident English Male" },
+  { id: "aura-luna-en", label: "Luna (English)", desc: "Calm & Friendly Female" },
 ];
 
 /**
