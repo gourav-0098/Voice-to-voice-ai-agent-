@@ -262,6 +262,26 @@ class AudioStreamQueue {
   public onStopSpeaking?: () => void;
   public onChunkStart?: (chunk: { index: number; text: string }) => void;
 
+  private volume: number = 1.0;
+
+  public setVolume(vol: number) {
+    this.volume = Math.max(0, Math.min(1, vol));
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.volume = this.volume;
+      } catch (_) {}
+    }
+    for (const item of this.chunksMap.values()) {
+      try {
+        item.audio.volume = this.volume;
+      } catch (_) {}
+    }
+  }
+
+  public getVolume(): number {
+    return this.volume;
+  }
+
   public reset(startIndex = 0) {
     this.stop();
     this.nextPlayIndex = startIndex;
@@ -281,7 +301,7 @@ class AudioStreamQueue {
       const audioSrc = `data:${mime};base64,${base64Audio}`;
       const audio = new Audio(audioSrc);
       audio.preload = "auto";
-      audio.volume = 1.0;
+      audio.volume = this.volume;
 
       this.chunksMap.set(index, { audio, text, index, format: mime });
 
@@ -342,6 +362,7 @@ class AudioStreamQueue {
 
   private playChunk(item: AudioChunkItem) {
     this.isPlaying = true;
+    item.audio.volume = this.volume;
     this.currentAudio = item.audio;
 
     if (this.onStartSpeaking) this.onStartSpeaking();
@@ -432,6 +453,8 @@ export default function VoicePage() {
   const [selectedVoice, setSelectedVoice] = useState<string>("sarvam-aditya");
   const [selectedPersona, setSelectedPersona] = useState<string>("conversational");
   const [voiceMuted, setVoiceMuted] = useState(false);
+  const [volume, setVolume] = useState<number>(1.0);
+  const volumeRef = useRef<number>(1.0);
   const [handsFree, setHandsFree] = useState(false);
   const [activeModel, setActiveModel] = useState<string>("Chatly Ultra");
 
@@ -585,6 +608,20 @@ export default function VoicePage() {
       if (savedPersona) {
         setSelectedPersona(savedPersona);
       }
+      const savedVol = localStorage.getItem("chatly_voice_volume");
+      if (savedVol !== null) {
+        const parsed = parseFloat(savedVol);
+        if (!isNaN(parsed)) {
+          const clamped = Math.max(0, Math.min(1, parsed));
+          setVolume(clamped);
+          volumeRef.current = clamped;
+          audioQueueRef.current.setVolume(clamped);
+          if (clamped === 0) {
+            setVoiceMuted(true);
+            voiceMutedRef.current = true;
+          }
+        }
+      }
     }
   }, []);
 
@@ -636,6 +673,55 @@ export default function VoicePage() {
     setConversationMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("chatly_mode", mode);
+    }
+  };
+
+  const handleVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1, newVol));
+    setVolume(clamped);
+    volumeRef.current = clamped;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("chatly_voice_volume", clamped.toString());
+    }
+
+    if (clamped === 0) {
+      setVoiceMuted(true);
+      voiceMutedRef.current = true;
+      audioQueueRef.current.setVolume(0);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.volume = 0;
+      }
+    } else {
+      if (voiceMutedRef.current) {
+        setVoiceMuted(false);
+        voiceMutedRef.current = false;
+      }
+      audioQueueRef.current.setVolume(clamped);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.volume = clamped;
+      }
+    }
+  };
+
+  const handleToggleMute = () => {
+    if (voiceMuted) {
+      const restoreVol = volume > 0 ? volume : 0.8;
+      setVoiceMuted(false);
+      voiceMutedRef.current = false;
+      setVolume(restoreVol);
+      volumeRef.current = restoreVol;
+      audioQueueRef.current.setVolume(restoreVol);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.volume = restoreVol;
+      }
+    } else {
+      if (isAiSpeaking) stopAiSpeaking();
+      setVoiceMuted(true);
+      voiceMutedRef.current = true;
+      audioQueueRef.current.setVolume(0);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.volume = 0;
+      }
     }
   };
 
@@ -824,7 +910,7 @@ export default function VoicePage() {
       try {
         const audioSrc = `data:${format};base64,${base64Audio}`;
         const audio = new Audio(audioSrc);
-        audio.volume = 1.0;
+        audio.volume = voiceMutedRef.current ? 0 : volumeRef.current;
         audioPlayerRef.current = audio;
 
         audio.onplay = () => {
@@ -904,6 +990,7 @@ export default function VoicePage() {
       stopListeningRef.current(false);
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.volume = voiceMutedRef.current ? 0 : volumeRef.current;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
 
@@ -1912,28 +1999,51 @@ export default function VoicePage() {
           </button>
         </div>
 
-        {/* Voice Audio Mute */}
-        <div className="flex items-center justify-between p-3 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none">
-          <div>
-            <p className="text-xs font-medium text-slate-900 dark:text-white">
-              🔊 AI Voice Audio
-            </p>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-500">Mute or play AI spoken responses</p>
+        {/* Voice Audio Volume & Mute */}
+        <div className="p-3.5 rounded-2xl border transition bg-white border-slate-200 shadow-xs dark:bg-white/[0.02] dark:border-white/10 dark:shadow-none space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base select-none">
+                {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
+              </span>
+              <div>
+                <p className="text-xs font-medium text-slate-900 dark:text-white">
+                  Audio Output Volume
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-zinc-500">
+                  {voiceMuted ? "Sound muted" : `Volume at ${Math.round(volume * 100)}%`}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              className={`px-2.5 py-1 text-[11px] rounded-full border cursor-pointer font-medium transition ${
+                voiceMuted
+                  ? "border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 font-semibold"
+                  : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
+              }`}
+            >
+              {voiceMuted ? "🔇 Muted" : "Mute"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (isAiSpeaking) stopAiSpeaking();
-              setVoiceMuted(!voiceMuted);
-            }}
-            className={`px-3 py-1 text-xs rounded-full border cursor-pointer transition ${
-              voiceMuted
-                ? "border-red-500/40 bg-red-500/10 text-red-500 dark:text-red-400 font-semibold"
-                : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
-            }`}
-          >
-            {voiceMuted ? "🔇 Muted" : "Active"}
-          </button>
+
+          {/* Volume Slider Bar */}
+          <div className="flex items-center gap-3 pt-1">
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={voiceMuted ? 0 : volume}
+              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+              className="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
+              aria-label="Audio output volume"
+            />
+            <span className="text-xs font-mono font-semibold text-slate-700 dark:text-zinc-300 w-9 text-right shrink-0">
+              {Math.round((voiceMuted ? 0 : volume) * 100)}%
+            </span>
+          </div>
         </div>
 
         {/* Theme Toggle */}
@@ -2410,6 +2520,31 @@ export default function VoicePage() {
                   ⏹️ Interrupt AI (Barge-in)
                 </button>
               )}
+            </div>
+
+            {/* Quick Volume Control Bar */}
+            <div className="mt-4 flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] backdrop-blur-md shadow-xs">
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                className="text-sm cursor-pointer hover:scale-110 active:scale-95 transition"
+                title={voiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+              >
+                {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={voiceMuted ? 0 : volume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-24 sm:w-28 h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
+                aria-label="Quick volume control"
+              />
+              <span className="text-[11px] font-mono font-medium text-slate-600 dark:text-zinc-400 w-8 text-right">
+                {Math.round((voiceMuted ? 0 : volume) * 100)}%
+              </span>
             </div>
 
             {/* Subtitles pill in Voice-Only mode */}
