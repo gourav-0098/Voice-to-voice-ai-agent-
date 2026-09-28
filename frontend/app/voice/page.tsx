@@ -1543,8 +1543,13 @@ export default function VoicePage() {
       if (API_BASE && API_BASE.startsWith("http")) {
         host = API_BASE.replace(/^https?:\/\//, "");
       }
-      const wsUrl = `${wsProto}//${host}/ws/voice`;
+      const isVercel = host.includes("vercel.app");
+      if (isVercel) {
+        console.log("ℹ️ [VOICE PIPELINE] Vercel cloud environment detected; streaming via real-time SSE pipeline.");
+        return;
+      }
 
+      const wsUrl = `${wsProto}//${host}/ws/voice`;
       ws = new WebSocket(wsUrl);
       voiceWsRef.current = ws;
 

@@ -23,20 +23,24 @@ console.log(`📍 [CLOUDINARY CONFIG] Cloudinary initialized for cloud_name: ${c
  * Upload an avatar image (base64 data URL or remote URL) to Cloudinary
  * @param {string} imageInput - Base64 data URL or URL
  * @param {string} userId - User ID for deterministic public_id
- * @returns {Promise<string>} - Secure Cloudinary HTTPS URL
+ * @returns {Promise<string>} - Secure Cloudinary HTTPS URL or direct image string
  */
 export async function uploadAvatarToCloudinary(imageInput, userId) {
   if (!imageInput || typeof imageInput !== "string") return "";
 
-  // If already a hosted Cloudinary URL, don't re-upload
+  // If already a hosted URL (Cloudinary or elsewhere), don't re-upload
   if (imageInput.startsWith("http://") || imageInput.startsWith("https://")) {
-    if (imageInput.includes("res.cloudinary.com")) {
-      return imageInput;
-    }
+    return imageInput;
   }
 
-  // If not a data URL or valid image format, return as is
+  // If not a data URL, return as is
   if (!imageInput.startsWith("data:image/")) {
+    return imageInput;
+  }
+
+  const isConfigured = !!(process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+  if (!isConfigured) {
+    console.warn("⚠️ [CLOUDINARY] Cloudinary keys not found in environment. Saving avatar directly.");
     return imageInput;
   }
 
@@ -57,9 +61,8 @@ export async function uploadAvatarToCloudinary(imageInput, userId) {
     console.log(`✅ [CLOUDINARY] Avatar uploaded successfully! URL: ${result.secure_url}`);
     return result.secure_url;
   } catch (error) {
-    console.error("❌ [CLOUDINARY ERROR] Upload failed:", error.message || error);
-    // If Cloudinary upload fails, fallback to keeping existing or passing the dataUrl safely
-    throw new Error(`Failed to upload image to Cloudinary: ${error.message || "Unknown error"}`);
+    console.error("❌ [CLOUDINARY ERROR] Upload failed, falling back to direct image data:", error.message || error);
+    return imageInput;
   }
 }
 

@@ -195,13 +195,13 @@ router.put("/profile", verifyToken, async (req, res) => {
         user.avatar = "";
       } else if (typeof avatar === "string") {
         if (avatar.startsWith("data:image/")) {
-          console.log(`📍 [AUTH CHECKPOINT] Uploading user ${user._id} avatar to Cloudinary...`);
+          console.log(`📍 [AUTH CHECKPOINT] Processing avatar for user ${user._id}...`);
           try {
             const cloudinaryUrl = await uploadAvatarToCloudinary(avatar, user._id.toString());
-            user.avatar = cloudinaryUrl;
+            user.avatar = cloudinaryUrl || avatar;
           } catch (uploadErr) {
-            console.error("❌ [AUTH CHECKPOINT ERROR] Cloudinary upload failed:", uploadErr.message || uploadErr);
-            return res.status(500).json({ error: "Failed to upload image to Cloudinary storage. Please try again." });
+            console.warn("⚠️ [AUTH CHECKPOINT] Cloudinary upload notice (fallback to direct):", uploadErr.message || uploadErr);
+            user.avatar = avatar;
           }
         } else if (avatar.startsWith("http://") || avatar.startsWith("https://")) {
           user.avatar = avatar;
