@@ -13,6 +13,15 @@ export interface UserProfile {
   name: string;
   email: string;
   role?: string;
+  avatar?: string;
+  dob?: string;
+  bio?: string;
+  gender?: string;
+  phone?: string;
+  location?: string;
+  jobTitle?: string;
+  preferredLanguage?: string;
+  voicePersonaPreference?: string;
   quota?: {
     isAdmin: boolean;
     remainingHourly: number | string;
@@ -175,9 +184,17 @@ function AccountPane({ p }: { p: SettingsPanelProps }) {
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-gradient-to-br from-emerald-500/8 to-teal-500/4 dark:from-emerald-500/10 dark:to-teal-500/5 p-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-400 text-white font-bold text-lg shadow-lg shadow-emerald-500/25">
-            {p.currentUser ? p.currentUser.name.slice(0, 2).toUpperCase() : "👤"}
-          </div>
+          {p.currentUser?.avatar ? (
+            <img
+              src={p.currentUser.avatar}
+              alt={p.currentUser.name}
+              className="h-12 w-12 shrink-0 rounded-2xl object-cover border border-emerald-500 shadow-md shadow-emerald-500/25"
+            />
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-400 text-white font-bold text-lg shadow-lg shadow-emerald-500/25">
+              {p.currentUser ? p.currentUser.name.slice(0, 2).toUpperCase() : "👤"}
+            </div>
+          )}
           <div className="min-w-0">
             <p className="font-semibold text-slate-900 dark:text-white truncate">
               {p.currentUser ? p.currentUser.name : "Guest User"}
@@ -187,14 +204,25 @@ function AccountPane({ p }: { p: SettingsPanelProps }) {
             </p>
           </div>
         </div>
+
         {p.currentUser ? (
-          <button
-            type="button"
-            onClick={p.onSignOut}
-            className="w-full py-2 rounded-xl border border-red-500/30 bg-red-500/8 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-500/15 transition cursor-pointer"
-          >
-            Sign Out
-          </button>
+          <div className="space-y-2">
+            <Link
+              href="/dashboard"
+              onClick={p.onClose}
+              className="w-full py-2 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-500/20 transition flex items-center justify-center gap-1.5"
+            >
+              <span>✏️</span> Edit Profile & Personal Info →
+            </Link>
+
+            <button
+              type="button"
+              onClick={p.onSignOut}
+              className="w-full py-2 rounded-xl border border-red-500/30 bg-red-500/8 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-500/15 transition cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
         ) : (
           <div className="flex gap-2">
             <Link href="/login" className="flex-1 text-center py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition shadow-sm">

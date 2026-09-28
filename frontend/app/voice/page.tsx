@@ -26,6 +26,15 @@ interface UserProfile {
   name: string;
   email: string;
   role?: string;
+  avatar?: string;
+  dob?: string;
+  bio?: string;
+  gender?: string;
+  phone?: string;
+  location?: string;
+  jobTitle?: string;
+  preferredLanguage?: string;
+  voicePersonaPreference?: string;
   quota?: {
     isAdmin: boolean;
     remainingHourly: number | string;

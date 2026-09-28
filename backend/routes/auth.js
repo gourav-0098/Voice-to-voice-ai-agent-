@@ -13,6 +13,26 @@ const generateToken = (userId, email) => {
   return jwt.sign({ id: userId, email }, secret, { expiresIn: "7d" });
 };
 
+// Format comprehensive user response
+const formatUserResponse = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  avatar: user.avatar || "",
+  dob: user.dob || "",
+  bio: user.bio || "",
+  gender: user.gender || "not_specified",
+  phone: user.phone || "",
+  location: user.location || "",
+  jobTitle: user.jobTitle || "",
+  preferredLanguage: user.preferredLanguage || "auto",
+  voicePersonaPreference: user.voicePersonaPreference || "friendly",
+  quota: typeof user.getQuotaSummary === "function" ? user.getQuotaSummary() : undefined,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
+
 // =========================================================
 // POST /api/auth/signup
 // =========================================================
@@ -66,14 +86,7 @@ router.post("/signup", async (req, res) => {
       status: "success",
       message: "Account created successfully!",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        quota: user.getQuotaSummary(),
-        createdAt: user.createdAt,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("❌ [AUTH CHECKPOINT ERROR] Signup exception:", error.message || error);
@@ -122,14 +135,7 @@ router.post("/login", async (req, res) => {
       status: "success",
       message: "Logged in successfully!",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        quota: user.getQuotaSummary(),
-        createdAt: user.createdAt,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("❌ [AUTH CHECKPOINT ERROR] Login exception:", error.message || error);
@@ -147,18 +153,93 @@ router.get("/me", verifyToken, async (req, res) => {
   try {
     return res.json({
       status: "success",
-      user: {
-        id: req.user._id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        quota: req.user.getQuotaSummary(),
-        createdAt: req.user.createdAt,
-      },
+      user: formatUserResponse(req.user),
     });
   } catch (error) {
     console.error("❌ [AUTH CHECKPOINT ERROR] Profile fetch exception:", error.message || error);
     return res.status(500).json({ error: "Could not fetch user profile." });
+  }
+});
+
+// =========================================================
+// PUT /api/auth/profile (Update Profile Info, Avatar, DOB, Bio)
+// =========================================================
+router.put("/profile", verifyToken, async (req, res) => {
+  console.log(`📍 [AUTH CHECKPOINT] Incoming /profile update for user ID: ${req.user?._id}`);
+  try {
+    const user = req.user;
+    const {
+      name,
+      avatar,
+      dob,
+      bio,
+      gender,
+      phone,
+      location,
+      jobTitle,
+      preferredLanguage,
+      voicePersonaPreference,
+    } = req.body;
+
+    if (name !== undefined) {
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      if (trimmed.length < 2 || trimmed.length > 50) {
+        return res.status(400).json({ error: "Name must be between 2 and 50 characters." });
+      }
+      user.name = trimmed;
+    }
+
+    if (avatar !== undefined) {
+      if (avatar && typeof avatar === "string" && avatar.length > 5 * 1024 * 1024) {
+        return res.status(400).json({ error: "Profile photo is too large (max 5MB)." });
+      }
+      user.avatar = typeof avatar === "string" ? avatar : "";
+    }
+
+    if (dob !== undefined) {
+      user.dob = typeof dob === "string" ? dob.trim() : "";
+    }
+
+    if (bio !== undefined) {
+      user.bio = typeof bio === "string" ? bio.slice(0, 500) : "";
+    }
+
+    if (gender !== undefined) {
+      const validGenders = ["not_specified", "male", "female", "non_binary", "other", "prefer_not_to_say", ""];
+      user.gender = validGenders.includes(gender) ? gender : "not_specified";
+    }
+
+    if (phone !== undefined) {
+      user.phone = typeof phone === "string" ? phone.trim().slice(0, 30) : "";
+    }
+
+    if (location !== undefined) {
+      user.location = typeof location === "string" ? location.trim().slice(0, 100) : "";
+    }
+
+    if (jobTitle !== undefined) {
+      user.jobTitle = typeof jobTitle === "string" ? jobTitle.trim().slice(0, 100) : "";
+    }
+
+    if (preferredLanguage !== undefined) {
+      user.preferredLanguage = typeof preferredLanguage === "string" ? preferredLanguage : "auto";
+    }
+
+    if (voicePersonaPreference !== undefined) {
+      user.voicePersonaPreference = typeof voicePersonaPreference === "string" ? voicePersonaPreference : "friendly";
+    }
+
+    await user.save();
+    console.log(`✅ [AUTH CHECKPOINT] Profile updated successfully for user ID: ${user._id}`);
+
+    return res.json({
+      status: "success",
+      message: "Profile updated successfully!",
+      user: formatUserResponse(user),
+    });
+  } catch (error) {
+    console.error("❌ [AUTH CHECKPOINT ERROR] Profile update exception:", error.message || error);
+    return res.status(500).json({ error: error.message || "Failed to update profile." });
   }
 });
 

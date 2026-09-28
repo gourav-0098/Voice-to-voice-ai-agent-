@@ -80,9 +80,9 @@ app.use(
   })
 );
 
-// 4. Payload size limits & Anti-DDoS
-app.use(express.json({ limit: "15kb" }));
-app.use(express.urlencoded({ extended: true, limit: "15kb" }));
+// 4. Payload size limits & Anti-DDoS (5mb for profile image uploads)
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(globalLimiter);
 app.use(sanitizeInput);
 

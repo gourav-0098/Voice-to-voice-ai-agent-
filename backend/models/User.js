@@ -35,6 +35,47 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+    avatar: {
+      type: String,
+      default: "",
+    },
+    dob: {
+      type: String,
+      default: "",
+    },
+    bio: {
+      type: String,
+      maxlength: [500, "Bio cannot exceed 500 characters"],
+      default: "",
+    },
+    gender: {
+      type: String,
+      enum: ["not_specified", "male", "female", "non_binary", "other", "prefer_not_to_say", ""],
+      default: "not_specified",
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    location: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    jobTitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    preferredLanguage: {
+      type: String,
+      default: "auto",
+    },
+    voicePersonaPreference: {
+      type: String,
+      default: "friendly",
+    },
     voiceCalls: [
       {
         type: Date,

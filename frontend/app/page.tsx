@@ -5,7 +5,12 @@ import Link from "next/link";
 import { ThemeToggle } from "./components/ThemeToggle";
 
 export default function Home() {
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    name: string;
+    email: string;
+    avatar?: string;
+    role?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -49,8 +54,16 @@ export default function Home() {
 
           {currentUser ? (
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs">
+                {currentUser.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    className="h-4 w-4 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                )}
                 <span className="font-medium text-emerald-700 dark:text-emerald-300 truncate max-w-[100px] sm:max-w-[150px]">
                   {currentUser.name}
                 </span>
