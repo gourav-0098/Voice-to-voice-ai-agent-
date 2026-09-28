@@ -1761,7 +1761,7 @@ export default function VoicePage() {
 
   return (
     <div
-      className={`min-h-screen flex flex-row transition-colors duration-300 ${
+      className={`min-h-screen flex flex-col transition-colors duration-300 ${
         isDark
           ? "bg-[#07080a] text-white selection:bg-emerald-500 selection:text-white"
           : "bg-slate-50 text-slate-900 selection:bg-emerald-600 selection:text-white"
@@ -1898,28 +1898,20 @@ export default function VoicePage() {
       )}
 
       {/* =====================================================
-          1. LAPTOP / DESKTOP SIDEBAR DASHBOARD (>= lg)
-      ===================================================== */}
-      <aside className="hidden lg:flex w-[23.5rem] flex-col h-screen sticky top-0 border-r border-slate-200 dark:border-white/10 bg-white/95 dark:bg-zinc-950/70 backdrop-blur-xl p-4 sm:p-5 shrink-0 transition-colors shadow-sm dark:shadow-none overflow-hidden">
-        <SettingsPanel {...settingsPanelProps} isMobile={false} />
-      </aside>
-
-      {/* =====================================================
-          2. MOBILE HAMBURGER SETTINGS DRAWER (< lg)
+          SETTINGS DRAWER (LAPTOP, DESKTOP & MOBILE)
       ===================================================== */}
       {mobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 overflow-hidden">
           {/* Backdrop blur */}
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
             onClick={() => setMobileDrawerOpen(false)}
           />
 
           {/* Sliding sheet */}
-          <div className="fixed inset-y-0 right-0 w-full max-w-sm p-5 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl flex flex-col">
+          <div className="fixed inset-y-0 right-0 w-full max-w-md sm:max-w-lg p-5 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-300">
             <SettingsPanel
               {...settingsPanelProps}
-              isMobile={true}
               onClose={() => setMobileDrawerOpen(false)}
             />
           </div>
@@ -1927,26 +1919,28 @@ export default function VoicePage() {
       )}
 
       {/* =====================================================
-          3. MAIN STAGE
+          MAIN STAGE
       ===================================================== */}
-      <div className="flex-1 flex flex-col min-h-screen max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
+      <div className="flex-1 flex flex-col min-h-screen max-w-4xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
         {/* Streamlined Main Header */}
         <header className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4 gap-3 transition-colors">
-          {/* Left on mobile: Brand */}
+          {/* Left: Brand */}
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="lg:hidden flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white transition"
+              className="flex items-center gap-2 text-sm sm:text-base font-bold text-slate-900 dark:text-white transition hover:opacity-85"
             >
-              🎙️ Chatly
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-bold text-sm shadow-md shadow-emerald-500/25">
+                🎙️
+              </span>
+              <span>Chatly</span>
+              <span className="hidden sm:inline-block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                Voice AI
+              </span>
             </Link>
-
-            <span className="hidden lg:inline text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
-              Voice Assistant Stage
-            </span>
           </div>
 
-          {/* Center/Right: Pipeline Status + Debate Arena + Mobile Theme Toggle + Hamburger */}
+          {/* Center/Right: Pipeline Status + Debate Arena + Theme Toggle + Settings */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* AI vs AI Debate Arena Launcher */}
             <button
@@ -1958,6 +1952,7 @@ export default function VoicePage() {
               <span>⚔️</span>
               <span className="hidden sm:inline">Debate Arena</span>
             </button>
+
             {/* Dynamic Status Indicator Chip */}
             <div
               className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
@@ -2000,21 +1995,18 @@ export default function VoicePage() {
               </span>
             </div>
 
-            {/* Mobile Header Theme Toggle */}
-            <div className="lg:hidden">
-              <ThemeToggle />
-            </div>
+            {/* Theme Toggle */}
+            <ThemeToggle />
 
-            {/* Mobile Hamburger Menu Toggle Button (< lg) */}
+            {/* Settings Button (Laptop, Desktop & Mobile) */}
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label="Open settings dashboard"
-              className="lg:hidden flex items-center justify-center p-2 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 text-xs font-semibold active:scale-95"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <span className="text-sm">⚙️</span>
+              <span className="hidden sm:inline">Settings</span>
             </button>
           </div>
         </header>

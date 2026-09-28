@@ -573,17 +573,17 @@ function AboutPane({ p }: { p: SettingsPanelProps }) {
 //  MAIN
 // ─────────────────────────────────────────────────────────────
 export default function SettingsPanel(props: SettingsPanelProps) {
-  const { isMobile = false, onClose } = props;
-  const [activeCategory, setActiveCategory] = useState<CategoryId | null>(isMobile ? null : "account");
+  const { onClose } = props;
+  const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null);
 
   function renderContent(id: CategoryId) {
     switch (id) {
-      case "account":    return <AccountPane p={props} />;
+      case "account":     return <AccountPane p={props} />;
       case "voice_audio": return <VoiceAudioPane p={props} />;
-      case "ai_chat":    return <AiChatPane p={props} />;
-      case "appearance": return <AppearancePane p={props} />;
-      case "memory":     return <MemoryPane p={props} />;
-      case "about":      return <AboutPane p={props} />;
+      case "ai_chat":     return <AiChatPane p={props} />;
+      case "appearance":  return <AppearancePane p={props} />;
+      case "memory":      return <MemoryPane p={props} />;
+      case "about":       return <AboutPane p={props} />;
     }
   }
 
@@ -600,143 +600,70 @@ export default function SettingsPanel(props: SettingsPanelProps) {
       </Link>
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        {isMobile && onClose && (
-          <button type="button" onClick={onClose} aria-label="Close settings"
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close settings"
             className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5"
-          >✕</button>
+          >
+            ✕
+          </button>
         )}
       </div>
     </div>
   );
 
-  const CategoryNav = (compact: boolean) => (
-    <nav className={`flex flex-col ${compact ? "gap-0.5" : "gap-1"}`}>
-      {CATEGORIES.map((cat) => {
-        const isActive = activeCategory === cat.id;
-        const a = ACCENT[cat.accent];
-        return (
-          <button key={cat.id} type="button" onClick={() => setActiveCategory(cat.id)}
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left cursor-pointer transition-all duration-200 group w-full ${
-              isActive ? `${a.bg} ${a.border} border` : "border border-transparent hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-            }`}
-          >
-            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm transition-all ${isActive ? a.iconBg : "bg-slate-100 dark:bg-white/[0.04]"}`}>
-              {cat.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xs font-semibold truncate transition-colors leading-tight ${isActive ? a.text : "text-slate-700 dark:text-zinc-300"}`}>{cat.label}</p>
-              {!compact && <p className="text-[9px] text-slate-400 dark:text-zinc-600 truncate leading-tight">{cat.description}</p>}
-            </div>
-            <span className={`text-xs transition-all shrink-0 ${isActive ? a.text : "opacity-0 group-hover:opacity-40 text-slate-400"}`}>›</span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-
-  // ── DESKTOP ──────────────────────────────────────────────────
-  if (!isMobile) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        {Header}
-
-        {/* Clean Segmented Category Switcher (3 cols x 2 rows) */}
-        <div className="mb-3 shrink-0">
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/70 dark:bg-white/[0.03]">
+  return (
+    <div className="flex flex-col h-full">
+      {Header}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-0.5">
+        {activeCategory === null ? (
+          /* Category list */
+          <div className="space-y-2 pb-6">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-600 px-1 mb-2">
+              Categories
+            </p>
             {CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat.id;
+              const a = ACCENT[cat.accent];
               return (
                 <button
                   key={cat.id}
                   type="button"
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-xl text-xs cursor-pointer transition-all duration-200 ${
-                    isActive
-                      ? "bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-semibold"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 font-medium"
-                  }`}
-                  title={cat.description}
+                  className="flex items-center gap-3.5 w-full px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-white/[0.07] bg-white dark:bg-white/[0.02] hover:bg-slate-50 dark:hover:bg-white/[0.04] cursor-pointer transition-all active:scale-[0.98] group shadow-2xs"
                 >
-                  <span className="text-sm select-none shrink-0">{cat.icon}</span>
-                  <span className="truncate">{cat.shortLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Active Category Header */}
-        {activeCategory && (() => {
-          const cat = CATEGORIES.find((c) => c.id === activeCategory)!;
-          const a = ACCENT[cat.accent];
-          return (
-            <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100 dark:border-white/5 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${a.iconBg} text-xs select-none`}>{cat.icon}</span>
-                <div>
-                  <h2 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{cat.label}</h2>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-tight">{cat.description}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Content Pane - Spans full width of the sidebar with ample breathing room */}
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
-          {activeCategory ? (
-            <div key={activeCategory} className="animate-in fade-in duration-200">
-              {renderContent(activeCategory)}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-24 text-slate-400 text-xs">
-              Select a category
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── MOBILE ────────────────────────────────────────────────────
-  return (
-    <div className="flex flex-col h-full">
-      {Header}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {activeCategory === null ? (
-          /* Mobile category list */
-          <div className="space-y-1.5 pb-6">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-600 px-1 mb-3">Settings</p>
-            {CATEGORIES.map((cat) => {
-              const a = ACCENT[cat.accent];
-              return (
-                <button key={cat.id} type="button" onClick={() => setActiveCategory(cat.id)}
-                  className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-white/[0.07] bg-white dark:bg-white/[0.02] hover:bg-slate-50 dark:hover:bg-white/[0.04] cursor-pointer transition-all active:scale-[0.98]"
-                >
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${a.iconBg} text-xl`}>{cat.icon}</span>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${a.iconBg} text-xl transition-transform group-hover:scale-105`}>
+                    {cat.icon}
+                  </span>
                   <div className="min-w-0 flex-1 text-left">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">{cat.label}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-500">{cat.description}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-500 truncate">{cat.description}</p>
                   </div>
-                  <span className="text-slate-300 dark:text-zinc-600 text-base">›</span>
+                  <span className="text-slate-300 dark:text-zinc-600 text-base transition-transform group-hover:translate-x-1">›</span>
                 </button>
               );
             })}
           </div>
         ) : (
-          /* Mobile content pane */
+          /* Content pane */
           <div className="pb-6">
-            <div className="flex items-center gap-2 mb-5">
-              <button type="button" onClick={() => setActiveCategory(null)}
-                className="text-sm font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer flex items-center gap-1"
-              >‹ Back</button>
-              <span className="text-slate-200 dark:text-zinc-700">|</span>
+            <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+              <button
+                type="button"
+                onClick={() => setActiveCategory(null)}
+                className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-emerald-500/10 transition"
+              >
+                <span>‹</span>
+                <span>All Categories</span>
+              </button>
               {(() => {
                 const cat = CATEGORIES.find((c) => c.id === activeCategory)!;
                 const a = ACCENT[cat.accent];
                 return (
-                  <h2 className={`text-sm font-bold ${a.text} flex items-center gap-1.5`}>
-                    <span>{cat.icon}</span><span>{cat.label}</span>
+                  <h2 className={`text-xs font-bold ${a.text} flex items-center gap-1.5`}>
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
                   </h2>
                 );
               })()}
