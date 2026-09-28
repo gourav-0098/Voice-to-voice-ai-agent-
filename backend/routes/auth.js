@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { verifyToken } from "../middleware/auth.js";
+import { uploadAvatarToCloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
@@ -190,10 +191,22 @@ router.put("/profile", verifyToken, async (req, res) => {
     }
 
     if (avatar !== undefined) {
-      if (avatar && typeof avatar === "string" && avatar.length > 5 * 1024 * 1024) {
-        return res.status(400).json({ error: "Profile photo is too large (max 5MB)." });
+      if (!avatar) {
+        user.avatar = "";
+      } else if (typeof avatar === "string") {
+        if (avatar.startsWith("data:image/")) {
+          console.log(`📍 [AUTH CHECKPOINT] Uploading user ${user._id} avatar to Cloudinary...`);
+          try {
+            const cloudinaryUrl = await uploadAvatarToCloudinary(avatar, user._id.toString());
+            user.avatar = cloudinaryUrl;
+          } catch (uploadErr) {
+            console.error("❌ [AUTH CHECKPOINT ERROR] Cloudinary upload failed:", uploadErr.message || uploadErr);
+            return res.status(500).json({ error: "Failed to upload image to Cloudinary storage. Please try again." });
+          }
+        } else if (avatar.startsWith("http://") || avatar.startsWith("https://")) {
+          user.avatar = avatar;
+        }
       }
-      user.avatar = typeof avatar === "string" ? avatar : "";
     }
 
     if (dob !== undefined) {
