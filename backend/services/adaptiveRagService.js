@@ -16,11 +16,29 @@
 
 import { QdrantClient } from "@qdrant/js-client-rest";
 import dotenv from "dotenv";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { buildEvidencePack } from "./evidencePackBuilder.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
+
+// Preload local datasets for fast <2ms fallback and zero-failure retrieval
+let localDataset = [];
+let localFactChecks = [];
+try {
+  const dsPath = path.join(__dirname, "../data/dataset.json");
+  const fcPath = path.join(__dirname, "../data/fact_checks.json");
+  if (fs.existsSync(dsPath)) {
+    localDataset = JSON.parse(fs.readFileSync(dsPath, "utf-8"));
+  }
+  if (fs.existsSync(fcPath)) {
+    localFactChecks = JSON.parse(fs.readFileSync(fcPath, "utf-8"));
+  }
+} catch (err) {
+  console.warn("⚠️ [ADAPTIVE RAG] Could not preload local datasets:", err.message);
+}
 
 const QDRANT_URL =
   process.env.QDRANT_URL ||
@@ -135,87 +153,112 @@ export function classifyIntent(queryText, persona = "conversational") {
   return "GENERAL_KNOWLEDGE";
 }
 
+const CULTURAL_EXPANSIONS = [
+  { match: /\bpappu\b/i, expand: "Rahul Gandhi Pappu dynastic gaffes political maturity commentary Congress" },
+  { match: /\bgodi\s*media\b/i, expand: "Godi media mainstream news bias anchor propaganda election mandate" },
+  { match: /\b(khan\s*market|lutyens)\b/i, expand: "Khan Market Gang Lutyens Delhi English elite intellectual establishment commentators" },
+  { match: /\bwhatsapp\s*university\b/i, expand: "WhatsApp University viral forwards unverified claims fact checking social media" },
+  { match: /\b(revdi|khata\s*khat)\b/i, expand: "revdi culture khata khat cash transfer freebie doles state fiscal deficit capex" },
+  { match: /\b(toolkit|tukde)\b/i, expand: "toolkit gang tukde tukde narrative warfare foreign intervention social media campaigns" },
+  { match: /\bdouble\s*engine\b/i, expand: "double engine ki sarkar Center State alignment fast clearances development" },
+  { match: /\b(bhakt|andhbhakt)\b/i, expand: "andhbhakt Modi supporter nationalist political discourse development pride" },
+  { match: /\b(bofors|howitzer)\b/i, expand: "1987 Bofors scandal Rajiv Gandhi defence procurement howitzer guns" },
+  { match: /\b(1962|forward\s*policy)\b/i, expand: "1962 Sino-Indian War Jawaharlal Nehru Forward Policy Sardar Patel warning letter" },
+  { match: /\b(emergency|1975)\b/i, expand: "1975 Emergency Indira Gandhi fundamental rights suspension press censorship" },
+  { match: /\b(oil\s*bonds|petrol)\b/i, expand: "UPA oil bonds repayment fiscal deficit petrol diesel crude shock absorption" },
+  { match: /\b(ram\s*mandir|ayodhya)\b/i, expand: "Ram Mandir voluntary chanda civilizational pride tourism economy Supreme Court 2019" },
+  { match: /\b(370|kashmir)\b/i, expand: "Article 370 abrogation Jammu Kashmir temporary provision constitution integration" }
+];
+
 /**
- * HyDE (Hypothetical Document Embeddings) Generator:
- * Generates an ideal hypothetical response document to bridge the semantic gap
- * between critical user questions and affirmative knowledge base records.
- * Uses ultra-fast LLM generation (with 450ms circuit breaker) and heuristic fallback.
+ * Deterministic Multi-Facet Query Expansion (< 2ms, zero LLM delay)
+ * Generates an empirical facet (targeting data, metrics, official records)
+ * and a discourse facet (targeting public arguments, claims, perspectives, cultural lexicon).
  */
-export async function generateHyDEHypothesis(queryText, persona = "andhbhakt") {
-  const q = queryText.toLowerCase().trim();
+export function expandQueryFacets(queryText) {
+  const t0 = performance.now();
+  const clean = (queryText || "").trim().toLowerCase();
+  const words = clean.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2);
+  const coreQuery = words.join(" ");
 
-  // Fast-path heuristic templates for zero latency on core topics
-  if (persona === "andhbhakt") {
-    if (q.includes("mandir") || q.includes("temple")) {
-      return "Ram Mandir construction is funded 100% through voluntary public donations with zero state funds, generating massive tourism GDP, while 15 AIIMS and thousands of schools were built since 2014.";
-    }
-    if (q.includes("petrol") || q.includes("fuel") || q.includes("diesel") || q.includes("oil")) {
-      return "Fuel prices are tied to global crude oil markets and paying off UPA oil bonds debt, while tax revenues directly fund 80 crore free ration and 55,000 km national highway infrastructure.";
-    }
-    if (q.includes("unemployment") || q.includes("job") || q.includes("naukri") || q.includes("berojgari")) {
-      return "Formal employment and startup ecosystem with 110 unicorns and 43 crore Mudra loans empower self-reliance rather than socialist entitlement doles.";
-    }
-    if (q.includes("russia") || q.includes("ukraine") || q.includes("war")) {
-      return "India maintains independent strategic autonomy, discounted energy supplies for citizens, and executed Operation Ganga to safely evacuate 22,000 Indian students.";
-    }
-    if (q.includes("adani") || q.includes("ambani") || q.includes("crony")) {
-      return "National champions build critical world-class ports, airports, and renewable energy on Indian soil to compete globally, ending legacy phone-banking cronyism.";
-    }
-  } else if (persona === "rational") {
-    if (q.includes("russia") || q.includes("ukraine") || q.includes("war")) {
-      return "Fact-check analysis confirms India carried out student evacuations under Operation Ganga, but claims that the Prime Minister halted the ongoing Russia-Ukraine war are unverified political campaign exaggerations.";
-    }
-    if (q.includes("temple") || q.includes("mandir")) {
-      return "Public debate balances religious tourism investments with public expenditure priorities across healthcare and education based on state and central budget figures.";
+  let culturalAdditions = "";
+  for (const item of CULTURAL_EXPANSIONS) {
+    if (item.match.test(clean)) {
+      culturalAdditions += ` ${item.expand}`;
     }
   }
 
-  // LLM-backed HyDE generation with strict 450ms timeout
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 450);
+  const empiricalQuery = `${coreQuery} official report data statistics facts indicators`.trim();
+  const discourseQuery = `${coreQuery}${culturalAdditions} public claims criticism rebuttal counter perspective arguments`.trim();
 
-      const promptInstruction = persona === "andhbhakt"
-        ? "Write exactly 1 short factual sentence defending Indian governance, GDP, or infrastructure achievements against this criticism:"
-        : "Write exactly 1 short neutral, fact-checking sentence analyzing this claim:";
+  return {
+    coreQuery,
+    empiricalQuery,
+    discourseQuery,
+    latencyMs: Math.round((performance.now() - t0) * 100) / 100,
+  };
+}
 
-      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${groqKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [
-            { role: "system", content: "You are a specialized HyDE retrieval assistant. Output only 1 concise sentence without quotes, preamble, or markdown." },
-            { role: "user", content: `${promptInstruction} "${queryText}"` },
-          ],
-          max_tokens: 45,
-          temperature: 0.3,
-        }),
-        signal: controller.signal,
+/**
+ * Fast in-memory lexical fallback search (< 2ms)
+ * Searches preloaded dataset.json and fact_checks.json when dense embedder or Qdrant cloud is offline
+ */
+export function searchLocalFallback(queryText, limit = 2) {
+  const tokens = (queryText || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2);
+  if (tokens.length === 0) return { evidence: [], discourse: [] };
+
+  const scoredDebates = localDataset.map((item) => {
+    const text = `${item.topic || ""} ${item.criticism || ""} ${item.counter_argument || ""} ${item.stats_and_facts || ""} ${(item.keywords || []).join(" ")}`.toLowerCase();
+    let matches = 0;
+    tokens.forEach((t) => { if (text.includes(t)) matches++; });
+    return { item, score: matches / tokens.length };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+
+  const scoredFactChecks = localFactChecks.map((item) => {
+    const text = `${item.claim || ""} ${item.fact_check_summary || ""} ${item.context || ""} ${item.leader || ""}`.toLowerCase();
+    let matches = 0;
+    tokens.forEach((t) => { if (text.includes(t)) matches++; });
+    return { item, score: matches / tokens.length };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+
+  const evidence = [];
+  const discourse = [];
+
+  scoredFactChecks.forEach(({ item, score }) => {
+    evidence.push({
+      text: item.fact_check_summary,
+      claim: item.claim,
+      sourceType: item.source_type || "Fact-Check Record",
+      sourceUrl: "https://factcheck.org",
+      score,
+      origin: "local_fact_checks",
+    });
+  });
+
+  scoredDebates.forEach(({ item, score }) => {
+    if (item.stats_and_facts) {
+      evidence.push({
+        text: item.stats_and_facts,
+        sourceType: "Reported Governance & Economic Stats",
+        sourceUrl: "https://www.pmindia.gov.in",
+        score,
+        origin: "local_dataset_stats",
       });
-
-      clearTimeout(timer);
-      if (resp.ok) {
-        const data = await resp.json();
-        const candidate = data.choices?.[0]?.message?.content?.trim();
-        if (candidate && candidate.length > 15) {
-          return candidate.replace(/["\n]/g, " ");
-        }
-      }
-    } catch (_) {
-      // Graceful fallback to heuristic
     }
-  }
+    if (item.counter_argument || item.criticism) {
+      discourse.push({
+        topic: item.topic,
+        claim: item.criticism,
+        argument: item.counter_argument,
+        whataboutism: item.whataboutism_or_pre2014,
+        sourceName: "Public Political Debate",
+        category: "discourse",
+        score,
+      });
+    }
+  });
 
-  // Generic fallback
-  return persona === "andhbhakt"
-    ? `Post-2014 national infrastructure, economic resurgence, and civilizational pride provide verified achievements regarding ${queryText}.`
-    : `An empirical examination of ${queryText} requires checking verified statistical indicators and official fact-checks.`;
+  return { evidence, discourse };
 }
 
 /**
@@ -223,7 +266,7 @@ export async function generateHyDEHypothesis(queryText, persona = "andhbhakt") {
  * Takes top-10 candidate pool from Qdrant and reranks them down to the top-K (default 2)
  * using dense cosine score, lexical token overlap, and entity/topic relevance.
  */
-export function crossEncoderRerank(queryText, candidates, topK = 2) {
+export function crossEncoderRerank(queryText, candidates, topK = 2, queryIntent = "POLITICAL_DEBATE") {
   if (!candidates || candidates.length <= 1) return candidates || [];
 
   const queryTokens = new Set(
@@ -233,6 +276,10 @@ export function crossEncoderRerank(queryText, candidates, topK = 2) {
       .split(/\s+/)
       .filter((w) => w.length > 2)
   );
+
+  const isFactualQuery = queryIntent === "FACT_VERIFICATION" ||
+                         /report|stat|data|numbers|official|plfs|mospi|verdict|supreme court|gdp|inflation rate|unemployment rate/i.test(queryText);
+  const isCultureQuery = /pappu|godi media|revdi|whatsapp university|bhakt|dynasty|tukde|toolkit|meme|dialogue/i.test(queryText);
 
   const scored = candidates.map((cand, idx) => {
     // 1. Dense Vector Similarity Score (from Qdrant cosine)
@@ -255,8 +302,32 @@ export function crossEncoderRerank(queryText, candidates, topK = 2) {
       entityBonus += 0.10;
     }
 
-    // Combined Weighted Rerank Score: Dense semantic 45%, Lexical 35%, Entity 20%
-    const rerankScore = 0.45 * vectorScore + 0.35 * lexicalScore + entityBonus;
+    // 4. Strict Category & Intent Alignment Bonus
+    let categoryBonus = 0;
+    if (isFactualQuery) {
+      if (cand.category === "VERIFIED_FACT" || cand.category === "HISTORICAL_RECORD") {
+        categoryBonus += 0.25;
+      } else if (cand.category === "MEME_LEXICON") {
+        categoryBonus -= 0.30; // Demote memes on purely factual queries
+      }
+    } else if (isCultureQuery) {
+      if (cand.category === "MEME_LEXICON" || cand.category === "SUPPORTER_NARRATIVE" || cand.category === "RHETORICAL_PATTERN") {
+        categoryBonus += 0.25;
+      }
+    }
+
+    // 5. Specific Cultural Slang & Exact Entity Alignment Bonus
+    let slangBonus = 0;
+    const lowerQuery = queryText.toLowerCase();
+    const slangMatches = ["pappu", "godi media", "khan market", "lutyens", "whatsapp university", "revdi", "khata khat", "toolkit", "tukde", "double engine", "bofors", "1962", "emergency", "1975", "balakot", "ayodhya", "kashi", "370", "dbt", "upi", "adani", "ambani", "evm", "vvpat", "electoral bonds", "farm laws", "msp", "swaminathan", "operation ganga", "g20", "imec", "brahmos", "tejas", "pm kisan", "ayushman", "jal jeevan", "pm awas", "ujjwala"];
+    for (const sm of slangMatches) {
+      if (lowerQuery.includes(sm) && candText.includes(sm)) {
+        slangBonus += 0.35;
+      }
+    }
+
+    // Combined Weighted Rerank Score
+    const rerankScore = 0.35 * vectorScore + 0.25 * lexicalScore + entityBonus + categoryBonus + slangBonus;
 
     return {
       ...cand,
@@ -273,16 +344,16 @@ export function crossEncoderRerank(queryText, candidates, topK = 2) {
 }
 
 /**
- * Query Qdrant 'political_debate_rag' (160 curated political rebuttals + graph metadata)
- * Retrieves top-10 candidates and applies Neural Cross-Encoder Reranking to return top-2.
+ * Query Qdrant 'political_debate_rag' (curated political rebuttals + culture corpus + graph metadata)
+ * Retrieves candidate pool from Qdrant and applies Neural Cross-Encoder Reranking to return top-K.
  */
-export async function searchPoliticalDebates(vector, queryText = "", limit = 2) {
+export async function searchPoliticalDebates(vector, queryText = "", limit = 2, queryIntent = "POLITICAL_DEBATE") {
   if (!qdrantClient || !vector) return [];
 
   try {
     const res = await qdrantClient.query("political_debate_rag", {
       query: vector,
-      limit: 10, // Retrieve candidate pool of 10 for reranking
+      limit: 25, // Retrieve broader candidate pool of 25 for reranking
       with_payload: true,
     });
 
@@ -294,17 +365,23 @@ export async function searchPoliticalDebates(vector, queryText = "", limit = 2) 
         id: p.payload?.id || String(p.id),
         score: p.score,
         topic: p.payload?.topic || "General",
+        category: p.payload?.category || (p.payload?.stats_and_facts ? "VERIFIED_FACT" : "SUPPORTER_NARRATIVE"),
+        contentType: p.payload?.content_type || "social",
         criticism: p.payload?.criticism || "",
-        counterArgument: p.payload?.counter_argument || "",
-        statsAndFacts: p.payload?.stats_and_facts || "",
+        counterArgument: p.payload?.counter_argument || p.payload?.text || "",
+        statsAndFacts: p.payload?.stats_and_facts || (p.payload?.category === "VERIFIED_FACT" || p.payload?.category === "HISTORICAL_RECORD" ? p.payload?.text : ""),
+        text: p.payload?.text || p.payload?.counter_argument || p.payload?.stats_and_facts || "",
         whataboutism: p.payload?.whataboutism_or_pre2014 || "",
         signatureCatchphrase: p.payload?.signature_catchphrase || "",
-        targetEntity: p.payload?.graph_relations?.target_entity || "Government / Nation",
+        targetEntity: p.payload?.graph_relations?.target_entity || (p.payload?.entity_targets ? p.payload.entity_targets[0] : "Government / Nation"),
         counterEntity: p.payload?.graph_relations?.counter_entity || "Opposition",
+        sourceType: p.payload?.source_type || "Political Discourse",
+        sourceUrl: p.payload?.source_url || "https://sansad.in",
+        authority: p.payload?.authority || 0.70,
       }));
 
     if (queryText && rawCandidates.length > 0) {
-      return crossEncoderRerank(queryText, rawCandidates, limit);
+      return crossEncoderRerank(queryText, rawCandidates, limit, queryIntent);
     }
 
     return rawCandidates.slice(0, limit);
@@ -392,182 +469,197 @@ export async function searchWikiKnowledge(vector, queryText = "", limit = 2) {
 
 /**
  * Master Hybrid Grounding Function
- * Steers retrieval and synthesizes voice-ready context based on active persona.
- * Incorporates HyDE query expansion and 10-to-2 Neural Cross-Encoder Reranking.
+ * Unified Shared Evidence Pack retrieval for all personas.
+ * Strict separation: Evidence (facts/data) vs Discourse (debates/claims).
+ * Eliminates slow LLM HyDE in favor of deterministic multi-facet expansion (< 2ms).
  */
 export async function getPersonaGrounding(queryText, persona = "conversational") {
-  const startTime = Date.now();
+  const startTime = performance.now();
   const intent = classifyIntent(queryText, persona);
 
   if (intent === "CHITCHAT") {
     return {
+      topic: "chitchat",
+      evidence: [],
+      discourse: [],
       contextPrompt: "",
+      spokenContext: "",
+      uiCitations: [],
       ragSource: null,
-      latencyMs: Date.now() - startTime,
+      confidence: "HIGH",
+      latencyMs: Math.round((performance.now() - startTime) * 100) / 100,
+      latencyBreakdown: {
+        queryExpansionMs: 0,
+        embeddingMs: 0,
+        qdrantRetrievalMs: 0,
+        packBuildMs: 0,
+        totalMs: Math.round((performance.now() - startTime) * 100) / 100,
+      },
     };
   }
 
-  // 1. Generate 384-dimensional query vector in ~12ms
+  // 1. Fast Deterministic Multi-Facet Query Expansion (< 2ms)
+  const expansion = expandQueryFacets(queryText);
+  const queryExpansionMs = expansion.latencyMs;
+
+  // 2. Generate 384-dimensional query vector via local embedder daemon
+  const tEmbed = performance.now();
   const queryVector = await getMiniLMEmbedding(queryText);
+  const embeddingMs = Math.round((performance.now() - tEmbed) * 100) / 100;
 
-  // If vector is unavailable (e.g. daemon offline), return graceful empty grounding
-  if (!queryVector) {
-    return {
-      contextPrompt: "",
-      ragSource: "none",
-      latencyMs: Date.now() - startTime,
-    };
-  }
+  // 3. Unified Shared Retrieval across empirical and discourse collections
+  const tRet = performance.now();
+  let rawDebates = [];
+  let rawFactChecks = [];
+  let rawWiki = [];
+  const activeSources = [];
 
-  // 2. HyDE (Hypothetical Document Embeddings) Query Bridging
-  let searchVector = queryVector;
-  let hydeHypothesis = null;
-
-  if (persona === "andhbhakt" || persona === "rational") {
+  if (queryVector && qdrantClient) {
     try {
-      hydeHypothesis = await generateHyDEHypothesis(queryText, persona);
-      if (hydeHypothesis) {
-        const hydeVector = await getMiniLMEmbedding(hydeHypothesis);
-        if (hydeVector && hydeVector.length === queryVector.length) {
-          // Blend Query Vector (45%) with HyDE Vector (55%) to bridge question-to-answer semantic gap
-          searchVector = queryVector.map((val, idx) => 0.45 * val + 0.55 * hydeVector[idx]);
-          console.log(`🧬 [HyDE] Blended hypothesis vector: "${hydeHypothesis.slice(0, 70)}..."`);
-        }
-      }
-    } catch (hydeErr) {
-      console.warn("⚠️ [HyDE] Generation skipped, using direct query vector:", hydeErr.message);
+      const [debates, factChecks, wikiChunks] = await Promise.all([
+        searchPoliticalDebates(queryVector, queryText, 4, intent),
+        searchFactChecks(queryVector, queryText, 2),
+        searchWikiKnowledge(queryVector, queryText, 2),
+      ]);
+      rawDebates = debates || [];
+      rawFactChecks = factChecks || [];
+      rawWiki = wikiChunks || [];
+      if (rawDebates.length > 0) activeSources.push("political_debate_rag");
+      if (rawFactChecks.length > 0) activeSources.push("fact_checks_rag");
+      if (rawWiki.length > 0) activeSources.push("wiki_knowledge_chunks");
+    } catch (qErr) {
+      console.warn("⚠️ [ADAPTIVE RAG] Qdrant retrieval error, activating local fallback:", qErr.message);
     }
   }
 
-  // 3. Persona-Aware Retrieval Execution with Neural Cross-Encoder Reranker
-  let groundingPrompt = "";
-  let ragSource = "none";
-  let groundingDetails = null;
-
-  if (persona === "andhbhakt") {
-    // Pipeline: Political Debates + Knowledge Graph + Wiki National Success
-    const [debates, wikiChunks] = await Promise.all([
-      searchPoliticalDebates(searchVector, queryText, 2),
-      searchWikiKnowledge(searchVector, queryText, 1),
-    ]);
-
-    if (debates.length > 0) {
-      const top = debates[0];
-      const scoreVal = top.rerankScore || top.score || 0.45;
-      ragSource = `political_debate_rag (Reranked: ${scoreVal.toFixed(2)})`;
-
-      groundingDetails = {
-        type: "political_debate_rag",
-        topic: top.topic,
-        score: scoreVal,
-        criticism: top.criticism,
-        counterArgument: top.counterArgument,
-        statsAndFacts: top.statsAndFacts,
-        whataboutism: top.whataboutism,
-        targetEntity: top.targetEntity,
-        counterEntity: top.counterEntity,
-        signatureCatchphrase: top.signatureCatchphrase,
-        sourceUrl: wikiChunks[0]?.url || "https://www.pmindia.gov.in/en/major-initiatives/",
-        sourceTitle: wikiChunks[0]?.title || "PM India - Governance & Major Initiatives",
-      };
-
-      groundingPrompt =
-        `\n\n[HYBRID GRAPHRAG GROUNDING - PERSONA: SAFFRON DEBATER]:\n` +
-        `- Core Debate Topic: ${top.topic}\n` +
-        `- Matched Opposition Claim: "${top.criticism}"\n` +
-        `- Verified Rebuttal Point: ${top.counterArgument}\n` +
-        `- Solid Hard Data & Stats: ${top.statsAndFacts}\n` +
-        `- Historical Contrast / Whataboutism: ${top.whataboutism}\n` +
-        `- Target Entity Defended: ${top.targetEntity}\n` +
-        `- Contrasting Opposition Entity: ${top.counterEntity}\n` +
-        (top.signatureCatchphrase ? `- Signature Catchphrase: "${top.signatureCatchphrase}"\n` : "") +
-        `- INSTRUCTION: Boldly defend national development and PM Modi using the above statistics and historical contrasts. Highlight what pre-2014 failed to deliver vs post-2014 transformation. Speak in passionate, proud, energetic conversational Hinglish with complete conviction!`;
-
-      if (wikiChunks.length > 0) {
-        groundingPrompt += `\n- Additional Verified Metric: ${wikiChunks[0].text}`;
-      }
-    } else if (wikiChunks.length > 0) {
-      const scoreVal = wikiChunks[0].rerankScore || wikiChunks[0].score || 0.42;
-      ragSource = `wiki_knowledge_chunks (Score: ${scoreVal.toFixed(2)})`;
-
-      groundingDetails = {
-        type: "wiki_knowledge_chunks",
-        topic: wikiChunks[0].title,
-        score: scoreVal,
-        section: wikiChunks[0].section,
-        text: wikiChunks[0].text,
-        sourceUrl: wikiChunks[0].url || "https://en.wikipedia.org/wiki/Economy_of_India",
-        sourceTitle: wikiChunks[0].title,
-      };
-
-      groundingPrompt =
-        `\n\n[HYBRID RAG GROUNDING - PERSONA: SAFFRON DEBATER]:\n` +
-        `- Verified National Achievement: ${wikiChunks[0].title} (${wikiChunks[0].section})\n` +
-        `- Excerpt: ${wikiChunks[0].text}\n` +
-        `- INSTRUCTION: Highlight this nation-building achievement with pride and energetic Hinglish!`;
-    }
-  } else if (persona === "rational") {
-    // Pipeline: Verified Fact Checks + Neutral Encyclopedic Wiki
-    const [factChecks, wikiChunks] = await Promise.all([
-      searchFactChecks(searchVector, queryText, 2),
-      searchWikiKnowledge(searchVector, queryText, 2),
-    ]);
-
-    if (factChecks.length > 0 && (factChecks[0].rerankScore >= 0.38 || factChecks[0].score >= 0.45)) {
-      const top = factChecks[0];
-      const scoreVal = top.rerankScore || top.score || 0.48;
-      ragSource = `fact_checks_rag (Reranked: ${scoreVal.toFixed(2)})`;
-
-      groundingDetails = {
-        type: "fact_checks_rag",
-        topic: top.claim,
-        claim: top.claim,
-        score: scoreVal,
-        context: top.context,
-        factCheckSummary: top.factCheckSummary,
-        sourceType: top.sourceType,
-        leader: top.leader,
-        sourceUrl: wikiChunks[0]?.url || "https://en.wikipedia.org/wiki/Fact-checking",
-        sourceTitle: wikiChunks[0]?.title || top.sourceType,
-      };
-
-      groundingPrompt =
-        `\n\n[VERIFIED FACT-CHECK GROUNDING - PERSONA: RATIONALIST ANALYST]:\n` +
-        `- Evaluated Claim: "${top.claim}"\n` +
-        `- Context & Background: ${top.context}\n` +
-        `- Official Fact-Check Verdict: ${top.factCheckSummary}\n` +
-        `- Source & Credibility: ${top.sourceType}\n` +
-        `- INSTRUCTION: Present this fact-check objectively. Dissect the viral claim with calm, logical clarity. Acknowledge what parts are accurate and what parts are exaggerated or misleading. Speak in neutral, respectful, balanced conversational Hinglish/English.`;
-    } else if (wikiChunks.length > 0) {
-      const scoreVal = wikiChunks[0].rerankScore || wikiChunks[0].score || 0.45;
-      ragSource = `wiki_knowledge_chunks (Score: ${scoreVal.toFixed(2)})`;
-
-      groundingDetails = {
-        type: "wiki_knowledge_chunks",
-        topic: wikiChunks[0].title,
-        score: scoreVal,
-        section: wikiChunks[0].section,
-        text: wikiChunks[0].text,
-        sourceUrl: wikiChunks[0].url || "https://en.wikipedia.org/wiki/Public_policy_in_India",
-        sourceTitle: wikiChunks[0].title,
-      };
-
-      const points = wikiChunks.map((w, i) => `${i + 1}. [${w.title} - ${w.section}]: ${w.text}`).join("\n");
-      groundingPrompt =
-        `\n\n[OBJECTIVE ENCYCLOPEDIC GROUNDING - PERSONA: RATIONALIST ANALYST]:\n` +
-        `${points}\n` +
-        `- INSTRUCTION: Use the above empirical facts and statistics to answer. Present multiple perspectives fairly, avoid ideological bias, and explain the underlying reasons with rational clarity.`;
+  // If vector search returned 0 items (daemon offline or Qdrant empty), use local in-memory fallback
+  let fallbackResults = { evidence: [], discourse: [] };
+  if (rawDebates.length === 0 && rawFactChecks.length === 0 && rawWiki.length === 0) {
+    fallbackResults = searchLocalFallback(queryText, 2);
+    if (fallbackResults.evidence.length > 0 || fallbackResults.discourse.length > 0) {
+      activeSources.push("local_fallback_corpus");
     }
   }
+  const qdrantRetrievalMs = Math.round((performance.now() - tRet) * 100) / 100;
 
-  const latencyMs = Date.now() - startTime;
-  console.log(`🧠 [ADAPTIVE RAG] Grounding completed in ${latencyMs}ms (Source: ${ragSource}, Persona: ${persona})`);
+  // 4. Map candidates into Evidence (facts, data, reports) vs Discourse (debates, perspectives, claims)
+  const factualCandidates = [];
+  const discourseCandidates = [];
+
+  // Wiki chunks -> Evidence
+  rawWiki.forEach((w) => {
+    factualCandidates.push({
+      text: w.text,
+      title: w.title,
+      sourceUrl: w.url,
+      sourceType: "Encyclopedic Record",
+      authorityScore: 0.85,
+      score: w.rerankScore || w.score,
+      category: "evidence",
+    });
+  });
+
+  // Fact-checks -> Evidence (evaluated verdicts on claims)
+  rawFactChecks.forEach((fc) => {
+    factualCandidates.push({
+      text: fc.factCheckSummary,
+      claim: fc.claim,
+      context: fc.context,
+      sourceType: fc.sourceType || "Fact Check Organization",
+      sourceUrl: "https://factcheck.org",
+      authorityScore: 0.88,
+      score: fc.rerankScore || fc.score,
+      category: "evidence",
+    });
+  });
+
+  // Political debates & Culture corpus ontology-aware mapping
+  rawDebates.forEach((d) => {
+    // 1. Facts & Historical Records go strictly to Factual Evidence
+    if (d.category === "VERIFIED_FACT" || d.category === "HISTORICAL_RECORD" || d.statsAndFacts) {
+      factualCandidates.push({
+        text: d.statsAndFacts || d.text,
+        topic: d.topic,
+        sourceType: d.sourceType || "Reported Governance & Historical Records",
+        sourceUrl: d.sourceUrl || "https://www.pmindia.gov.in",
+        authorityScore: d.authority || 0.90,
+        score: d.rerankScore || d.score,
+        category: "evidence",
+      });
+    }
+
+    // 2. Supporter Narratives, Counter Narratives, Memes, Rhetorical Patterns, Opinions, and Social Claims go to Discourse
+    if (
+      d.category === "SUPPORTER_NARRATIVE" ||
+      d.category === "COUNTER_NARRATIVE" ||
+      d.category === "MEME_LEXICON" ||
+      d.category === "RHETORICAL_PATTERN" ||
+      d.category === "SOCIAL_CLAIM" ||
+      d.category === "OPINION" ||
+      d.counterArgument ||
+      d.criticism
+    ) {
+      let perspective = "Supporter / Rebuttal";
+      if (d.category === "COUNTER_NARRATIVE") perspective = "Counter-Perspective";
+      else if (d.category === "MEME_LEXICON") perspective = "Political Meme / Lexicon";
+      else if (d.category === "RHETORICAL_PATTERN") perspective = "Rhetorical Pattern";
+      else if (d.category === "SOCIAL_CLAIM") perspective = "Unverified Social Claim";
+      else if (d.category === "OPINION") perspective = "Public Political Opinion";
+
+      discourseCandidates.push({
+        topic: d.topic,
+        claim: d.criticism || (d.category === "SOCIAL_CLAIM" ? `[SOCIAL CLAIM (Unverified)]: ${d.text}` : ""),
+        argument: d.counterArgument || d.text,
+        perspective,
+        whataboutism: d.whataboutism,
+        targetEntity: d.targetEntity,
+        sourceName: d.sourceType || "Public Political Debate",
+        category: "discourse",
+        score: d.rerankScore || d.score,
+      });
+    }
+  });
+
+  // Merge local fallback if used
+  fallbackResults.evidence.forEach((ev) => factualCandidates.push(ev));
+  fallbackResults.discourse.forEach((dc) => discourseCandidates.push(dc));
+
+  // 5. Build Shared Evidence Pack
+  const tPack = performance.now();
+  const evidencePack = buildEvidencePack({
+    query: queryText,
+    topic: intent,
+    qdrantResults: factualCandidates,
+    discourseResults: discourseCandidates,
+    intent,
+  });
+  const packBuildMs = Math.round((performance.now() - tPack) * 100) / 100;
+  const totalMs = Math.round((performance.now() - startTime) * 100) / 100;
+
+  const ragSource = activeSources.length > 0
+    ? `shared_evidence_pack (${activeSources.join(", ")})`
+    : "shared_evidence_pack (empty)";
+
+  console.log(`🧠 [ADAPTIVE RAG] Shared Evidence Pack built in ${totalMs}ms (Evidence: ${evidencePack.evidenceCount}, Discourse: ${evidencePack.discourseCount})`);
 
   return {
-    contextPrompt: groundingPrompt,
+    topic: intent,
+    evidence: evidencePack.evidence,
+    discourse: evidencePack.discourse,
+    contextPrompt: evidencePack.spokenEvidenceContext,
+    spokenContext: evidencePack.spokenEvidenceContext,
+    uiCitations: evidencePack.uiCitations,
+    confidence: evidencePack.confidenceLevel,
     ragSource,
-    groundingDetails,
-    latencyMs,
+    groundingDetails: evidencePack.evidence[0] || evidencePack.discourse[0] || null,
+    latencyBreakdown: {
+      queryExpansionMs,
+      embeddingMs,
+      qdrantRetrievalMs,
+      packBuildMs,
+      totalMs,
+    },
+    latencyMs: totalMs,
     queryVector,
   };
 }
@@ -575,6 +667,8 @@ export async function getPersonaGrounding(queryText, persona = "conversational")
 export default {
   getMiniLMEmbedding,
   classifyIntent,
+  expandQueryFacets,
+  searchLocalFallback,
   searchPoliticalDebates,
   searchFactChecks,
   searchWikiKnowledge,

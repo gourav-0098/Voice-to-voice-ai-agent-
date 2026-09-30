@@ -104,16 +104,26 @@ export function setupVoiceWebSocket(httpServer) {
           adaptiveRag = fetchedRag || adaptiveRag;
           liveWebResult = fetchedWeb || null;
 
-          // Format clean Evidence Pack if RAG or Live Search was retrieved
-          const qdrantChunks = adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : [];
-          const webChunks = liveWebResult ? [liveWebResult] : [];
-
-          if (qdrantChunks.length > 0 || webChunks.length > 0) {
+          // Format clean Shared Evidence Pack if RAG or Live Search was retrieved
+          if (adaptiveRag && adaptiveRag.spokenContext) {
+            if (liveWebResult) {
+              evidencePack = buildEvidencePack({
+                query: prompt,
+                topic: route.detectedTopic,
+                qdrantResults: adaptiveRag.evidence || (adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : []),
+                discourseResults: adaptiveRag.discourse || [],
+                webResults: [liveWebResult],
+                intent: route.intent,
+              });
+            } else {
+              evidencePack = adaptiveRag;
+            }
+          } else if (liveWebResult) {
             evidencePack = buildEvidencePack({
               query: prompt,
               topic: route.detectedTopic,
-              qdrantResults: qdrantChunks,
-              webResults: webChunks,
+              qdrantResults: [],
+              webResults: [liveWebResult],
               intent: route.intent,
             });
           }
@@ -129,14 +139,21 @@ export function setupVoiceWebSocket(httpServer) {
               type: "rag_grounded",
               ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
               latencyMs: adaptiveRag.latencyMs || route.routerLatencyMs,
+              latencyBreakdown: adaptiveRag.latencyBreakdown || null,
+              intensityLevel: route.intensityLevel || 0,
+              intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
               citations: evidencePack?.uiCitations || [],
               confidence: evidencePack?.confidenceLevel || "HIGH",
             }));
           }
 
-          // Build dynamic instruction
+          // Build dynamic instruction with context-sensitive intensity and continuity
           let dynamicInstruction = typeof aiService.getSystemInstruction === "function"
-            ? aiService.getSystemInstruction(persona, voiceModel)
+            ? aiService.getSystemInstruction(persona, voiceModel, {
+                intensityLevel: route.intensityLevel || 0,
+                intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
+                recentHistory,
+              })
             : DEFAULT_SYSTEM_INSTRUCTION;
 
           if (evidencePack && evidencePack.spokenEvidenceContext) {

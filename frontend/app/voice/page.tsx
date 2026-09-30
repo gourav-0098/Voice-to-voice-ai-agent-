@@ -511,6 +511,8 @@ export default function VoicePage() {
   const manuallyStoppedRef = useRef(false);
   const hadErrorRef = useRef(false);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedAudioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -883,15 +885,9 @@ export default function VoicePage() {
             noiseFloorRef.current = noiseFloorRef.current * 0.95 + rms * 0.05;
           }
 
-          // Vocalization threshold: 2.2x ambient noise floor + baseline
+          // Vocalization threshold for visualizer & barge-in detection
           const isVocalizing = rms > (noiseFloorRef.current * 2.2 + 0.015);
           isVocalizingRef.current = isVocalizing;
-
-          // If user started speaking while a silence debounce was ticking, cancel it
-          if (isVocalizing && silenceTimeoutRef.current) {
-            clearTimeout(silenceTimeoutRef.current);
-            silenceTimeoutRef.current = null;
-          }
         }, 50);
       } catch (err) {
         console.warn("Could not attach mic audio analyzer:", err);
@@ -1344,18 +1340,69 @@ export default function VoicePage() {
     sendVoiceToBackendRef.current = sendVoiceToBackend;
   });
 
+  // Start auxiliary MediaRecorder alongside SpeechRecognition for 100% resilient transcription
+  const startMediaRecording = useCallback(() => {
+    if (!micStreamRef.current || typeof window === "undefined") return;
+    try {
+      const MR = (window as any).MediaRecorder;
+      if (!MR) return;
+      recordedAudioChunksRef.current = [];
+      const mime = MR.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MR.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+      const recorder = new MR(micStreamRef.current, { mimeType: mime });
+      recorder.ondataavailable = (e: any) => {
+        if (e.data && e.data.size > 0) {
+          recordedAudioChunksRef.current.push(e.data);
+        }
+      };
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+    } catch (e) {
+      console.warn("Could not start MediaRecorder:", e);
+    }
+  }, []);
+
+  const stopMediaRecording = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder || recorder.state === "inactive") {
+        const chunks = recordedAudioChunksRef.current;
+        if (chunks.length > 0) {
+          resolve(new Blob(chunks, { type: chunks[0].type || "audio/webm" }));
+        } else {
+          resolve(null);
+        }
+        return;
+      }
+      recorder.onstop = () => {
+        const chunks = recordedAudioChunksRef.current;
+        if (chunks.length > 0) {
+          resolve(new Blob(chunks, { type: chunks[0].type || "audio/webm" }));
+        } else {
+          resolve(null);
+        }
+      };
+      try {
+        recorder.stop();
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }, []);
+
   // Finalize full user query and dispatch to backend
-  const finalizeAndSendSpeech = useCallback(() => {
+  const finalizeAndSendSpeech = useCallback(async () => {
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
     }
 
-    const queryToSend = currentQueryRef.current.trim();
+    let queryToSend = currentQueryRef.current.trim();
     currentQueryRef.current = "";
     setInterimText("");
-
-    if (!queryToSend) return;
 
     // Stop recognition while waiting for AI response so ambient noises aren't captured
     if (recognitionRef.current) {
@@ -1363,12 +1410,44 @@ export default function VoicePage() {
         recognitionRef.current.stop();
       } catch (_) {}
     }
+
+    // Stop media recording and obtain audio blob
+    const audioBlob = await stopMediaRecording();
+
+    // If client Web Speech API missed the audio or produced empty text, use Server-Side Groq Whisper!
+    if (!queryToSend && audioBlob && audioBlob.size > 2000) {
+      try {
+        setPipelineState("transcribing");
+        const activeLang = selectedLanguageRef.current;
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "user_speech.webm");
+        formData.append("language", activeLang === "hi" ? "hi" : activeLang === "en" ? "en" : "hi");
+
+        const res = await fetch(`${API_BASE}/api/voice/transcribe`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.text && data.text.trim()) {
+            queryToSend = data.text.trim();
+            console.log(`🎙️ [SERVER STT] Transcribed via ${data.provider} in ${data.latencyMs}ms: "${queryToSend}"`);
+          }
+        }
+      } catch (sttErr: any) {
+        console.warn("Server STT fallback notice:", sttErr.message || sttErr);
+      }
+    }
+
     setListening(false);
     listeningRef.current = false;
 
+    if (!queryToSend) return;
+
     setFinalisedText((prev) => [queryToSend, ...prev]);
     sendVoiceToBackendRef.current(queryToSend);
-  }, []);
+  }, [stopMediaRecording]);
 
   // Speech Recognition Initializer with Smart VAD Turn-Taking Cadence
   const createRecognition = useCallback(() => {
@@ -1383,10 +1462,13 @@ export default function VoicePage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      const activeLang = selectedLanguageRef.current;
       recognition.lang =
-        typeof navigator !== "undefined" && navigator.language
-          ? navigator.language
-          : "en-US";
+        activeLang === "hi"
+          ? "hi-IN"
+          : activeLang === "en"
+          ? "en-IN"
+          : (typeof navigator !== "undefined" && navigator.language?.startsWith("hi") ? "hi-IN" : "en-IN");
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
@@ -1427,18 +1509,15 @@ export default function VoicePage() {
             silenceTimeoutRef.current = null;
           }
 
-          // Smart VAD Turn-Taking Tuning:
-          // 1. If sentence ends with terminal punctuation (. ? !) or isFinal is true: user finished thought -> 650ms
-          // 2. If mid-clause pause: allow user time to think without cutting them off -> 1100ms
+          // Smart Turn-Taking Tuning:
+          // 1. If sentence ends with terminal punctuation (. ? !) or isFinal is true: user finished thought -> 700ms
+          // 2. If mid-clause pause: allow user time to think without cutting them off -> 1200ms
           const lastResult = event.results[event.results.length - 1];
           const isTerminal = /[.?!]$/.test(combinedText) || (lastResult && lastResult.isFinal);
-          const dynamicSilenceMs = isTerminal ? 650 : 1100;
+          const dynamicSilenceMs = isTerminal ? 700 : 1200;
 
           silenceTimeoutRef.current = setTimeout(() => {
-            // Verify energy VAD is not currently detecting active vocalization before finalizing
-            if (!isVocalizingRef.current) {
-              finalizeAndSendSpeech();
-            }
+            finalizeAndSendSpeech();
           }, dynamicSilenceMs);
         }
       };
@@ -1460,16 +1539,18 @@ export default function VoicePage() {
             setListening(false);
             listeningRef.current = false;
             break;
+          case "network":
+            console.warn("Speech recognition network notice; server STT fallback will handle audio.");
+            break;
           default:
-            setListening(false);
-            listeningRef.current = false;
+            console.warn("Speech recognition notice:", event.error);
             break;
         }
       };
 
       recognition.onend = () => {
-        // If silence timer was pending and text was collected, trigger finalization now
-        if (silenceTimeoutRef.current && currentQueryRef.current.trim()) {
+        // If text was collected, trigger finalization now
+        if (currentQueryRef.current.trim()) {
           finalizeAndSendSpeech();
           return;
         }
@@ -1653,10 +1734,6 @@ export default function VoicePage() {
   );
 
   const startListening = useCallback(() => {
-    if (!isSupported) {
-      setError("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
-      return;
-    }
     stopAiSpeaking();
 
     if (silenceTimeoutRef.current) {
@@ -1674,22 +1751,39 @@ export default function VoicePage() {
     }
 
     try {
+      // 1. Always start MediaRecorder audio stream (for server-side Groq Whisper fallback)
+      startMediaRecording();
+
+      // 2. Start browser SpeechRecognition if supported
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
         } catch (_) {}
       }
       const rec = createRecognition();
-      if (!rec) return;
-
-      recognitionRef.current = rec;
-      manuallyStoppedRef.current = false;
-      hadErrorRef.current = false;
-      rec.start();
+      if (rec) {
+        recognitionRef.current = rec;
+        manuallyStoppedRef.current = false;
+        hadErrorRef.current = false;
+        try {
+          rec.start();
+        } catch (recStartErr) {
+          console.warn("SpeechRecognition start notice; server STT active:", recStartErr);
+          setListening(true);
+          listeningRef.current = true;
+        }
+      } else {
+        // Universal fallback for browsers without Web Speech API (Firefox, Brave default)
+        setListening(true);
+        listeningRef.current = true;
+        setError(null);
+      }
     } catch (err: any) {
       console.error("Error starting recognition:", err);
+      setListening(true);
+      listeningRef.current = true;
     }
-  }, [isSupported, stopAiSpeaking, createRecognition]);
+  }, [stopAiSpeaking, createRecognition, startMediaRecording]);
 
   useEffect(() => {
     stopListeningRef.current = stopListening;

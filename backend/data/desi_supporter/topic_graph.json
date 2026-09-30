@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Rahul Gandhi": {
+      "cluster": "Opposition Leadership",
+      "associated_memes": ["Pappu"],
+      "core_narratives": ["Dynastic politics vs meritocracy", "Lack of grassroots administrative experience", "Frequent political reinventions"],
+      "counter_narratives": ["Bharat Jodo Yatra mobilization", "Consistent criticism of crony capitalism"],
+      "pivot_targets": ["Jawaharlal Nehru", "Indira Gandhi", "Dynasty"]
+    },
+    "Jawaharlal Nehru": {
+      "cluster": "Historical Foundations",
+      "associated_memes": [],
+      "core_narratives": ["1962 Sino-Indian War defense unpreparedness", "Fabian socialism vs economic deregulation", "Article 370 special status origin"],
+      "counter_narratives": ["Institution building (IITs, IIMs, ISRO origins)", "Democratic consolidation in diverse post-colonial nation"],
+      "pivot_targets": ["Sardar Vallabhbhai Patel", "B.R. Ambedkar", "1962 War"]
+    },
+    "Narendra Modi": {
+      "cluster": "National Governance & Leadership",
+      "associated_memes": ["56-inch chest", "Double Engine"],
+      "core_narratives": ["Decisive political will", "Zero personal corruption / 24x7 work ethic", "Direct benefit transfer & infrastructure scale"],
+      "counter_narratives": ["Economic inequality & job informalization", "Democratic institution pressures"],
+      "pivot_targets": ["UPI & Digital India", "National Highways", "Article 370", "Foreign Policy"]
+    },
+    "Ram Mandir": {
+      "cluster": "Civilizational Heritage",
+      "associated_memes": [],
+      "core_narratives": ["500-year civilizational justice", "Unanimous Supreme Court verdict", "Voluntary funding without taxpayer money", "Spiritual tourism economy"],
+      "counter_narratives": ["Secular state priorities vs religious monument expenditure"],
+      "pivot_targets": ["Kashi Vishwanath", "Ayodhya Economy", "Supreme Court Verdict"]
+    },
+    "Unemployment & Economy": {
+      "cluster": "Economic Governance",
+      "associated_memes": ["Pakoda employment (opposition slur rebuttal)"],
+      "core_narratives": ["Formalization of economy via GST & EPFO", "Mudra loan self-employment", "Capital expenditure on manufacturing and electronics"],
+      "counter_narratives": ["High youth graduate unemployment in CMIE data", "Exam paper leaks"],
+      "pivot_targets": ["UPI", "Manufacturing & PLI", "Mudra Loans"]
+    }
+  }
+}

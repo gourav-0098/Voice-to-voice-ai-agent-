@@ -1,0 +1,159 @@
+{
+  "audit_summary": {
+    "sample_size": 500,
+    "direct_source_text": 0,
+    "source_derived_summary": 0,
+    "ai_paraphrase": 0,
+    "synthetic_record": 500,
+    "invalid_provenance": 500,
+    "semantic_duplicates": 412,
+    "category_errors": 7,
+    "stance_errors": 0
+  },
+  "percentages": {
+    "sample_size": 500,
+    "direct_source_text": "0.0%",
+    "source_derived_summary": "0.0%",
+    "ai_paraphrase": "0.0%",
+    "synthetic_record": "100.0%",
+    "invalid_provenance": "100.0%",
+    "semantic_duplicates": "82.4%",
+    "category_errors": "1.4%",
+    "stance_errors": "0.0%"
+  },
+  "category_breakdown": {
+    "MEME_LEXICON": {
+      "count": 78,
+      "synthetic_record": 78,
+      "invalid_urls": 78,
+      "invalid_provenance": 78,
+      "distinct_roots": 38,
+      "template_duplication_rate_pct": 51.3,
+      "sample_roots": [
+        "Double engine ka benefit yeh hai ki highway, metro aur defence corridors ke central funds state bureaucratic hurdles me nahi phanste.",
+        "Bulldozer model criminal syndicates aur illegal encroachment empires ke khilaf strict state deterrence ka practical symbol ban chuka hai.",
+        "Vikas aur delivery ko appreciate karna aam nagrik ka adhikar hai; isse blind bhakti keh kar dismiss karna elite frustration hai."
+      ]
+    },
+    "RHETORICAL_PATTERN": {
+      "count": 50,
+      "synthetic_record": 50,
+      "invalid_urls": 50,
+      "invalid_provenance": 50,
+      "distinct_roots": 10,
+      "template_duplication_rate_pct": 80.0,
+      "sample_roots": [
+        "2014 se pehle daily newspaper me naya scam hota tha — 2G, Coalgate, Commonwealth Games. Aaj 10 saal me ek bhi Cabinet level corruption charge nahi laga.",
+        "500 saal ke continuous legal aur peaceful struggle ke baad Ram Mandir bana hai; apni heritage par garv karna kisi doosre community ke rights infringe nahi karta.",
+        "Pehle cross-border terror attack ke baad dossier bheje jate the; Balakot ke baad surgical strike aur aerial precision deterrence new normal hai."
+      ]
+    },
+    "SUPPORTER_NARRATIVE": {
+      "count": 114,
+      "synthetic_record": 114,
+      "invalid_urls": 114,
+      "invalid_provenance": 114,
+      "distinct_roots": 10,
+      "template_duplication_rate_pct": 91.2,
+      "sample_roots": [
+        "Capital expenditure ko 11.11 lakh crore tak badhane se highway, railway, aur freight corridors bane hain jo permanent national productivity ko multiply kar rahe hain.",
+        "UPI aur DBT ne middleman raj ko khatam kiya. 34 lakh crore se zyada direct bank accounts me credit hua jisse 2.7 lakh crore ki leakage ruki jo pehle middlemen ki pocket me jati thi.",
+        "Mobile manufacturing me hum 2014 me 2 factories se aaj 200+ factories par pahunch gaye hain. Apple iPhone ab Bharat me ban kar global market me export ho raha hai."
+      ]
+    },
+    "COUNTER_NARRATIVE": {
+      "count": 73,
+      "synthetic_record": 73,
+      "invalid_urls": 73,
+      "invalid_provenance": 73,
+      "distinct_roots": 8,
+      "template_duplication_rate_pct": 89.0,
+      "sample_roots": [
+        "Southern states argue that despite contributing higher per-capita central tax revenues, their devolution share from the Finance Commission has reduced relative to northern states.",
+        "Opposition leaders cite high graduate unemployment, recruitment exam paper leaks across states, and reliance on gig work as proof of jobless economic growth.",
+        "Rural economists highlight that high food inflation in vegetables, pulses, and cooking gas erodes real disposable income for unorganized daily-wage workers."
+      ]
+    },
+    "HISTORICAL_RECORD": {
+      "count": 68,
+      "synthetic_record": 68,
+      "invalid_urls": 68,
+      "invalid_provenance": 68,
+      "distinct_roots": 7,
+      "template_duplication_rate_pct": 89.7,
+      "sample_roots": [
+        "The 1962 Henderson Brooks-Bhagat report and Sardar Patel's November 1950 letter documented severe logistic unpreparedness and unheeded warnings regarding China's Himalayan ambitions.",
+        "The Bofors kickback scandal paralyzed Indian artillery procurement for 30 years, preventing the Indian Army from acquiring modern howitzers until K9 Vajra and M777 in 2018.",
+        "The 2G spectrum scam involved first-come-first-served spectrum allocation at outdated 2001 prices, resulting in Supreme Court cancelling 122 telecom licenses in 2012 due to arbitrary favoritism."
+      ]
+    },
+    "SOCIAL_CLAIM": {
+      "count": 40,
+      "synthetic_record": 40,
+      "invalid_urls": 40,
+      "invalid_provenance": 40,
+      "distinct_roots": 5,
+      "template_duplication_rate_pct": 87.5,
+      "sample_roots": [
+        "Viral WhatsApp claim asserting ancient temple pillars contain radio-active nuclear energy shielding.",
+        "Unverified social post claiming that national gold reserves were secretly pledged to international banks.",
+        "Social media claim alleging that monthly cash transfers of ₹8,500 will start immediately without budgetary clearance."
+      ]
+    },
+    "VERIFIED_FACT": {
+      "count": 77,
+      "synthetic_record": 77,
+      "invalid_urls": 77,
+      "invalid_provenance": 77,
+      "distinct_roots": 10,
+      "template_duplication_rate_pct": 87.0,
+      "sample_roots": [
+        "Ministry of Road Transport: National highway construction pace averaged 34 km per day in FY 2023-24 under Bharatmala Pariyojana.",
+        "Department of Drinking Water: Jal Jeevan Mission achieved 78.4% coverage providing over 15.1 crore tap water connections.",
+        "National Health Authority: Ayushman Bharat PM-JAY has authorized 6.8 crore hospital admissions with claims exceeding ₹86,000 crore."
+      ]
+    }
+  },
+  "most_repeated_roots": [
+    {
+      "root": "UPI aur DBT ne middleman raj ko khatam kiya. 34 lakh crore se zyada direct bank accounts me credit hua jisse 2.7 lakh crore ki leakage ruki jo pehle middlemen ki pocket me jati thi.",
+      "occurrences_in_500_sample": 17
+    },
+    {
+      "root": "Ram Mandir 500 saal ke civilizational struggle aur Supreme Court ke unanimous constitutional verdict se bana hai. Poora mandir jan-chande se bana hai bina state treasury ke paison ke.",
+      "occurrences_in_500_sample": 15
+    },
+    {
+      "root": "In 1991, India's foreign exchange reserves plummeted to under $1.2 billion, forcing the RBI to airlift 47 tonnes of gold to London to secure emergency credit and avoid sovereign default.",
+      "occurrences_in_500_sample": 14
+    },
+    {
+      "root": "The 1962 Henderson Brooks-Bhagat report and Sardar Patel's November 1950 letter documented severe logistic unpreparedness and unheeded warnings regarding China's Himalayan ambitions.",
+      "occurrences_in_500_sample": 13
+    },
+    {
+      "root": "Capital expenditure ko 11.11 lakh crore tak badhane se highway, railway, aur freight corridors bane hain jo permanent national productivity ko multiply kar rahe hain.",
+      "occurrences_in_500_sample": 12
+    },
+    {
+      "root": "Article 370 hatne ke baad Kashmir me patharbaaji zero ho gayi, 2 crore tourists aaye, aur pehli baar Valmiki aur SC/ST communities ko constitutional reservation aur voting rights mile.",
+      "occurrences_in_500_sample": 12
+    },
+    {
+      "root": "EAM Jaishankar ne west ke double standards ko expose kiya: 'Europe's problems are not world's problems'. Bharat ne discounted Russian crude lekar aam nagrik ko global oil price shock se bachaya.",
+      "occurrences_in_500_sample": 12
+    },
+    {
+      "root": "Southern states argue that despite contributing higher per-capita central tax revenues, their devolution share from the Finance Commission has reduced relative to northern states.",
+      "occurrences_in_500_sample": 12
+    },
+    {
+      "root": "International civil liberties bodies cite government pressure on independent media houses, defamation cases against journalists, and misuse of ED/CBI probes against opposition politicians.",
+      "occurrences_in_500_sample": 12
+    },
+    {
+      "root": "The Bofors kickback scandal paralyzed Indian artillery procurement for 30 years, preventing the Indian Army from acquiring modern howitzers until K9 Vajra and M777 in 2018.",
+      "occurrences_in_500_sample": 12
+    }
+  ]
+}

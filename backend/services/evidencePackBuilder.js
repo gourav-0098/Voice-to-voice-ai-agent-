@@ -50,16 +50,38 @@ export function buildEvidencePack({
   topic = "general",
   qdrantResults = [],
   webResults = [],
+  discourseResults = [],
   intent = "GENERAL_KNOWLEDGE",
 } = {}) {
   const tStart = performance.now();
-  const rawItems = [];
+  const rawEvidence = [];
+  const rawDiscourse = [];
   const uiCitations = [];
 
-  // 1. Process Qdrant items
+  // 1. Process Qdrant items (categorize into Evidence vs Discourse)
   if (Array.isArray(qdrantResults)) {
     qdrantResults.forEach((qItem) => {
-      const text = qItem.text || qItem.factCheckSummary || qItem.counterArgument || qItem.context || "";
+      // If item is explicit discourse or has debate arguments
+      if (qItem.category === "discourse" || (qItem.counterArgument && !qItem.text && !qItem.factCheckSummary)) {
+        const cleanArg = cleanForSpokenContext(qItem.counterArgument || qItem.argument || "");
+        const cleanClaim = cleanForSpokenContext(qItem.criticism || qItem.claim || "");
+        if (cleanArg.length > 15 || cleanClaim.length > 15) {
+          rawDiscourse.push({
+            topic: qItem.topic || topic,
+            perspective: qItem.perspective || (cleanArg ? "Supporter / Rebuttal" : "Opposition Claim"),
+            claim: cleanClaim,
+            argument: cleanArg,
+            whataboutism: cleanForSpokenContext(qItem.whataboutism || ""),
+            speaker: qItem.speaker || qItem.leader || null,
+            sourceName: qItem.sourceName || "Public Debate & Discourse",
+            category: "discourse",
+          });
+        }
+        return;
+      }
+
+      // Factual / Primary / Reported material
+      const text = qItem.text || qItem.statsAndFacts || qItem.factCheckSummary || qItem.counterArgument || qItem.context || "";
       const sourceUrl = qItem.sourceUrl || qItem.url || "";
       const publisher = qItem.sourceType || qItem.source || qItem.title || "Knowledge Base";
 
@@ -71,13 +93,16 @@ export function buildEvidencePack({
 
       const cleanText = cleanForSpokenContext(text);
       if (cleanText.length > 20) {
-        rawItems.push({
+        rawEvidence.push({
           sourceName: auth.sourceName,
+          sourceType: qItem.sourceType || "Retrieved Record",
           authorityScore: auth.authorityScore,
           tier: auth.tier,
+          date: qItem.date || null,
           text: cleanText,
           claim: qItem.claim || null,
           isPrimary: auth.isPrimary,
+          category: "evidence",
           origin: "qdrant_rag",
         });
 
@@ -90,10 +115,47 @@ export function buildEvidencePack({
           snippet: cleanText.substring(0, 140) + "...",
         });
       }
+
+      // If debate item also contained criticism or counterArgument alongside stats, capture the discourse facet
+      if (qItem.counterArgument && qItem.statsAndFacts) {
+        const cleanArg = cleanForSpokenContext(qItem.counterArgument);
+        const cleanClaim = cleanForSpokenContext(qItem.criticism || "");
+        if (cleanArg.length > 15) {
+          rawDiscourse.push({
+            topic: qItem.topic || topic,
+            perspective: "Supporter / Rebuttal",
+            claim: cleanClaim,
+            argument: cleanArg,
+            whataboutism: cleanForSpokenContext(qItem.whataboutism || ""),
+            sourceName: "Public Debate & Discourse",
+            category: "discourse",
+          });
+        }
+      }
     });
   }
 
-  // 2. Process Web Search items
+  // 2. Process Discourse items passed directly
+  if (Array.isArray(discourseResults)) {
+    discourseResults.forEach((dItem) => {
+      const cleanArg = cleanForSpokenContext(dItem.counterArgument || dItem.argument || "");
+      const cleanClaim = cleanForSpokenContext(dItem.criticism || dItem.claim || "");
+      if (cleanArg.length > 15 || cleanClaim.length > 15) {
+        rawDiscourse.push({
+          topic: dItem.topic || topic,
+          perspective: dItem.perspective || (cleanArg ? "Supporter / Rebuttal" : "Critical Viewpoint"),
+          claim: cleanClaim,
+          argument: cleanArg,
+          whataboutism: cleanForSpokenContext(dItem.whataboutism || ""),
+          speaker: dItem.speaker || dItem.leader || null,
+          sourceName: dItem.sourceName || "Public Debate & Discourse",
+          category: "discourse",
+        });
+      }
+    });
+  }
+
+  // 3. Process Web Search items (Categorized as Evidence)
   if (Array.isArray(webResults)) {
     webResults.forEach((wItem) => {
       const text = wItem.content || wItem.snippet || wItem.text || "";
@@ -108,13 +170,16 @@ export function buildEvidencePack({
 
       const cleanText = cleanForSpokenContext(text);
       if (cleanText.length > 20) {
-        rawItems.push({
+        rawEvidence.push({
           sourceName: auth.sourceName,
+          sourceType: "Live Web Report",
           authorityScore: auth.authorityScore,
           tier: auth.tier,
+          date: wItem.date || null,
           text: cleanText,
           claim: null,
           isPrimary: auth.isPrimary,
+          category: "evidence",
           origin: "web_search",
         });
 
@@ -139,13 +204,14 @@ export function buildEvidencePack({
     return true;
   });
 
-  // 3. Sort raw items by Authority Score (primary government/stat bodies first)
-  rawItems.sort((a, b) => b.authorityScore - a.authorityScore);
+  // 4. Sort Evidence items by Authority Score (primary government/stat bodies first)
+  rawEvidence.sort((a, b) => b.authorityScore - a.authorityScore);
+  const topEvidence = rawEvidence.slice(0, 4);
 
-  // Take top-4 most authoritative evidence points
-  const topEvidence = rawItems.slice(0, 4);
+  // Take top 3 discourse items
+  const topDiscourse = rawDiscourse.slice(0, 3);
 
-  // 4. Calculate Aggregate Confidence
+  // 5. Calculate Aggregate Confidence
   let confidenceLevel = "LOW";
   if (topEvidence.length > 0) {
     const highestAuth = topEvidence[0].authorityScore;
@@ -158,10 +224,11 @@ export function buildEvidencePack({
     } else {
       confidenceLevel = "LOW";
     }
+  } else if (topDiscourse.length > 0) {
+    confidenceLevel = "MEDIUM";
   }
 
-  // 5. Detect Potential Numerical or Definition Discrepancies
-  // If multiple items cite different numbers/metrics, flag for Gemini single-pass nuance
+  // 6. Detect Potential Numerical or Definition Discrepancies
   let conflictFlag = null;
   if (topEvidence.length >= 2) {
     const numbersFound = topEvidence.map((e) => {
@@ -174,21 +241,38 @@ export function buildEvidencePack({
     }
   }
 
-  // 6. Build Compact Spoken Evidence Context for LLM
+  // 7. Build Speech-Safe Spoken Context for LLM (Strict Separation: Evidence vs Discourse)
   let spokenEvidenceContext = "";
-  if (topEvidence.length > 0) {
-    spokenEvidenceContext += `[STRUCTURED EVIDENCE PACK (CONFIDENCE: ${confidenceLevel})]:\n`;
-    topEvidence.forEach((item, idx) => {
-      const tag = item.isPrimary ? "[PRIMARY SOURCE]" : "[REPORTED]";
-      spokenEvidenceContext += `${idx + 1}. ${tag} ${item.sourceName} (Authority: ${item.authorityScore}): "${item.text}"\n`;
-    });
+  if (topEvidence.length > 0 || topDiscourse.length > 0) {
+    spokenEvidenceContext += `[SHARED EVIDENCE PACK (CONFIDENCE: ${confidenceLevel})]:\n`;
 
-    if (conflictFlag) {
-      spokenEvidenceContext += `[NUANCE GUIDANCE]: ${conflictFlag}\n`;
+    if (topEvidence.length > 0) {
+      spokenEvidenceContext += `-- RETRIEVED FACTUAL & PRIMARY-SOURCE MATERIAL --\n`;
+      spokenEvidenceContext += `(Official metrics and reported data from retrieved sources; not infallible truth)\n`;
+      topEvidence.forEach((item, idx) => {
+        const tag = item.isPrimary ? "[PRIMARY SOURCE]" : "[REPORTED]";
+        spokenEvidenceContext += `${idx + 1}. ${tag} ${item.sourceName} (Authority: ${item.authorityScore}): "${item.text}"\n`;
+      });
     }
 
-    spokenEvidenceContext += `[SPOKEN CONTEXT RULES]:\n`;
-    spokenEvidenceContext += `- Cite sources naturally by name (e.g., 'MoSPI ke data ke mutabiq' or 'official reports ke mutabiq').\n`;
+    if (topDiscourse.length > 0) {
+      spokenEvidenceContext += `\n-- RETRIEVED PUBLIC DISCOURSE & PERSPECTIVES --\n`;
+      topDiscourse.forEach((dItem, idx) => {
+        spokenEvidenceContext += `${idx + 1}. [Perspective: ${dItem.perspective}]`;
+        if (dItem.claim) spokenEvidenceContext += ` Claim/Topic: "${dItem.claim}".`;
+        if (dItem.argument) spokenEvidenceContext += ` Argument: "${dItem.argument}".`;
+        if (dItem.whataboutism) spokenEvidenceContext += ` Historical Contrast: "${dItem.whataboutism}".`;
+        spokenEvidenceContext += `\n`;
+      });
+    }
+
+    if (conflictFlag) {
+      spokenEvidenceContext += `\n[NUANCE GUIDANCE]: ${conflictFlag}\n`;
+    }
+
+    spokenEvidenceContext += `\n[SPOKEN CONTEXT RULES]:\n`;
+    spokenEvidenceContext += `- Maintain strict distinction: Evidence = data/statistics; Discourse = public political arguments & claims.\n`;
+    spokenEvidenceContext += `- Cite sources naturally by name (e.g., 'MoSPI ke data ke mutabiq' or 'reports ke mutabiq').\n`;
     spokenEvidenceContext += `- NEVER speak raw URLs or web domains.\n`;
     spokenEvidenceContext += `- Follow the confidence level: ${confidenceLevel === "HIGH" ? "Speak with factual certainty." : confidenceLevel === "MEDIUM" ? "Use measured phrasing ('reports indicate')." : "State that direct verification is inconclusive."}\n`;
   }
@@ -198,7 +282,10 @@ export function buildEvidencePack({
   return {
     query,
     intent,
+    evidence: topEvidence,
+    discourse: topDiscourse,
     evidenceCount: topEvidence.length,
+    discourseCount: topDiscourse.length,
     confidenceLevel,
     spokenEvidenceContext,
     uiCitations: filteredUiCitations,

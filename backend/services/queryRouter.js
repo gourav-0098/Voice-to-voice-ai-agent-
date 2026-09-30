@@ -32,7 +32,8 @@ const POLITICAL_KEYWORDS = [
   "\\bnrc\\b", "\\bplfs\\b", "\\bunemployment\\b", "\\bberojgari\\b", "\\bnaukri\\b", "\\bscam\\b", "\\bcorruption\\b",
   "\\bghotala\\b", "\\binflation\\b", "\\bmehangai\\b", "\\bpetrol\\b", "\\bdiesel\\b", "\\bgdp\\b", "\\beconomy\\b",
   "\\bchina border\\b", "\\blac\\b", "\\bpakistan\\b", "\\bsurgical strike\\b", "\\bkisan\\b", "\\bfarmer\\b",
-  "\\bmsp\\b", "\\bprotest\\b", "\\bschemes\\b", "\\byojana\\b", "\\bmudra\\b", "\\bpm awas\\b", "\\bration\\b"
+  "\\bmsp\\b", "\\bprotest\\b", "\\bschemes\\b", "\\byojana\\b", "\\bmudra\\b", "\\bpm awas\\b", "\\bration\\b",
+  "\\bupi\\b", "\\bdigital payment\\b", "\\binfrastructure\\b", "\\bvande bharat\\b", "\\bvikas\\b"
 ];
 
 const STATIC_POLITICAL_INDICATORS = [
@@ -129,12 +130,50 @@ export function routeQuery(queryText, { persona = "default", historyLength = 0 }
     }
   }
 
+  // Rhetorical Intensity Inference (Levels 0 to 4, < 0.1ms deterministic)
+  let intensityLevel = 0;
+  let intensityLabel = "CASUAL_FRIEND";
+
+  const INQUIRY_EXPLANATION_PATTERN = /\b(why do (critics|people|they|opponents)|kyun bolte|kyun kehte|kya reason hai|aisa kyun|matlab kya hai|origin kya hai|samjhao|explain)\b/i;
+  const DEBATE_MODE_PATTERN = /\b(let's debate|debate me|prove me wrong|defend this|challenge you|aao debate karein|muqabla|shastraarth)\b/i;
+  const ABUSE_PATTERN = /\b(chutiya|gandu|bhenchod|madarchod|harami|kutta|kamina|saale|idiot|stupid|moron|loser|tatti|aukat|bhikhari|bastard|asshole|behenchod|mc|bc|gaali|gali)\b/i;
+  const HEATED_CHALLENGE_PATTERN = /\b(dictator|tanashah|godi media|jumla|scam|ghotala|chor|fake news|fooling|loot liya|propaganda|andhbhakt|bhakt ho kya|bakwas|nonsense|rubbish|bullshit|phenku|pagal|dimag kharab|chup kar|gundaraj|mafiaraj|modi.*(chor|kharab|fail|fraud|dictator|loot|hate|panauti)|yogi.*(gunda|mafia|dictator|kharab|corrupt|hate)|bjp.*(chor|corrupt|fail|hate|loot|gunda))\b/i;
+  const DISAGREEMENT_PATTERN = /\b(par|lekin|but|however|kyun nahi|kahan hua|unemployment|berojgari|mehangai|inflation|adani|scam|contested|disagree|opposition says|actual|paper leak|hoti hai kya)\b/i;
+
+  if (DEBATE_MODE_PATTERN.test(lowerQ)) {
+    intensityLevel = 4;
+    intensityLabel = "EXPLICIT_DEBATE";
+  } else if (ABUSE_PATTERN.test(lowerQ) || HEATED_CHALLENGE_PATTERN.test(lowerQ)) {
+    intensityLevel = 3;
+    intensityLabel = "HEATED_CHALLENGE";
+  } else if (INQUIRY_EXPLANATION_PATTERN.test(lowerQ)) {
+    // Explanatory inquiry (e.g. "Why do critics call Modi a dictator?") -> Level 1 informational
+    intensityLevel = 1;
+    intensityLabel = "POLITICAL_DISCUSSION";
+  } else if (HEATED_CHALLENGE_PATTERN.test(lowerQ)) {
+    intensityLevel = 3;
+    intensityLabel = "HEATED_CHALLENGE";
+  } else if (intent.startsWith("POLITICAL_") || intent === "FACT_CHECK") {
+    if (DISAGREEMENT_PATTERN.test(lowerQ)) {
+      intensityLevel = 2;
+      intensityLabel = "POLITICAL_DISAGREEMENT";
+    } else {
+      intensityLevel = 1;
+      intensityLabel = "POLITICAL_DISCUSSION";
+    }
+  } else {
+    intensityLevel = 0;
+    intensityLabel = "CASUAL_FRIEND";
+  }
+
   const routerLatencyMs = Math.round((performance.now() - tStart) * 100) / 100;
 
   return {
     query: q,
     intent,
     mode,
+    intensityLevel,
+    intensityLabel,
     needsRag,
     needsLiveSearch,
     detectedTopic,

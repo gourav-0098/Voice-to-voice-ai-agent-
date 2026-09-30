@@ -1,0 +1,27 @@
+{
+  "casual_starters": [
+    "Dekho bhai,",
+    "Seedhi si baat hai,",
+    "Sach bolun toh,",
+    "Haan, yeh point samajh aata hai,",
+    "Ek baat batao,"
+  ],
+  "disagreement_starters": [
+    "Nahi bhai, yahan thoda miss kar rahe ho.",
+    "Arre aisa bilkul nahi hai,",
+    "Thoda ground reality check karo,",
+    "Yeh toh media ki headline hai bhai,"
+  ],
+  "follow_up_continuity_markers": [
+    "Wahi toh main pehle bol raha tha,",
+    "Haan, jo tumne pehle poocha tha ussi se related hai yeh,",
+    "Ussi trade-off pe aate hain abhi,",
+    "Bilkul, pehle wale point ko hi aage badhaun toh"
+  ],
+  "balanced_acknowledgments": [
+    "Yeh baat toh sahi hai,",
+    "Isme koi doubt nahi hai,",
+    "Fair point hai tumhara,",
+    "Main maanta hoon ki challenges hain,"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "pipeline_version": "3.1.0",
+  "execution_timestamp": "2026-09-28T23:31:42Z",
+  "source_file": "records_10000.jsonl",
+  "raw_records_discovered": 10000,
+  "records_successfully_normalized": 10000,
+  "duplicates_removed": 0,
+  "category_distribution": {
+    "VERIFIED_FACT": 1500,
+    "HISTORICAL_RECORD": 1500,
+    "SUPPORTER_NARRATIVE": 2000,
+    "COUNTER_NARRATIVE": 1500,
+    "SOCIAL_CLAIM": 1000,
+    "MEME_LEXICON": 1500,
+    "RHETORICAL_PATTERN": 1000,
+    "OPINION": 0
+  },
+  "content_type_distribution": {
+    "constitutional": 700,
+    "economic": 1999,
+    "historical": 1500,
+    "foreign_policy": 550,
+    "infrastructure": 500,
+    "culture": 1900,
+    "elections": 776,
+    "social": 2075
+  },
+  "avg_authority_score": 0.7,
+  "provenance_coverage_pct": 100.0
+}

@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 import { verifyToken, optionalVerifyToken } from "../middleware/auth.js";
 import { voiceLimiter } from "../middleware/security.js";
 import Conversation from "../models/Conversation.js";
@@ -11,8 +12,52 @@ import { routeQuery } from "../services/queryRouter.js";
 import { buildEvidencePack } from "../services/evidencePackBuilder.js";
 import toolService from "../services/toolService.js";
 import groqMemoryWorker from "../services/groqMemoryWorker.js";
+import { transcribeAudio } from "../services/sttService.js";
 
 const router = express.Router();
+
+const upload = multer({
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB max
+  storage: multer.memoryStorage(),
+});
+
+// =========================================================
+// POST /api/voice/transcribe - Server-Side Ultra-Fast STT (Groq / Deepgram)
+// =========================================================
+router.post("/transcribe", upload.single("audio"), async (req, res) => {
+  try {
+    let audioBuffer = null;
+    let mimeType = "audio/webm";
+
+    if (req.file && req.file.buffer) {
+      audioBuffer = req.file.buffer;
+      mimeType = req.file.mimetype || "audio/webm";
+    } else if (req.body?.audioBase64) {
+      audioBuffer = Buffer.from(req.body.audioBase64, "base64");
+      mimeType = req.body.mimeType || "audio/webm";
+    }
+
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return res.status(400).json({ error: "No audio data provided." });
+    }
+
+    const language = req.body?.language || "hi";
+    const result = await transcribeAudio(audioBuffer, mimeType, language);
+
+    return res.json({
+      status: "success",
+      text: result.text,
+      provider: result.provider,
+      latencyMs: result.latencyMs,
+    });
+  } catch (err) {
+    console.error("❌ [STT TRANSCRIBE ERROR]:", err.message || err);
+    return res.status(500).json({
+      error: "Transcription failed.",
+      details: err.message,
+    });
+  }
+});
 
 // =========================================================
 // GET /api/voice/cache/stats - Semantic Cache Telemetry
@@ -166,16 +211,26 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
     adaptiveRag = fetchedRag || adaptiveRag;
     liveWebResult = fetchedWeb || null;
 
-    // Build structured Evidence Pack
-    const qdrantChunks = adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : [];
-    const webChunks = liveWebResult ? [liveWebResult] : [];
-
-    if (qdrantChunks.length > 0 || webChunks.length > 0) {
+    // Build structured Shared Evidence Pack
+    if (adaptiveRag && adaptiveRag.spokenContext) {
+      if (liveWebResult) {
+        evidencePack = buildEvidencePack({
+          query: userText,
+          topic: route.detectedTopic,
+          qdrantResults: adaptiveRag.evidence || (adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : []),
+          discourseResults: adaptiveRag.discourse || [],
+          webResults: [liveWebResult],
+          intent: route.intent,
+        });
+      } else {
+        evidencePack = adaptiveRag;
+      }
+    } else if (liveWebResult) {
       evidencePack = buildEvidencePack({
         query: userText,
         topic: route.detectedTopic,
-        qdrantResults: qdrantChunks,
-        webResults: webChunks,
+        qdrantResults: [],
+        webResults: [liveWebResult],
         intent: route.intent,
       });
     }
@@ -186,12 +241,19 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
       latencyMs: adaptiveRag.latencyMs || route.routerLatencyMs,
+      latencyBreakdown: adaptiveRag.latencyBreakdown || null,
+      intensityLevel: route.intensityLevel || 0,
+      intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
       citations: evidencePack?.uiCitations || [],
       confidence: evidencePack?.confidenceLevel || "HIGH",
     });
 
     let dynamicInstruction = typeof aiService.getSystemInstruction === "function"
-      ? aiService.getSystemInstruction(selectedPersona, selectedVoiceModel)
+      ? aiService.getSystemInstruction(selectedPersona, selectedVoiceModel, {
+          intensityLevel: route.intensityLevel || 0,
+          intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
+          recentHistory,
+        })
       : DEFAULT_SYSTEM_INSTRUCTION;
 
     if (evidencePack && evidencePack.spokenEvidenceContext) {
@@ -511,7 +573,7 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
     const adaptiveRag = await adaptiveRagService.getPersonaGrounding(`${topic} ${lastTurn?.text || ""}`, speaker);
 
     let systemInstruction = speaker === "andhbhakt"
-      ? `You are the firebrand Saffron Debater in a high-stakes TV news debate against a skeptical rationalist. Debate Topic: "${topic}". Defend PM Narendra Modi and India's post-2014 resurgence with intense patriotic conviction, witty counters, and sharp whataboutisms comparing pre-2014 failures. Address your opponent's exact points directly in 2 firecracker, spoken conversational Hinglish sentences in Roman script (e.g. 'Arre bhai, pehle ground reality toh dekh lijiye!'). Never use markdown, bullets, or code.`
+      ? `You are the firebrand Saffron Debater in a high-stakes TV news debate against a skeptical rationalist. Debate Topic: "${topic}". Defend PM Narendra Modi, Yogi Adityanath, and India's post-2014 resurgence with intense patriotic conviction, aggressive witty roasts, and sharp counters against any nonsense. Address your opponent's exact points directly in 2 firecracker, spoken conversational Hinglish sentences in Roman script with punchy roasts (e.g. 'Arre bhai, din me sapne dekhna band karo aur pehle ground reality toh dekh lijiye!'). Never use markdown, bullets, or code.`
       : `You are the Rationalist Analyst in a live verbal debate against a saffron hyper-nationalist. Debate Topic: "${topic}". Dissect claims with calm objectivity, cite empirical statistical facts, highlight trade-offs, and challenge exaggerations in 2 clear spoken conversational sentences. Never use markdown, bullets, or code.`;
 
     if (adaptiveRag.contextPrompt) {
