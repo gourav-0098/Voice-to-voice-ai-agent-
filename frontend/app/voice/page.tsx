@@ -822,6 +822,18 @@ export default function VoicePage() {
           })
           .catch(() => {});
       }
+
+      // Always fetch live quota status (Logged-in or Guest free tier)
+      fetch(`${API_BASE}/api/voice/quota`, {
+        headers: token ? { Authorization: "Bearer " + token } : {},
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.quota) {
+            setQuota(data.quota);
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -1151,10 +1163,11 @@ export default function VoicePage() {
     if (!text || !text.trim()) return;
 
     const token = typeof window !== "undefined" ? localStorage.getItem("chatly_token") : null;
-    if (!token) {
-      setError("Please sign in or create an account to talk with Chatly AI.");
-      setShowLoginModal(true);
-      return;
+    const reqHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      reqHeaders["Authorization"] = `Bearer ${token}`;
     }
 
     // 1. Halt any previous speech & stop listening
@@ -1264,10 +1277,7 @@ export default function VoicePage() {
     try {
       const response = await fetch(`${API_BASE}/api/voice/stream`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: reqHeaders,
         signal: controller.signal,
         body: JSON.stringify({
           text: promptText,
@@ -1282,14 +1292,15 @@ export default function VoicePage() {
       if (response.status === 429) {
         const errData = await response.json().catch(() => ({}));
         const limitMsg = errData.error || "Rate limit reached. Please wait before making more calls.";
+        if (errData?.quota) setQuota(errData.quota);
         setError(limitMsg);
         setAiResponse(limitMsg);
-        speakAiResponse("You have reached your voice call limit. Please check back later.");
+        speakAiResponse(errData?.quota?.isGuest ? "You've reached your free guest limit. Sign up for 30 calls per hour and unlimited daily calls!" : "You have reached your voice call limit.");
         setIsAiLoading(false);
         return;
       }
 
-      if (response.status === 401) {
+      if (response.status === 401 && token) {
         setError("Your session has expired. Please sign in again.");
         setShowLoginModal(true);
         setIsAiLoading(false);
@@ -1341,6 +1352,7 @@ export default function VoicePage() {
               if (data.audio) turnAudioBase64 = data.audio;
               if (data.reply) appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined);
               if (data.firstAudioTimeMs) setLastTtfa(data.firstAudioTimeMs);
+              if (data.quota) setQuota(data.quota);
               setIsAiLoading(false);
             }
           } catch (_) {}
@@ -1358,10 +1370,7 @@ export default function VoicePage() {
       try {
         const legacyRes = await fetch(`${API_BASE}/api/voice`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: reqHeaders,
           body: JSON.stringify({
             text: promptText,
             message: promptText,
@@ -1377,6 +1386,7 @@ export default function VoicePage() {
         const data = await legacyRes.json();
         const reply = data.reply || "I heard you!";
         appendOrUpdateAiMessage(reply, data.ragSource, data.groundingDetails, data.audio);
+        if (data.quota) setQuota(data.quota);
 
         if (data.audio) {
           playDeepgramAudio(data.audio, data.audioFormat || "audio/wav", reply);
@@ -2237,18 +2247,25 @@ export default function VoicePage() {
                 : pipelineState === "transcribing"
                 ? "⚡ Transcribing your voice..."
                 : !currentUser
-                ? "🔒 Sign in to start talking"
-                : "Click the microphone button to talk"}
+                ? "🎙️ Free Guest Mode: Speak freely (10 calls/hr, 50/day) • Powered by Groq"
+                : "Click the microphone button to talk (30 calls/hr, unlimited daily)"}
             </p>
 
-            {/* Real-time Streaming & VAD Telemetry Pill */}
+            {/* Real-time Streaming & Quota Telemetry Pill */}
             <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Sub-300ms Streaming Voice
-              </span>
+              {!currentUser ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Free Quota: {quota?.remainingHourly ?? 10}/10 hr • {quota?.remainingDaily ?? 50}/50 day • Groq API
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Member Quota: {quota?.remainingHourly ?? 30}/30 hr • Unlimited Daily
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                ⚡ Silero VAD Tuned
+                ⚡ Sub-300ms Streaming
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                 🎯 FlashRank Reranker + HyDE
@@ -2323,10 +2340,6 @@ export default function VoicePage() {
                   key={i}
                   type="button"
                   onClick={() => {
-                    if (!currentUser) {
-                      setShowLoginModal(true);
-                      return;
-                    }
                     sendVoiceToBackend(item.prompt);
                   }}
                   className="text-xs px-3 py-1.5 rounded-full border transition-all cursor-pointer font-medium active:scale-95 shadow-xs border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white dark:hover:border-white/20"
@@ -2342,10 +2355,6 @@ export default function VoicePage() {
                 type="button"
                 disabled={!isStarted}
                 onClick={() => {
-                  if (!currentUser) {
-                    setShowLoginModal(true);
-                    return;
-                  }
                   toggleListening();
                 }}
                 className={`w-full sm:w-auto touch-manipulation select-none rounded-2xl sm:rounded-full px-8 py-3.5 font-semibold text-sm sm:text-base transition-all duration-150 cursor-pointer active:scale-95 text-center ${
@@ -2353,8 +2362,6 @@ export default function VoicePage() {
                     ? "cursor-not-allowed opacity-50 border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-zinc-600"
                     : listening
                     ? "border border-red-500 bg-red-600 text-white shadow-[0_0_30px_rgba(239,68,68,0.45)] hover:bg-red-700"
-                    : !currentUser
-                    ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30"
                     : isDark
                     ? "border border-white/20 bg-white text-black hover:bg-zinc-200 shadow-md"
                     : "border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
@@ -2362,13 +2369,11 @@ export default function VoicePage() {
               >
                 <span className="flex items-center justify-center gap-2.5">
                   <span className="text-base sm:text-lg">
-                    {listening ? "⏹️" : !currentUser ? "🔒" : "🎙️"}
+                    {listening ? "⏹️" : "🎙️"}
                   </span>
                   <span>
                     {listening
                       ? "Click to Stop Talking"
-                      : !currentUser
-                      ? "Sign In to Talk"
                       : "Click to Speak"}
                   </span>
                 </span>
@@ -2679,10 +2684,6 @@ export default function VoicePage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!currentUser) {
-                  setShowLoginModal(true);
-                  return;
-                }
                 if (!manualInput.trim()) return;
                 const textToSend = manualInput.trim();
                 setManualInput("");
@@ -2696,11 +2697,10 @@ export default function VoicePage() {
                 onChange={(e) => setManualInput(e.target.value)}
                 placeholder={
                   currentUser
-                    ? "Type a message to Chatly..."
-                    : "Please sign in to send messages..."
+                    ? "Type a message to Chatly (30/hr, unlimited daily)..."
+                    : "Type a message (Free guest mode: 10/hr, 50/day)..."
                 }
-                disabled={!currentUser}
-                className="flex-1 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
+                className="flex-1 bg-transparent px-3 py-2 text-sm outline-none text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
               />
               <button
                 type="submit"

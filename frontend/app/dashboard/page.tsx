@@ -261,11 +261,11 @@ export default function UserDashboard() {
     user?.email?.toLowerCase() === "r19216871@gamil.com" ||
     user?.email?.toLowerCase() === "r19216871@gmail.com";
 
-  const remainingHourly = typeof user?.quota?.remainingHourly === "number" ? user.quota.remainingHourly : 5;
-  const remainingDaily = typeof user?.quota?.remainingDaily === "number" ? user.quota.remainingDaily : 10;
+  const remainingHourly = typeof user?.quota?.remainingHourly === "number" ? user.quota.remainingHourly : 30;
+  const remainingDaily = "Unlimited";
 
-  const hourlyPct = Math.min(100, Math.max(0, (remainingHourly / 5) * 100));
-  const dailyPct = Math.min(100, Math.max(0, (remainingDaily / 10) * 100));
+  const hourlyPct = Math.min(100, Math.max(0, ((typeof remainingHourly === "number" ? remainingHourly : 30) / 30) * 100));
+  const dailyPct = 100;
 
   const userAge = calculateAge(formData.dob);
 
@@ -693,7 +693,7 @@ export default function UserDashboard() {
                 {isAdmin ? "∞" : remainingHourly}
               </span>
               <span className="text-sm text-slate-500 dark:text-zinc-500 font-medium">
-                {isAdmin ? "Unlimited" : "/ 5 calls"}
+                {isAdmin ? "Unlimited" : "/ 30 calls"}
               </span>
             </div>
 
@@ -725,38 +725,22 @@ export default function UserDashboard() {
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
                 Daily Limit
               </span>
-              <span className="text-xs text-slate-400 dark:text-zinc-500">24-hour window</span>
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">No Day Limit</span>
             </div>
 
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-slate-900 dark:text-white">
-                {isAdmin ? "∞" : remainingDaily}
+                ∞
               </span>
-              <span className="text-sm text-slate-500 dark:text-zinc-500 font-medium">
-                {isAdmin ? "Unlimited" : "/ 10 calls"}
+              <span className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+                Unlimited Daily
               </span>
             </div>
 
-            {!isAdmin && (
-              <div className="mt-4">
-                <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
-                    style={{ width: `${dailyPct}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-500">
-                  {remainingDaily} call{remainingDaily !== 1 ? "s" : ""} left today
-                </p>
-              </div>
-            )}
-
-            {isAdmin && (
-              <p className="mt-4 text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1.5">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Admin account bypasses daily rate limits
-              </p>
-            )}
+            <p className="mt-4 text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1.5">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Logged-in members have unlimited daily calls with 30 calls/hour.
+            </p>
           </div>
 
           {/* AI MEMORY STATUS */}

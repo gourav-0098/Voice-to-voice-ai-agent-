@@ -13,6 +13,7 @@ import { buildEvidencePack } from "../services/evidencePackBuilder.js";
 import toolService from "../services/toolService.js";
 import groqMemoryWorker from "../services/groqMemoryWorker.js";
 import { transcribeAudio } from "../services/sttService.js";
+import guestQuotaService from "../services/guestQuotaService.js";
 
 const router = express.Router();
 
@@ -41,8 +42,10 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
       return res.status(400).json({ error: "No audio data provided." });
     }
 
+    const authHeader = req.headers["authorization"];
+    const isGuest = !authHeader || !authHeader.startsWith("Bearer ");
     const language = req.body?.language || "hi";
-    const result = await transcribeAudio(audioBuffer, mimeType, language);
+    const result = await transcribeAudio(audioBuffer, mimeType, language, { forceGroq: isGuest });
 
     return res.json({
       status: "success",
@@ -64,6 +67,24 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
 // =========================================================
 router.get("/cache/stats", (req, res) => {
   return res.json({ status: "success", stats: semanticCache.getStats() });
+});
+
+// =========================================================
+// GET /api/voice/quota - Live Quota status for User or Guest
+// =========================================================
+router.get("/quota", optionalVerifyToken, (req, res) => {
+  const user = req.user;
+  if (user) {
+    const summary = typeof user.getQuotaSummary === "function"
+      ? user.getQuotaSummary()
+      : { remainingHourly: 30, remainingDaily: "Unlimited", totalHourly: 30, totalDaily: "∞" };
+    return res.json({ status: "success", quota: summary, isGuest: false });
+  }
+
+  const clientIp = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim();
+  const guestIdentifier = (req.headers["x-guest-id"] || clientIp).trim();
+  const summary = guestQuotaService.getGuestQuota(guestIdentifier);
+  return res.json({ status: "success", quota: summary, isGuest: true });
 });
 
 // =========================================================
@@ -103,13 +124,40 @@ router.delete("/history", verifyToken, async (req, res) => {
 // =========================================================
 // POST /api/voice/stream - Real-Time Token-to-Audio SSE Stream (Sub-300ms)
 // =========================================================
-router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
+router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
   const startTotal = Date.now();
   const user = req.user;
+  const isGuest = !user;
+  const clientIp = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim();
+  const guestIdentifier = (req.headers["x-guest-id"] || clientIp).trim();
   const userText = (req.body?.text || req.body?.message || "").trim();
 
   if (!userText) {
     return res.status(400).json({ error: "Text is required for streaming voice." });
+  }
+
+  // Quota & Rate Limit Check
+  // Free / Guest users: 10 calls/hour, 50 calls/day
+  // Logged-in users: 30 calls/hour, unlimited daily
+  let quota = null;
+  if (user) {
+    try {
+      quota = await user.checkAndRecordVoiceCall();
+    } catch (err) {
+      console.warn("⚠️ User quota check warning:", err.message);
+      quota = { allowed: true, remainingHourly: 30, remainingDaily: "Unlimited", totalHourly: 30, totalDaily: "∞" };
+    }
+  } else {
+    quota = guestQuotaService.checkAndRecordGuestCall(guestIdentifier);
+  }
+
+  if (quota && !quota.allowed) {
+    console.warn(`⚠️ [VOICE SSE] Quota limit exceeded for ${isGuest ? `guest (${guestIdentifier})` : user.email}`);
+    return res.status(429).json({
+      error: quota.error || "Rate limit reached. Please wait before speaking again.",
+      quota,
+      reply: quota.error || "You have reached your voice call limit. Please check back soon!",
+    });
   }
 
   // Set SSE Headers
@@ -129,7 +177,7 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
   try {
     const selectedPersona = req.body?.persona || "conversational";
     const selectedVoiceModel = req.body?.voiceModel || "sarvam-aditya";
-    const userIdentifier = user?.email || String(user?._id) || "general_user";
+    const userIdentifier = user?.email || (user?._id ? String(user._id) : `guest_${guestIdentifier}`);
 
     // 0. Fast Semantic Query Cache Check (< 3ms response, zero LLM cost)
     const cachedHit = semanticCache.get(userText, null, selectedPersona, selectedVoiceModel);
@@ -158,6 +206,8 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
         totalLatencyMs: Date.now() - startTotal,
         sentenceCount: 1,
         cached: true,
+        quota,
+        isGuest,
         ragSource: cachedHit.ragSource,
         groundingDetails: cachedHit.groundingDetails,
       });
@@ -178,8 +228,8 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
     const clientHistory = Array.isArray(req.body.history) && req.body.history.length > 0 ? req.body.history : null;
     const retrievalTasks = [];
 
-    // History retrieval
-    retrievalTasks.push(clientHistory ? Promise.resolve([]) : Conversation.getRecentTurns(user._id, 8).catch(() => []));
+    // History retrieval (only if user._id is present)
+    retrievalTasks.push((clientHistory || !user?._id) ? Promise.resolve([]) : Conversation.getRecentTurns(user._id, 8).catch(() => []));
 
     // Memory retrieval
     if (route.intent === "MEMORY" || route.needsRag) {
@@ -274,6 +324,7 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       history: recentHistory,
       systemInstruction: dynamicInstruction,
       voiceModel: selectedVoiceModel,
+      forceGroq: isGuest,
       onTokenDelta: (token) => {
         sendEvent("token", { token });
       },
@@ -295,6 +346,9 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       firstAudioTimeMs: result.firstAudioTimeMs,
       totalLatencyMs: result.totalLatencyMs,
       sentenceCount: result.sentenceCount,
+      quota,
+      isGuest,
+      provider: isGuest ? "groq" : undefined,
       ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
       citations: evidencePack?.uiCitations || [],
@@ -317,8 +371,10 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
       groundingDetails: adaptiveRag.groundingDetails,
     });
 
-    // Save full verbatim turn to MongoDB conversation history
-    Conversation.appendTurn(user._id, userText, result.fullText).catch(() => {});
+    // Save full verbatim turn to MongoDB conversation history for authenticated users
+    if (user?._id) {
+      Conversation.appendTurn(user._id, userText, result.fullText).catch(() => {});
+    }
 
     // Asynchronously extract distilled, durable user memories in the background via Groq (Zero latency penalty)
     setImmediate(() => {
@@ -341,25 +397,32 @@ router.post("/stream", voiceLimiter, verifyToken, async (req, res) => {
 // =========================================================
 // POST /api/voice - Main Voice Pipeline (Gemini + Qdrant + Deepgram)
 // =========================================================
-router.post("/", voiceLimiter, verifyToken, async (req, res) => {
+router.post("/", voiceLimiter, optionalVerifyToken, async (req, res) => {
   const startTotal = Date.now();
-  console.log("📍 [VOICE CHECKPOINT 1] Received voice request from user:", req.user?.email);
+  const user = req.user;
+  const isGuest = !user;
+  const clientIp = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "client_ip").toString().split(",")[0].trim();
+  const guestIdentifier = (req.headers["x-guest-id"] || clientIp).trim();
+  console.log("📍 [VOICE CHECKPOINT 1] Received voice request from:", isGuest ? `Guest (${guestIdentifier})` : user.email);
 
   try {
-    const user = req.user;
-    const isAdmin = user.role === "admin" || user.email?.toLowerCase() === "r19216871@gamil.com";
-
-    // 1. Account rate limit check
-    console.log(`📍 [VOICE CHECKPOINT 2] Checking quota for user ${user.email} (isAdmin: ${isAdmin})...`);
-    let quota = { allowed: true, isAdmin, remainingHourly: "Unlimited", remainingDaily: "Unlimited" };
-    try {
-      quota = await user.checkAndRecordVoiceCall();
-    } catch (quotaErr) {
-      console.warn("⚠️ Quota check warning, defaulting to allow:", quotaErr.message);
+    let quota = null;
+    if (user) {
+      const isAdmin = user.role === "admin" || user.email?.toLowerCase() === "r19216871@gamil.com";
+      console.log(`📍 [VOICE CHECKPOINT 2] Checking quota for user ${user.email} (isAdmin: ${isAdmin})...`);
+      quota = { allowed: true, isAdmin, remainingHourly: "Unlimited", remainingDaily: "Unlimited", totalHourly: "∞", totalDaily: "∞" };
+      try {
+        quota = await user.checkAndRecordVoiceCall();
+      } catch (quotaErr) {
+        console.warn("⚠️ Quota check warning, defaulting to allow:", quotaErr.message);
+      }
+    } else {
+      console.log(`📍 [VOICE CHECKPOINT 2] Checking quota for guest ${guestIdentifier}...`);
+      quota = guestQuotaService.checkAndRecordGuestCall(guestIdentifier);
     }
 
     if (!quota.allowed) {
-      console.warn(`⚠️ [VOICE CHECKPOINT 2] Quota exceeded for user: ${user.email}`);
+      console.warn(`⚠️ [VOICE CHECKPOINT 2] Quota exceeded for: ${isGuest ? `guest ${guestIdentifier}` : user.email}`);
       return res.status(429).json({
         error: quota.error || "Rate limit exceeded. Please wait a moment before speaking again.",
         quota,
@@ -409,7 +472,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     if (Array.isArray(req.body.history) && req.body.history.length > 0) {
       recentHistory = req.body.history;
       console.log(`✅ [VOICE CHECKPOINT 4] Using ${recentHistory.length} active session history items from client`);
-    } else {
+    } else if (user?._id) {
       console.log("📍 [VOICE CHECKPOINT 4] Fetching recent conversation turns from MongoDB...");
       try {
         recentHistory = await Conversation.getRecentTurns(user._id, 8);
@@ -420,7 +483,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
     }
 
     // 3. Persona-Adaptive RAG Grounding + Long-term user memories
-    const userIdentifier = user?.email || String(user?._id) || "general_user";
+    const userIdentifier = user?.email || (user?._id ? String(user._id) : `guest_${guestIdentifier}`);
     console.log(`📍 [VOICE CHECKPOINT 5] Running Adaptive RAG for persona "${selectedPersona}" & memories for ${userIdentifier}...`);
 
     let qdrantMemories = [];
@@ -461,24 +524,27 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       dynamicInstruction += `\n\n[USER RECALLED LONG-TERM MEMORIES & PERSONAL FACTS]:\n${qdrantMemories.map((m, i) => `${i + 1}. ${m}`).join("\n")}\nNaturally acknowledge these known personal details if relevant to the question.`;
     }
 
-    // 4. Generate AI response via Groq (Primary) with Gemini (Fallback)
-    console.log(`📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator with Persona "${selectedPersona}"...`);
+    // 4. Generate AI response via Groq (strictly for guests, or failover for users)
+    console.log(`📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator (isGuest: ${isGuest})...`);
     const aiResult = await aiService.generateAIResponse({
       prompt,
       history: recentHistory,
       systemInstruction: dynamicInstruction,
       persona: selectedPersona,
+      forceGroq: isGuest,
     });
     const aiReply = aiResult.reply;
     console.log(`🤖 [VOICE CHECKPOINT 6] AI (${aiResult.provider} / ${aiResult.model}) replied in ${aiResult.latencyMs}ms: "${aiReply.slice(0, 100)}..."`);
 
-    // 5. Save exchange to MongoDB conversation history
-    console.log("📍 [VOICE CHECKPOINT 7] Saving exchange to MongoDB...");
-    try {
-      await Conversation.appendTurn(user._id, prompt, aiReply, aiResult.toolUsed);
-      console.log("✅ [VOICE CHECKPOINT 7] Exchange persisted to MongoDB conversation history");
-    } catch (dbErr) {
-      console.warn("⚠️ MongoDB history save warning:", dbErr.message);
+    // 5. Save exchange to MongoDB conversation history for logged-in users
+    if (user?._id) {
+      console.log("📍 [VOICE CHECKPOINT 7] Saving exchange to MongoDB...");
+      try {
+        await Conversation.appendTurn(user._id, prompt, aiReply, aiResult.toolUsed);
+        console.log("✅ [VOICE CHECKPOINT 7] Exchange persisted to MongoDB conversation history");
+      } catch (dbErr) {
+        console.warn("⚠️ MongoDB history save warning:", dbErr.message);
+      }
     }
 
     // 6. Asynchronously index memory into Qdrant Vector Cloud for continuous learning
@@ -525,6 +591,7 @@ router.post("/", voiceLimiter, verifyToken, async (req, res) => {
       },
       userText: prompt,
       quota,
+      isGuest,
       persona: selectedPersona,
       ragSource: adaptiveRag.ragSource || (qdrantMemories.length > 0 ? "user_memory" : null),
       groundingDetails: adaptiveRag.groundingDetails || null,

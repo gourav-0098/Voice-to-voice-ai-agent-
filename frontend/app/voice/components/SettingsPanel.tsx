@@ -253,22 +253,30 @@ function AccountPane({ p }: { p: SettingsPanelProps }) {
             <>
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5">
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">Hourly Calls</p>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">Resets every hour</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">Hourly Quota</p>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">Resets hourly (Rolling 60m)</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">{p.quota ? p.quota.remainingHourly : "5"} / 5</p>
+                  <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                    {p.quota ? p.quota.remainingHourly : (p.currentUser ? "30" : "10")} / {p.currentUser ? "30" : "10"}
+                  </p>
                   <p className="text-[10px] text-slate-400 dark:text-zinc-500">remaining</p>
                 </div>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">Daily Calls</p>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">Resets at midnight</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">Daily Quota</p>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                    {p.currentUser ? "Unlimited for logged-in accounts" : "Resets daily (50 calls/day)"}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-base font-bold text-sky-600 dark:text-cyan-400">{p.quota ? p.quota.remainingDaily : "10"} / 10</p>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">remaining</p>
+                  <p className="text-base font-bold text-sky-600 dark:text-cyan-400">
+                    {p.currentUser ? "Unlimited (∞)" : `${p.quota ? p.quota.remainingDaily : "50"} / 50`}
+                  </p>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                    {p.currentUser ? "no limit" : "remaining"}
+                  </p>
                 </div>
               </div>
             </>

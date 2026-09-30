@@ -105,7 +105,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Check and record voice call (Rate limits: 5/hour, 10/day, Admin unlimited)
+// Check and record voice call (Rate limits: 30/hour, Unlimited daily, Admin unlimited)
 userSchema.methods.checkAndRecordVoiceCall = async function () {
   const isAdmin =
     this.role === "admin" ||
@@ -120,6 +120,8 @@ userSchema.methods.checkAndRecordVoiceCall = async function () {
       isAdmin: true,
       remainingHourly: "Unlimited",
       remainingDaily: "Unlimited",
+      totalHourly: "∞",
+      totalDaily: "∞",
     };
   }
 
@@ -131,37 +133,26 @@ userSchema.methods.checkAndRecordVoiceCall = async function () {
   this.voiceCalls = (this.voiceCalls || []).filter((callDate) => callDate > oneDayAgo);
 
   const callsLastHour = this.voiceCalls.filter((callDate) => callDate > oneHourAgo);
-  const callsLastDay = this.voiceCalls;
 
-  // 1. Check Hourly Limit (Max 5 per hour)
-  if (callsLastHour.length >= 5) {
+  // 1. Check Hourly Limit (Max 30 per hour for logged-in users)
+  const MAX_HOURLY = 30;
+  if (callsLastHour.length >= MAX_HOURLY) {
     const oldestInHour = callsLastHour[0];
     const resetTimeMs = oldestInHour.getTime() + 60 * 60 * 1000;
     const waitMinutes = Math.max(1, Math.ceil((resetTimeMs - now) / 60000));
 
     return {
       allowed: false,
-      error: `Hourly limit reached (5 calls/hour). Please wait ${waitMinutes} minute(s) before trying again.`,
+      error: `Hourly limit reached (30 calls/hour). Please wait ${waitMinutes} minute(s) before trying again.`,
       waitMinutes,
       remainingHourly: 0,
-      remainingDaily: Math.max(0, 10 - callsLastDay.length),
+      remainingDaily: "Unlimited",
+      totalHourly: MAX_HOURLY,
+      totalDaily: "∞",
     };
   }
 
-  // 2. Check Daily Limit (Max 10 per day)
-  if (callsLastDay.length >= 10) {
-    const oldestInDay = callsLastDay[0];
-    const resetTimeMs = oldestInDay.getTime() + 24 * 60 * 60 * 1000;
-    const waitHours = Math.max(1, Math.ceil((resetTimeMs - now) / 3600000));
-
-    return {
-      allowed: false,
-      error: `Daily limit reached (10 calls/day). Quota resets in approximately ${waitHours} hour(s).`,
-      waitHours,
-      remainingHourly: Math.max(0, 5 - callsLastHour.length),
-      remainingDaily: 0,
-    };
-  }
+  // 2. Daily Limit: None for logged-in users (Unlimited calls per day)
 
   // Record this voice call
   this.voiceCalls.push(new Date());
@@ -170,10 +161,10 @@ userSchema.methods.checkAndRecordVoiceCall = async function () {
   return {
     allowed: true,
     isAdmin: false,
-    remainingHourly: 5 - callsLastHour.length - 1,
-    remainingDaily: 10 - callsLastDay.length - 1,
-    totalHourly: 5,
-    totalDaily: 10,
+    remainingHourly: Math.max(0, MAX_HOURLY - callsLastHour.length - 1),
+    remainingDaily: "Unlimited",
+    totalHourly: MAX_HOURLY,
+    totalDaily: "∞",
   };
 };
 
@@ -199,14 +190,13 @@ userSchema.methods.getQuotaSummary = function () {
 
   const activeCalls = (this.voiceCalls || []).filter((callDate) => callDate > oneDayAgo);
   const callsLastHour = activeCalls.filter((callDate) => callDate > oneHourAgo).length;
-  const callsLastDay = activeCalls.length;
 
   return {
     isAdmin: false,
-    remainingHourly: Math.max(0, 5 - callsLastHour),
-    remainingDaily: Math.max(0, 10 - callsLastDay),
-    totalHourly: 5,
-    totalDaily: 10,
+    remainingHourly: Math.max(0, 30 - callsLastHour),
+    remainingDaily: "Unlimited",
+    totalHourly: 30,
+    totalDaily: "∞",
   };
 };
 

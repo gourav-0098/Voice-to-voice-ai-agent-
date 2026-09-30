@@ -180,6 +180,7 @@ export async function streamVoiceResponse({
   history = [],
   systemInstruction = DEFAULT_SYSTEM_INSTRUCTION,
   voiceModel = "aura-asteria-en",
+  forceGroq = false,
   onTokenDelta,
   onAudioChunk,
   onSentenceComplete,
@@ -371,29 +372,36 @@ export async function streamVoiceResponse({
     }
   };
 
-  // Determine Primary Engine from System Settings (Gemini vs Groq)
-  const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"
-    ? systemSettingsService.getPrimaryModel()
-    : "gemini";
-
-  console.log(`🎙️ [STREAMING PIPELINE] Primary Engine: ${primaryEngine.toUpperCase()}`);
-
   let streamSuccess = false;
-  if (primaryEngine === "gemini") {
-    // 1. Primary: Google Gemini (3-key failover pool, superior reasoning)
-    streamSuccess = await streamWithGemini();
-    // 2. Backup: Groq Cloud
-    if (!streamSuccess) {
-      console.warn("🔄 [STREAMING] Gemini primary failed, falling back to Groq backup...");
-      streamSuccess = await streamWithGroq();
-    }
-  } else {
-    // 1. Primary: Groq Cloud (Ultra-low latency)
+
+  // Strict Groq API enforcement for free / unauthenticated users
+  if (forceGroq) {
+    console.log("⚡ [STREAMING PIPELINE] Free tier: strictly using Groq API only (zero external LLM costs)");
     streamSuccess = await streamWithGroq();
-    // 2. Backup: Google Gemini
-    if (!streamSuccess) {
-      console.warn("🔄 [STREAMING] Groq primary failed, falling back to Gemini backup...");
+  } else {
+    // Determine Primary Engine from System Settings (Gemini vs Groq)
+    const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"
+      ? systemSettingsService.getPrimaryModel()
+      : "gemini";
+
+    console.log(`🎙️ [STREAMING PIPELINE] Primary Engine: ${primaryEngine.toUpperCase()}`);
+
+    if (primaryEngine === "gemini") {
+      // 1. Primary: Google Gemini (3-key failover pool, superior reasoning)
       streamSuccess = await streamWithGemini();
+      // 2. Backup: Groq Cloud
+      if (!streamSuccess) {
+        console.warn("🔄 [STREAMING] Gemini primary failed, falling back to Groq backup...");
+        streamSuccess = await streamWithGroq();
+      }
+    } else {
+      // 1. Primary: Groq Cloud (Ultra-low latency)
+      streamSuccess = await streamWithGroq();
+      // 2. Backup: Google Gemini
+      if (!streamSuccess) {
+        console.warn("🔄 [STREAMING] Groq primary failed, falling back to Gemini backup...");
+        streamSuccess = await streamWithGemini();
+      }
     }
   }
 

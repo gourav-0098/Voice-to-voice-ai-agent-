@@ -23,8 +23,9 @@ const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
  * @param {string} language - "hi", "en", or "all"
  * @returns {Promise<{text: string, provider: string, latencyMs: number}>}
  */
-export async function transcribeAudio(audioBuffer, mimeType = "audio/webm", language = "hi") {
+export async function transcribeAudio(audioBuffer, mimeType = "audio/webm", language = "hi", options = {}) {
   const tStart = performance.now();
+  const { forceGroq = false } = options;
 
   if (!audioBuffer || audioBuffer.length === 0) {
     throw new Error("Empty audio buffer provided for transcription");
@@ -68,6 +69,11 @@ export async function transcribeAudio(audioBuffer, mimeType = "audio/webm", lang
     } catch (groqErr) {
       console.warn("⚠️ [STT GROQ ERROR] Falling back to Deepgram:", groqErr.message);
     }
+  }
+
+  // If strictly restricted to Groq API (Free Tier), do not invoke Deepgram
+  if (forceGroq) {
+    throw new Error("Groq Whisper transcription failed or timed out.");
   }
 
   // 2. Try Deepgram Nova-2 (Backup Engine)

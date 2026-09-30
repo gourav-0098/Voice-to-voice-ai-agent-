@@ -523,9 +523,48 @@ export async function generateAIResponse({
   history = [],
   systemInstruction = null,
   persona = "conversational",
+  forceGroq = false,
 }) {
   const startTime = Date.now();
   const effectiveInstruction = systemInstruction || getSystemInstruction(persona);
+
+  // If free tier or forceGroq is active, strictly execute via Groq API only
+  if (forceGroq) {
+    console.log("⚡ [AI ORCHESTRATOR] Free tier: strictly using Groq API only (qwen/qwen3.8-27b)");
+    const groqRes = await (async () => {
+      try {
+        const groqStart = Date.now();
+        const groqResult = await callGroq({
+          prompt,
+          history,
+          systemInstruction: effectiveInstruction,
+          model: "qwen/qwen3.8-27b",
+        });
+        const latencyMs = Date.now() - startTime;
+        console.log(`✅ [AI ORCHESTRATOR] Groq replied in ${Date.now() - groqStart}ms: "${groqResult.reply.slice(0, 80)}..."`);
+        return {
+          reply: groqResult.reply,
+          provider: "groq",
+          model: groqResult.model,
+          latencyMs,
+          toolUsed: groqResult.toolUsed || null,
+        };
+      } catch (groqErr) {
+        console.warn("⚠️ [AI ORCHESTRATOR] Groq failed:", groqErr.message || groqErr);
+        return null;
+      }
+    })();
+
+    if (groqRes) return groqRes;
+
+    const latencyMs = Date.now() - startTime;
+    return {
+      reply: "I heard you clearly, but my Groq network connection momentarily blinked. Could you please say that again?",
+      provider: "fallback",
+      model: "groq-fallback",
+      latencyMs,
+    };
+  }
 
   const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"
     ? systemSettingsService.getPrimaryModel()
