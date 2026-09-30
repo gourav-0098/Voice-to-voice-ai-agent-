@@ -11,6 +11,7 @@ import GroundingSourceDrawer, { GroundingDrawerData } from "./components/Groundi
 import DebateArenaModal from "./components/DebateArenaModal";
 import SettingsPanel from "./components/SettingsPanel";
 import { exportConversationTranscript, exportAudioFile } from "./utils/exportUtils";
+import { FactCheckHUD, FactCheckData } from "./components/FactCheckHUD";
 
 // Extend Window interface for Web Speech API
 declare global {
@@ -62,6 +63,7 @@ export interface ChatMessage {
   toolUsed?: ToolCallInfo | null;
   ragSource?: string | null;
   groundingDetails?: any;
+  factCheck?: FactCheckData | null;
 }
 
 // Gemini & ChatGPT Inspired Tool Usage Helper
@@ -453,6 +455,10 @@ export default function VoicePage() {
   const [isDebateModalOpen, setIsDebateModalOpen] = useState(false);
   const [isGroundingDrawerOpen, setIsGroundingDrawerOpen] = useState(false);
   const [groundingDrawerData, setGroundingDrawerData] = useState<GroundingDrawerData | null>(null);
+
+  // Real-time Truth Meter & Fallacy HUD states
+  const [activeFactCheck, setActiveFactCheck] = useState<FactCheckData | null>(null);
+  const [isFactCheckHudEnabled, setIsFactCheckHudEnabled] = useState<boolean>(true);
 
   // Responsive Drawer & Sidebar states
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -1193,16 +1199,19 @@ export default function VoicePage() {
     let ragSourceBadge: string | null = null;
     let currentGroundingDetails: any = null;
     let turnAudioBase64: string | null = null;
+    let currentFactCheck: FactCheckData | null = null;
     const startTurnTime = Date.now();
 
     const appendOrUpdateAiMessage = (
       newText: string,
       ragSource?: string | null,
       groundingDetails?: any,
-      audioBase64?: string
+      audioBase64?: string,
+      factCheck?: FactCheckData | null
     ) => {
       if (groundingDetails) currentGroundingDetails = groundingDetails;
       if (audioBase64) turnAudioBase64 = audioBase64;
+      if (factCheck) currentFactCheck = factCheck;
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === aiMsgId);
         if (idx === -1) {
@@ -1217,6 +1226,7 @@ export default function VoicePage() {
               ragSource: ragSource || ragSourceBadge,
               groundingDetails: groundingDetails || currentGroundingDetails,
               audio: audioBase64 || turnAudioBase64 || undefined,
+              factCheck: factCheck || currentFactCheck || undefined,
             },
           ];
         }
@@ -1227,6 +1237,7 @@ export default function VoicePage() {
           ragSource: ragSource || updated[idx].ragSource || ragSourceBadge,
           groundingDetails: groundingDetails || updated[idx].groundingDetails || currentGroundingDetails,
           audio: audioBase64 || updated[idx].audio || turnAudioBase64 || undefined,
+          factCheck: factCheck || updated[idx].factCheck || currentFactCheck || undefined,
         };
         return updated;
       });
@@ -1339,9 +1350,13 @@ export default function VoicePage() {
               ragSourceBadge = data.ragSource;
               if (data.groundingDetails) currentGroundingDetails = data.groundingDetails;
               appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails);
+            } else if (eventType === "factcheck") {
+              setActiveFactCheck(data);
+              currentFactCheck = data;
+              appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails, turnAudioBase64 || undefined, data);
             } else if (eventType === "token") {
               currentStreamTextRef.current += data.token;
-              appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails);
+              appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails, turnAudioBase64 || undefined, currentFactCheck);
             } else if (eventType === "audio") {
               handleAudioChunk(data);
               if (data.audio && !turnAudioBase64) {
@@ -1350,7 +1365,11 @@ export default function VoicePage() {
             } else if (eventType === "done") {
               if (data.groundingDetails) currentGroundingDetails = data.groundingDetails;
               if (data.audio) turnAudioBase64 = data.audio;
-              if (data.reply) appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined);
+              if (data.factCheck) {
+                setActiveFactCheck(data.factCheck);
+                currentFactCheck = data.factCheck;
+              }
+              if (data.reply) appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined, currentFactCheck);
               if (data.firstAudioTimeMs) setLastTtfa(data.firstAudioTimeMs);
               if (data.quota) setQuota(data.quota);
               setIsAiLoading(false);
@@ -1385,7 +1404,11 @@ export default function VoicePage() {
 
         const data = await legacyRes.json();
         const reply = data.reply || "I heard you!";
-        appendOrUpdateAiMessage(reply, data.ragSource, data.groundingDetails, data.audio);
+        if (data.factCheck) {
+          setActiveFactCheck(data.factCheck);
+          currentFactCheck = data.factCheck;
+        }
+        appendOrUpdateAiMessage(reply, data.ragSource, data.groundingDetails, data.audio, data.factCheck);
         if (data.quota) setQuota(data.quota);
 
         if (data.audio) {
@@ -1715,7 +1738,14 @@ export default function VoicePage() {
             setMessages((prev) => {
               const activeId = activeAiMsgIdRef.current;
               if (!activeId) return prev;
-              return prev.map((m) => (m.id === activeId ? { ...m, ragSource: msg.ragSource } : m));
+              return prev.map((m) => (m.id === activeId ? { ...m, ragSource: msg.ragSource, groundingDetails: msg.groundingDetails } : m));
+            });
+          } else if (msg.type === "factcheck") {
+            setActiveFactCheck(msg);
+            setMessages((prev) => {
+              const activeId = activeAiMsgIdRef.current;
+              if (!activeId) return prev;
+              return prev.map((m) => (m.id === activeId ? { ...m, factCheck: msg } : m));
             });
           } else if (msg.type === "token_delta") {
             currentStreamTextRef.current += msg.token;
@@ -1751,6 +1781,14 @@ export default function VoicePage() {
             setIsAiLoading(false);
             if (msg.firstAudioTimeMs) {
               setLastTtfa(msg.firstAudioTimeMs);
+            }
+            if (msg.factCheck) {
+              setActiveFactCheck(msg.factCheck);
+              setMessages((prev) => {
+                const activeId = activeAiMsgIdRef.current;
+                if (!activeId) return prev;
+                return prev.map((m) => (m.id === activeId ? { ...m, factCheck: msg.factCheck } : m));
+              });
             }
           }
         } catch (_) {}
@@ -2275,6 +2313,19 @@ export default function VoicePage() {
                   ⚡ First Spoken: {lastTtfa}ms
                 </span>
               )}
+              {/* Truth Meter HUD Toggle Chip */}
+              <button
+                type="button"
+                onClick={() => setIsFactCheckHudEnabled((prev) => !prev)}
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer border ${
+                  isFactCheckHudEnabled
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-slate-500/10 text-slate-500 dark:text-zinc-500 border-slate-500/20 opacity-60"
+                }`}
+                title="Toggle Real-Time Truth Meter & Fallacy HUD"
+              >
+                <span>⚖️ Truth HUD: {isFactCheckHudEnabled ? "ON" : "OFF"}</span>
+              </button>
             </div>
 
             {/* AUDIO REACTIVE CANVAS + ORB CONTAINER */}
@@ -2348,6 +2399,16 @@ export default function VoicePage() {
                 </button>
               ))}
             </div>
+
+            {/* Real-Time Fact-Check HUD & Truth Meter */}
+            {isFactCheckHudEnabled && activeFactCheck && (
+              <div className="w-full max-w-xl px-2 mb-3">
+                <FactCheckHUD
+                  data={activeFactCheck}
+                  onClose={() => setActiveFactCheck(null)}
+                />
+              </div>
+            )}
 
             {/* CONTROLS (Speak, Stop, Interrupt) */}
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto px-4 sm:px-0">
@@ -2488,6 +2549,16 @@ export default function VoicePage() {
               </div>
             </div>
 
+            {/* Real-time Fact-Check & Truth Meter HUD in Transcript */}
+            {isFactCheckHudEnabled && activeFactCheck && (
+              <div className="px-1 mb-3">
+                <FactCheckHUD
+                  data={activeFactCheck}
+                  onClose={() => setActiveFactCheck(null)}
+                />
+              </div>
+            )}
+
             {/* Scrollable Message Feed */}
             <div
               ref={chatScrollRef}
@@ -2609,6 +2680,33 @@ export default function VoicePage() {
                           </div>
                         );
                       })()}
+
+                      {/* Live Truth Meter & Fallacy Tag on Message */}
+                      {msg.factCheck && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveFactCheck(msg.factCheck!);
+                            setIsFactCheckHudEnabled(true);
+                          }}
+                          title="Click to view full Truth Meter audit and fallacy breakdown in HUD"
+                          className={`mb-2.5 mr-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                            (msg.factCheck.credibilityScore ?? 70) >= 80
+                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : (msg.factCheck.credibilityScore ?? 70) >= 50
+                              ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              : "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                          }`}
+                        >
+                          <span>{(msg.factCheck.credibilityScore ?? 70) >= 80 ? "✓" : (msg.factCheck.credibilityScore ?? 70) >= 50 ? "⚖️" : "⚠️"}</span>
+                          <span>Truth: {Math.round(msg.factCheck.credibilityScore ?? 70)}%</span>
+                          {msg.factCheck.fallaciesDetected && msg.factCheck.fallaciesDetected.length > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-300 text-[10px]">
+                              {msg.factCheck.fallaciesDetected.length} fallacy
+                            </span>
+                          )}
+                        </button>
+                      )}
 
                       <p className="whitespace-pre-wrap">{msg.text}</p>
 

@@ -10,6 +10,7 @@ import { routeQuery } from "./queryRouter.js";
 import { buildEvidencePack } from "./evidencePackBuilder.js";
 import toolService from "./toolService.js";
 import groqMemoryWorker from "./groqMemoryWorker.js";
+import factCheckService from "./factCheckService.js";
 
 /**
  * Attaches the real-time Voice WebSocket Server to the Node HTTP server.
@@ -133,11 +134,23 @@ export function setupVoiceWebSocket(httpServer) {
             ? data.history
             : dbHistory;
 
-          // Send RAG telemetry event to frontend immediately
+          // Real-Time Fact-Check & Rhetorical Fallacy Analysis (< 3ms)
+          const factCheck = await factCheckService.analyzeTurnFactCheck({
+            query: prompt,
+            evidencePack,
+            qdrantResults: adaptiveRag?.evidence || (adaptiveRag?.groundingDetails ? [adaptiveRag.groundingDetails] : []),
+          });
+
+          // Send FactCheck & RAG telemetry events to frontend immediately
           if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: "factcheck",
+              ...factCheck,
+            }));
             ws.send(JSON.stringify({
               type: "rag_grounded",
               ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
+              groundingDetails: adaptiveRag.groundingDetails,
               latencyMs: adaptiveRag.latencyMs || route.routerLatencyMs,
               latencyBreakdown: adaptiveRag.latencyBreakdown || null,
               intensityLevel: route.intensityLevel || 0,
@@ -199,7 +212,9 @@ export function setupVoiceWebSocket(httpServer) {
               firstAudioTimeMs: streamResult.firstAudioTimeMs,
               totalLatencyMs: streamResult.totalLatencyMs,
               sentenceCount: streamResult.sentenceCount,
+              factCheck,
               ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
+              groundingDetails: adaptiveRag.groundingDetails,
               telemetry: {
                 routeMs: route.routerLatencyMs,
                 ragMs: adaptiveRag.latencyMs || 0,

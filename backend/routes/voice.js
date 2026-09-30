@@ -14,6 +14,7 @@ import toolService from "../services/toolService.js";
 import groqMemoryWorker from "../services/groqMemoryWorker.js";
 import { transcribeAudio } from "../services/sttService.js";
 import guestQuotaService from "../services/guestQuotaService.js";
+import factCheckService from "../services/factCheckService.js";
 
 const router = express.Router();
 
@@ -287,6 +288,15 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
 
     const recentHistory = clientHistory || dbHistory;
 
+    // Real-Time Fact-Check & Rhetorical Fallacy Analysis
+    const factCheck = await factCheckService.analyzeTurnFactCheck({
+      query: userText,
+      evidencePack,
+      qdrantResults: adaptiveRag?.evidence || (adaptiveRag?.groundingDetails ? [adaptiveRag.groundingDetails] : []),
+    });
+
+    sendEvent("factcheck", factCheck);
+
     sendEvent("rag", {
       ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
@@ -349,6 +359,7 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
       quota,
       isGuest,
       provider: isGuest ? "groq" : undefined,
+      factCheck,
       ragSource: adaptiveRag.ragSource || (route.needsLiveSearch ? "live_search" : "chit_chat_direct"),
       groundingDetails: adaptiveRag.groundingDetails,
       citations: evidencePack?.uiCitations || [],
@@ -526,13 +537,20 @@ router.post("/", voiceLimiter, optionalVerifyToken, async (req, res) => {
 
     // 4. Generate AI response via Groq (strictly for guests, or failover for users)
     console.log(`📍 [VOICE CHECKPOINT 6] Invoking AI Orchestrator (isGuest: ${isGuest})...`);
-    const aiResult = await aiService.generateAIResponse({
-      prompt,
-      history: recentHistory,
-      systemInstruction: dynamicInstruction,
-      persona: selectedPersona,
-      forceGroq: isGuest,
-    });
+    const [aiResult, factCheck] = await Promise.all([
+      aiService.generateAIResponse({
+        prompt,
+        history: recentHistory,
+        systemInstruction: dynamicInstruction,
+        persona: selectedPersona,
+        forceGroq: isGuest,
+      }),
+      factCheckService.analyzeTurnFactCheck({
+        query: prompt,
+        evidencePack: adaptiveRag,
+        qdrantResults: adaptiveRag?.evidence || [],
+      }),
+    ]);
     const aiReply = aiResult.reply;
     console.log(`🤖 [VOICE CHECKPOINT 6] AI (${aiResult.provider} / ${aiResult.model}) replied in ${aiResult.latencyMs}ms: "${aiReply.slice(0, 100)}..."`);
 
@@ -592,6 +610,7 @@ router.post("/", voiceLimiter, optionalVerifyToken, async (req, res) => {
       userText: prompt,
       quota,
       isGuest,
+      factCheck,
       persona: selectedPersona,
       ragSource: adaptiveRag.ragSource || (qdrantMemories.length > 0 ? "user_memory" : null),
       groundingDetails: adaptiveRag.groundingDetails || null,
