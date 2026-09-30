@@ -19,14 +19,31 @@ interface VisualizerCanvasProps {
   analyserNode: AnalyserNode | null;
   isDark?: boolean;
   size?: number;
+  personaMode?: string;
 }
 
 const COLORS = {
-  idle: { primary: "rgba(255,255,255,0.3)", secondary: "rgba(255,255,255,0.12)", glow: "rgba(255,255,255,0.08)" },
-  listening: { primary: "rgba(239,68,68,0.85)", secondary: "rgba(244,63,94,0.6)", glow: "rgba(239,68,68,0.4)" },
-  transcribing: { primary: "rgba(245,158,11,0.85)", secondary: "rgba(251,191,36,0.6)", glow: "rgba(245,158,11,0.35)" },
-  synthesizing: { primary: "rgba(6,182,212,0.9)", secondary: "rgba(59,130,246,0.6)", glow: "rgba(6,182,212,0.4)" },
-  speaking: { primary: "rgba(16,185,129,0.85)", secondary: "rgba(6,182,212,0.6)", glow: "rgba(16,185,129,0.4)" },
+  default: {
+    idle: { primary: "rgba(255,255,255,0.3)", secondary: "rgba(255,255,255,0.12)", glow: "rgba(255,255,255,0.08)" },
+    listening: { primary: "rgba(239,68,68,0.85)", secondary: "rgba(244,63,94,0.6)", glow: "rgba(239,68,68,0.4)" },
+    transcribing: { primary: "rgba(245,158,11,0.85)", secondary: "rgba(251,191,36,0.6)", glow: "rgba(245,158,11,0.35)" },
+    synthesizing: { primary: "rgba(6,182,212,0.9)", secondary: "rgba(59,130,246,0.6)", glow: "rgba(6,182,212,0.4)" },
+    speaking: { primary: "rgba(16,185,129,0.85)", secondary: "rgba(6,182,212,0.6)", glow: "rgba(16,185,129,0.4)" },
+  },
+  saffron: {
+    idle: { primary: "rgba(245,158,11,0.4)", secondary: "rgba(234,88,12,0.2)", glow: "rgba(245,158,11,0.12)" },
+    listening: { primary: "rgba(234,88,12,0.9)", secondary: "rgba(220,38,38,0.7)", glow: "rgba(234,88,12,0.45)" },
+    transcribing: { primary: "rgba(245,158,11,0.9)", secondary: "rgba(251,191,36,0.7)", glow: "rgba(245,158,11,0.4)" },
+    synthesizing: { primary: "rgba(249,115,22,0.95)", secondary: "rgba(245,158,11,0.7)", glow: "rgba(249,115,22,0.45)" },
+    speaking: { primary: "rgba(245,158,11,0.95)", secondary: "rgba(234,88,12,0.8)", glow: "rgba(245,158,11,0.5)" },
+  },
+  secular: {
+    idle: { primary: "rgba(59,130,246,0.35)", secondary: "rgba(6,182,212,0.18)", glow: "rgba(59,130,246,0.1)" },
+    listening: { primary: "rgba(239,68,68,0.85)", secondary: "rgba(59,130,246,0.6)", glow: "rgba(239,68,68,0.4)" },
+    transcribing: { primary: "rgba(6,182,212,0.85)", secondary: "rgba(59,130,246,0.6)", glow: "rgba(6,182,212,0.35)" },
+    synthesizing: { primary: "rgba(59,130,246,0.9)", secondary: "rgba(147,51,234,0.6)", glow: "rgba(59,130,246,0.4)" },
+    speaking: { primary: "rgba(6,182,212,0.9)", secondary: "rgba(59,130,246,0.7)", glow: "rgba(6,182,212,0.45)" },
+  }
 };
 
 export default function VisualizerCanvas({
@@ -34,6 +51,7 @@ export default function VisualizerCanvas({
   analyserNode,
   isDark = true,
   size = 280,
+  personaMode = "conversational",
 }: VisualizerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -44,9 +62,17 @@ export default function VisualizerCanvas({
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const getColor = useCallback(() => {
-    if (state === "idle") return isDark ? COLORS.idle : { primary: "rgba(100,116,139,0.3)", secondary: "rgba(148,163,184,0.2)", glow: "rgba(148,163,184,0.08)" };
-    return COLORS[state] || COLORS.idle;
-  }, [state, isDark]);
+    const isSaffron = personaMode === "andhbhakt" || personaMode === "saffron";
+    const isSecular = personaMode === "secular";
+    const palette = isSaffron ? COLORS.saffron : isSecular ? COLORS.secular : COLORS.default;
+
+    if (state === "idle") {
+      return isDark
+        ? palette.idle
+        : { primary: "rgba(100,116,139,0.3)", secondary: "rgba(148,163,184,0.2)", glow: "rgba(148,163,184,0.08)" };
+    }
+    return palette[state] || palette.idle;
+  }, [state, isDark, personaMode]);
 
   const initAudioContext = useCallback(async () => {
     try {

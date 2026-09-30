@@ -490,6 +490,17 @@ export default function VoicePage() {
   const [manualInput, setManualInput] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showShortcutsModal, setShowShortcutsModal] = useState<boolean>(false);
+
+  // Curated Quick Debate Starter Prompts
+  const QUICK_DEBATE_PROMPTS = useMemo(() => [
+    { label: "🚩 Article 370", prompt: "Explain why Article 370 abrogation was legally justified and constitutional." },
+    { label: "📈 Economic Record", prompt: "What is the true economic track record, GDP growth and poverty reduction under Modi?" },
+    { label: "🗳️ Electoral Bonds", prompt: "What was the government's justification for Electoral Bonds?" },
+    { label: "⚡ Infrastructure", prompt: "How has Vande Bharat, UPI, and highway expansion transformed India?" },
+    { label: "⚖️ Uniform Civil Code", prompt: "Why is Uniform Civil Code necessary under Article 44 for gender equality?" },
+    { label: "🇮🇳 What About 1962?", prompt: "How does current border infrastructure in Ladakh and Arunachal compare to 1962?" },
+  ], []);
 
   // Conversation history stream
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -917,6 +928,51 @@ export default function VoicePage() {
     }
     setIsAiSpeaking(false);
   }, []);
+
+  // Push-To-Talk (Hold Spacebar to speak) & Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        if (!listeningRef.current) {
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(15);
+          startListeningRef.current?.();
+        }
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        handleToggleMute();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        stopAiSpeaking();
+      } else if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (listeningRef.current) {
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
+          stopListeningRef.current?.(true);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [handleToggleMute, stopAiSpeaking]);
 
   const playDeepgramAudio = useCallback(
     (base64Audio: string, format: string = "audio/wav", fallbackText?: string) => {
@@ -2061,6 +2117,17 @@ export default function VoicePage() {
               <span className="hidden sm:inline">Debate Arena</span>
             </button>
 
+            {/* Keyboard Shortcuts Button */}
+            <button
+              type="button"
+              onClick={() => setShowShortcutsModal(true)}
+              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white text-xs font-mono transition cursor-pointer active:scale-95"
+              title="Keyboard Shortcuts (Space to talk, M to mute, Esc to cancel, ? for help)"
+            >
+              <span>⌨️</span>
+              <span>Hotkeys</span>
+            </button>
+
             {/* Dynamic Status Indicator Chip */}
             <div
               className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
@@ -2201,6 +2268,7 @@ export default function VoicePage() {
                 analyserNode={activeAnalyser}
                 isDark={isDark}
                 size={280}
+                personaMode={selectedPersona}
               />
 
               {/* Central Glowing Core Orb */}
@@ -2209,11 +2277,19 @@ export default function VoicePage() {
                   pipelineState === "listening"
                     ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-red-600 to-rose-400 shadow-red-500/50 scale-105"
                     : pipelineState === "speaking"
-                    ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-emerald-500/50 scale-105 animate-pulse"
+                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
+                      ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-amber-600 via-orange-500 to-amber-400 shadow-amber-500/60 scale-105 animate-pulse"
+                      : selectedPersona === "secular"
+                      ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-blue-600 via-cyan-500 to-teal-400 shadow-cyan-500/60 scale-105 animate-pulse"
+                      : "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-emerald-500/50 scale-105 animate-pulse"
                     : pipelineState === "synthesizing"
-                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/40 animate-pulse"
+                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
+                      ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-orange-600 to-amber-500 shadow-orange-500/40 animate-pulse"
+                      : "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/40 animate-pulse"
                     : pipelineState === "transcribing"
                     ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-amber-600 to-yellow-500 shadow-amber-500/40"
+                    : (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
+                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-amber-500/10 border border-amber-500/30 text-amber-500"
                     : isDark
                     ? "w-22 h-22 sm:w-26 sm:h-26 bg-white/5 border border-white/10"
                     : "w-22 h-22 sm:w-26 sm:h-26 bg-white border border-slate-200 shadow-lg"
@@ -2223,14 +2299,41 @@ export default function VoicePage() {
                   {pipelineState === "listening"
                     ? "🔴"
                     : pipelineState === "speaking"
-                    ? "🔊"
+                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
+                      ? "🦁"
+                      : "🔊"
                     : pipelineState === "synthesizing"
                     ? "✨"
                     : pipelineState === "transcribing"
                     ? "⚡"
+                    : (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
+                    ? "🚩"
                     : "🎙️"}
                 </span>
               </div>
+            </div>
+
+            {/* Quick Debate Starter Chips */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-2xl px-3 mb-5">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider mr-1">
+                Quick Topics:
+              </span>
+              {QUICK_DEBATE_PROMPTS.map((item, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    if (!currentUser) {
+                      setShowLoginModal(true);
+                      return;
+                    }
+                    sendVoiceToBackend(item.prompt);
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-full border transition-all cursor-pointer font-medium active:scale-95 shadow-xs border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white dark:hover:border-white/20"
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
             {/* CONTROLS (Speak, Stop, Interrupt) */}
@@ -2642,6 +2745,52 @@ export default function VoicePage() {
           setIsGroundingDrawerOpen(true);
         }}
       />
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 shadow-2xl text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⌨️</span>
+                <h3 className="font-bold text-base">Keyboard Shortcuts</h3>
+              </div>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5">
+                <span className="text-slate-600 dark:text-zinc-300">Push-to-Talk (Hold to speak)</span>
+                <kbd className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-xs font-mono font-semibold">Space</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5">
+                <span className="text-slate-600 dark:text-zinc-300">Mute / Unmute AI Voice</span>
+                <kbd className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-xs font-mono font-semibold">M</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5">
+                <span className="text-slate-600 dark:text-zinc-300">Interrupt AI (Barge-in)</span>
+                <kbd className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-xs font-mono font-semibold">Esc</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-slate-600 dark:text-zinc-300">Toggle Shortcuts Cheat-sheet</span>
+                <kbd className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-xs font-mono font-semibold">?</kbd>
+              </div>
+            </div>
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="w-full py-2.5 rounded-xl font-semibold text-xs bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-white dark:text-black dark:hover:bg-zinc-200 transition cursor-pointer"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
