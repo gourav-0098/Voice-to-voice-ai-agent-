@@ -51,11 +51,16 @@ export default function DebateArenaModal({
   // Moderator / Anchor Interruption state
   const [isAnchorMode, setIsAnchorMode] = useState<boolean>(false);
   const [anchorComment, setAnchorComment] = useState<string>("");
+  const [debateError, setDebateError] = useState<string | null>(null);
 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const isDebatingRef = useRef(false);
   const isPausedRef = useRef(false);
+  const debateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debateGenerationIdRef = useRef<number>(0);
+  const activeFetchAbortControllerRef = useRef<AbortController | null>(null);
+  const activeAudioResolveRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     isDebatingRef.current = isDebating;
@@ -99,9 +104,34 @@ export default function DebateArenaModal({
     setIsPaused(false);
     setIsSpeakingAudio(false);
     setIsAnchorMode(false);
+    setDebateError(null);
+
+    // Cancel pending timer
+    if (debateTimerRef.current) {
+      clearTimeout(debateTimerRef.current);
+      debateTimerRef.current = null;
+    }
+
+    // Invalidate active generation
+    debateGenerationIdRef.current++;
+
+    // Abort in-flight network request
+    if (activeFetchAbortControllerRef.current) {
+      activeFetchAbortControllerRef.current.abort();
+      activeFetchAbortControllerRef.current = null;
+    }
+
+    // Resolve any pending audio play promise & cleanup audio
+    if (activeAudioResolveRef.current) {
+      activeAudioResolveRef.current();
+      activeAudioResolveRef.current = null;
+    }
+
     if (audioPlayerRef.current) {
       try {
         audioPlayerRef.current.pause();
+        audioPlayerRef.current.src = "";
+        audioPlayerRef.current.load();
       } catch (_) {}
       audioPlayerRef.current = null;
     }
@@ -111,9 +141,15 @@ export default function DebateArenaModal({
     return new Promise((resolve) => {
       if (!base64Audio) return resolve();
 
+      // Clean up previous audio & resolve pending promise
+      if (activeAudioResolveRef.current) {
+        activeAudioResolveRef.current();
+        activeAudioResolveRef.current = null;
+      }
       if (audioPlayerRef.current) {
         try {
           audioPlayerRef.current.pause();
+          audioPlayerRef.current.src = "";
         } catch (_) {}
       }
 
@@ -123,24 +159,23 @@ export default function DebateArenaModal({
         audioPlayerRef.current = audio;
         setIsSpeakingAudio(true);
 
-        audio.onended = () => {
+        const cleanup = () => {
           setIsSpeakingAudio(false);
+          activeAudioResolveRef.current = null;
           audioPlayerRef.current = null;
           resolve();
         };
 
-        audio.onerror = () => {
-          setIsSpeakingAudio(false);
-          audioPlayerRef.current = null;
-          resolve();
-        };
+        activeAudioResolveRef.current = cleanup;
+        audio.onended = cleanup;
+        audio.onerror = cleanup;
 
         audio.play().catch(() => {
-          setIsSpeakingAudio(false);
-          resolve();
+          cleanup();
         });
       } catch (_) {
         setIsSpeakingAudio(false);
+        activeAudioResolveRef.current = null;
         resolve();
       }
     });
@@ -150,8 +185,22 @@ export default function DebateArenaModal({
   const executeDebateTurn = async (speaker: "andhbhakt" | "rational", roundNum: number, currentHistory: DebateTurn[]) => {
     if (!isDebatingRef.current || isPausedRef.current) return;
 
+    // Advance monotonic generation ID so obsolete responses are discarded
+    debateGenerationIdRef.current++;
+    const thisGenId = debateGenerationIdRef.current;
+
+    // Abort previous in-flight fetch if any
+    if (activeFetchAbortControllerRef.current) {
+      activeFetchAbortControllerRef.current.abort();
+      activeFetchAbortControllerRef.current = null;
+    }
+
+    const controller = new AbortController();
+    activeFetchAbortControllerRef.current = controller;
+
     setIsTurnLoading(true);
     setActiveSpeaker(speaker);
+    setDebateError(null);
 
     const token = typeof window !== "undefined" ? localStorage.getItem("chatly_token") : null;
 
@@ -162,6 +211,7 @@ export default function DebateArenaModal({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token || ""}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           topic,
           round: roundNum,
@@ -170,11 +220,18 @@ export default function DebateArenaModal({
         }),
       });
 
+      if (thisGenId !== debateGenerationIdRef.current) return;
+
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("API rate-limit encountered (429). The system is in cooldown. You can retry or break in.");
+        }
         throw new Error(`Server returned ${response.status}`);
       }
 
       const data = await response.json();
+      if (thisGenId !== debateGenerationIdRef.current) return;
+
       setIsTurnLoading(false);
 
       const newTurn: DebateTurn = {
@@ -194,41 +251,48 @@ export default function DebateArenaModal({
       setTurns(updatedHistory);
 
       // Play spoken audio for this turn
-      if (data.audio) {
+      if (data.audio && thisGenId === debateGenerationIdRef.current) {
         await playTurnAudio(data.audio, data.audioFormat || "audio/mp3");
       }
 
-      // Check if paused or stopped while speaking
-      if (!isDebatingRef.current || isPausedRef.current) return;
+      // Check if paused, stopped, or interrupted during speech playback
+      if (thisGenId !== debateGenerationIdRef.current || !isDebatingRef.current || isPausedRef.current) return;
+
+      // Clear any previous timer
+      if (debateTimerRef.current) {
+        clearTimeout(debateTimerRef.current);
+        debateTimerRef.current = null;
+      }
 
       // Determine next turn
       if (speaker === "andhbhakt") {
-        // Next is rational in same round
-        setTimeout(() => {
-          if (isDebatingRef.current && !isPausedRef.current) {
+        debateTimerRef.current = setTimeout(() => {
+          if (thisGenId === debateGenerationIdRef.current && isDebatingRef.current && !isPausedRef.current) {
             executeDebateTurn("rational", roundNum, updatedHistory);
           }
         }, 800);
       } else {
-        // Round complete: check if more rounds remain
         if (roundNum < rounds) {
           setCurrentRound(roundNum + 1);
-          setTimeout(() => {
-            if (isDebatingRef.current && !isPausedRef.current) {
+          debateTimerRef.current = setTimeout(() => {
+            if (thisGenId === debateGenerationIdRef.current && isDebatingRef.current && !isPausedRef.current) {
               executeDebateTurn("andhbhakt", roundNum + 1, updatedHistory);
             }
           }, 1200);
         } else {
-          // Debate finished
           setIsDebating(false);
           setIsSpeakingAudio(false);
         }
       }
     } catch (err: any) {
+      if (err.name === "AbortError" || thisGenId !== debateGenerationIdRef.current) {
+        // Deliberately cancelled by anchor interruption or user stop
+        return;
+      }
       console.error("Debate turn failed:", err);
       setIsTurnLoading(false);
-      setIsDebating(false);
       setIsSpeakingAudio(false);
+      setDebateError(err.message || "Failed to generate debate turn.");
     }
   };
 
@@ -238,12 +302,14 @@ export default function DebateArenaModal({
     setCurrentRound(1);
     setIsDebating(true);
     setIsPaused(false);
+    setDebateError(null);
     executeDebateTurn("andhbhakt", 1, []);
   };
 
   const handleTogglePause = () => {
     if (isPaused) {
       setIsPaused(false);
+      setDebateError(null);
       // Resume from next speaker
       const lastTurn = turns[turns.length - 1];
       const nextSpeaker = lastTurn?.speaker === "andhbhakt" ? "rational" : "andhbhakt";
@@ -254,8 +320,18 @@ export default function DebateArenaModal({
       }
     } else {
       setIsPaused(true);
+      if (debateTimerRef.current) {
+        clearTimeout(debateTimerRef.current);
+        debateTimerRef.current = null;
+      }
+      if (activeAudioResolveRef.current) {
+        activeAudioResolveRef.current();
+        activeAudioResolveRef.current = null;
+      }
       if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
+        try {
+          audioPlayerRef.current.pause();
+        } catch (_) {}
       }
       setIsSpeakingAudio(false);
     }
@@ -269,11 +345,33 @@ export default function DebateArenaModal({
     const interventionText = anchorComment.trim();
     setAnchorComment("");
     setIsAnchorMode(false);
+    setDebateError(null);
 
+    // Cancel any scheduled timer immediately
+    if (debateTimerRef.current) {
+      clearTimeout(debateTimerRef.current);
+      debateTimerRef.current = null;
+    }
+
+    // Invalidate active generation and abort in-flight server fetch
+    debateGenerationIdRef.current++;
+    if (activeFetchAbortControllerRef.current) {
+      activeFetchAbortControllerRef.current.abort();
+      activeFetchAbortControllerRef.current = null;
+    }
+
+    // Cancel active audio playback immediately
+    if (activeAudioResolveRef.current) {
+      activeAudioResolveRef.current();
+      activeAudioResolveRef.current = null;
+    }
     if (audioPlayerRef.current) {
       try {
         audioPlayerRef.current.pause();
+        audioPlayerRef.current.src = "";
+        audioPlayerRef.current.load();
       } catch (_) {}
+      audioPlayerRef.current = null;
     }
     setIsSpeakingAudio(false);
 
@@ -644,6 +742,37 @@ export default function DebateArenaModal({
                 ✕
               </button>
             </form>
+          )}
+
+          {/* Failure / Rate Limit Banner with Retry */}
+          {debateError && (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-500 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <span className="text-base select-none">⚠️</span>
+                <span>{debateError}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDebateError(null);
+                    setIsDebating(true);
+                    setIsPaused(false);
+                    executeDebateTurn(activeSpeaker, currentRound, turns);
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer"
+                >
+                  Retry Turn 🔄
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDebateError(null)}
+                  className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           )}
         </div>
 

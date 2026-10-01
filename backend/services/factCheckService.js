@@ -110,16 +110,17 @@ export async function analyzeTurnFactCheck({
   }
   if (Array.isArray(qdrantResults)) {
     qdrantResults.forEach((item) => {
-      if (item.source_url || item.url || item.publisher) {
+      const candidateUrl = item.source_url || item.url || item.metadata?.url || item.metadata?.source_url;
+      if (candidateUrl && typeof candidateUrl === "string" && candidateUrl.startsWith("http")) {
         candidates.push({
-          title: item.title || item.subject_of_claim || "Audited Source",
-          publisher: item.publisher || item.source_role || "Audited Record",
-          url: item.source_url || item.url || "#",
-          date: item.published_at || item.date || "2024-2026",
-          authorityTier: item.authority_tier || "TIER_2",
-          stance: item.stance || "NEUTRAL",
+          title: item.title || item.metadata?.title || item.subject_of_claim || "Audited Source",
+          publisher: item.publisher || item.metadata?.publisher || item.source_role || "Audited Record",
+          url: candidateUrl,
+          date: item.published_at || item.metadata?.date || item.date || "2024-2026",
+          authorityTier: item.authority_tier || item.metadata?.authority_tier || "TIER_2",
+          stance: item.stance || item.metadata?.stance || "NEUTRAL",
           category: item.category || "FACT_CHECK",
-          claimSummary: item.summary || item.text || "",
+          claimSummary: item.summary || item.text || item.snippet || "",
         });
       }
     });

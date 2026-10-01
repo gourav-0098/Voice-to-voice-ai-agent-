@@ -688,11 +688,14 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
       qdrantResults: adaptiveRag?.evidence || (adaptiveRag?.groundingDetails ? [adaptiveRag.groundingDetails] : []),
     });
 
-    // Synthesize authentic voice audio (Sarvam Aditya vs Sarvam Priya)
+    // Synthesize authentic voice audio with resilient dual-engine fallback
     let audioPayload = null;
     try {
       if (speaker === "andhbhakt") {
         audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, "aditya");
+        if (!audioPayload) {
+          audioPayload = await deepgramTts.generateSpeech(replyText, "aura-arcas-en");
+        }
       } else {
         audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, "priya");
         if (!audioPayload) {
@@ -701,6 +704,9 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
       }
     } catch (ttsErr) {
       console.warn("TTS generation warning in debate arena:", ttsErr.message);
+      try {
+        audioPayload = await deepgramTts.generateSpeech(replyText, speaker === "andhbhakt" ? "aura-arcas-en" : "aura-orion-en");
+      } catch (_) {}
     }
 
     return res.json({
