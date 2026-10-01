@@ -15,6 +15,7 @@ import groqMemoryWorker from "../services/groqMemoryWorker.js";
 import { transcribeAudio } from "../services/sttService.js";
 import guestQuotaService from "../services/guestQuotaService.js";
 import factCheckService from "../services/factCheckService.js";
+import sarvamTtsService from "../services/sarvamTtsService.js";
 
 const router = express.Router();
 
@@ -646,14 +647,19 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
     const speakerName = speaker === "andhbhakt" ? "Saffron Debater" : "Rationalist Analyst";
     const speakerAvatar = speaker === "andhbhakt" ? "🚩" : "⚖️";
 
-    // Alternate voices: Sarvam Bulbul Aditya for Saffron Debater, English Orion for Rationalist
-    const targetVoice = speaker === "andhbhakt" ? "sarvam-aditya" : "aura-orion-en";
+    // Alternate voices: Sarvam Bulbul Aditya for Saffron, Sarvam Bulbul Priya for Rationalist
+    const targetVoice = speaker === "andhbhakt" ? "sarvam-aditya" : "sarvam-priya";
 
     // Extract last opposing statement if available
     const lastTurn = history && history.length > 0 ? history[history.length - 1] : null;
-    const debateContext = lastTurn
-      ? `Your opponent said: "${lastTurn.text}". Deliver a direct, sharp rebuttal.`
-      : `You are opening the debate on: "${topic}".`;
+    let debateContext = `You are opening the debate on: "${topic}".`;
+    if (lastTurn) {
+      if (lastTurn.speaker === "moderator") {
+        debateContext = `The TV Debate Anchor/Moderator stepped in with: "${lastTurn.text}". Address the Anchor with respect and deliver your sharpest point directly in 2 sentences.`;
+      } else {
+        debateContext = `Your opponent said: "${lastTurn.text}". Deliver a direct, sharp, point-by-point rebuttal.`;
+      }
+    }
 
     // Hybrid Grounding for the active speaker persona
     const adaptiveRag = await adaptiveRagService.getPersonaGrounding(`${topic} ${lastTurn?.text || ""}`, speaker);
@@ -668,19 +674,34 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
 
     // Call AI to generate concise spoken debate turn
     const aiResult = await aiService.generateAIResponse({
-      prompt: `${debateContext} Respond directly to your opponent in 2 natural spoken sentences.`,
-      history: history.slice(-4).map((h) => ({ role: h.speaker === speaker ? "assistant" : "user", text: h.text })),
+      prompt: `${debateContext} Respond directly in 2 natural spoken sentences.`,
+      history: history.slice(-6).map((h) => ({ role: h.speaker === speaker ? "assistant" : "user", text: h.text })),
       systemInstruction,
       persona: speaker,
     });
 
     const replyText = aiResult.reply;
 
-    // Synthesize voice
+    // Fact-Check this turn using factCheckService (< 3ms)
+    const factCheck = await factCheckService.analyzeTurnFactCheck({
+      query: replyText,
+      qdrantResults: adaptiveRag?.evidence || (adaptiveRag?.groundingDetails ? [adaptiveRag.groundingDetails] : []),
+    });
+
+    // Synthesize authentic voice audio (Sarvam Aditya vs Sarvam Priya)
     let audioPayload = null;
     try {
-      audioPayload = await deepgramTts.generateSpeech(replyText, targetVoice);
-    } catch (_) {}
+      if (speaker === "andhbhakt") {
+        audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, "aditya");
+      } else {
+        audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, "priya");
+        if (!audioPayload) {
+          audioPayload = await deepgramTts.generateSpeech(replyText, "aura-orion-en");
+        }
+      }
+    } catch (ttsErr) {
+      console.warn("TTS generation warning in debate arena:", ttsErr.message);
+    }
 
     return res.json({
       status: "success",
@@ -690,10 +711,11 @@ router.post("/debate/turn", optionalVerifyToken, async (req, res) => {
       speakerAvatar,
       reply: replyText,
       audio: audioPayload?.audioBase64 || null,
-      audioFormat: audioPayload?.format || "audio/wav",
+      audioFormat: audioPayload?.format || "audio/mp3",
       voiceModel: targetVoice,
       ragSource: adaptiveRag.ragSource,
       groundingDetails: adaptiveRag.groundingDetails,
+      factCheck,
       nextSpeaker,
       latencyMs: Date.now() - t0,
     });

@@ -39,6 +39,9 @@ scratch/
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Scraper runtime status
+backend/data/scraper_status.json
 desktop.ini
 
 # IDE & Editor caches
