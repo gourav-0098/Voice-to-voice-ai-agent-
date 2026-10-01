@@ -758,7 +758,8 @@ export default function DebateArenaModal({
                     setDebateError(null);
                     setIsDebating(true);
                     setIsPaused(false);
-                    executeDebateTurn(activeSpeaker, currentRound, turns);
+                    const speakerToRun = activeSpeaker === "rational" ? "rational" : "andhbhakt";
+                    executeDebateTurn(speakerToRun, currentRound, turns);
                   }}
                   className="px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer"
                 >
