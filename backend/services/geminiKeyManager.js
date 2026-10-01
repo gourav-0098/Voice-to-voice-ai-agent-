@@ -94,14 +94,14 @@ class GeminiKeyManager {
    */
   markRateLimited(apiKey, cooldownSeconds = 60) {
     if (!apiKey) return;
-    const masked = apiKey.slice(0, 6) + "..." + apiKey.slice(-4);
+    const keySlot = this.getKeys().indexOf(apiKey) + 1;
     const until = Date.now() + cooldownSeconds * 1000;
     const current = this.keyStatus.get(apiKey) || { failureCount: 0 };
     this.keyStatus.set(apiKey, {
       rateLimitedUntil: until,
       failureCount: current.failureCount + 1,
     });
-    console.warn(`⏳ [GEMINI RATE-LIMIT] Key (${masked}) rate-limited (429). Cooled down for ${cooldownSeconds}s. Other keys will take traffic.`);
+    console.warn(`⏳ [GEMINI RATE-LIMIT] Key slot #${keySlot || 1} rate-limited (429). Cooled down for ${cooldownSeconds}s.`);
   }
 
   /**
@@ -141,7 +141,7 @@ class GeminiKeyManager {
 
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(startingIndex + i) % keys.length];
-      const masked = key.slice(0, 6) + "..." + key.slice(-4);
+      const slotNum = ((startingIndex + i) % keys.length) + 1;
       const status = this.keyStatus.get(key);
 
       // Skip keys cooling down unless it's our last remaining option
@@ -163,9 +163,9 @@ class GeminiKeyManager {
 
         if (isRateLimit) {
           this.markRateLimited(key, 60);
-          console.warn(`🔄 [GEMINI FAILOVER] Key (${masked}) hit quota limit. Automatically switching to next available key...`);
+          console.warn(`🔄 [GEMINI FAILOVER] Key slot #${slotNum} reached quota limit. Switching to next key...`);
         } else {
-          console.warn(`⚠️ [GEMINI KEY ERROR] Key (${masked}) error:`, msg);
+          console.warn(`⚠️ [GEMINI KEY ERROR] Key slot #${slotNum} reported error:`, msg);
         }
       }
     }

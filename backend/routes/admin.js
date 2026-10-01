@@ -17,8 +17,7 @@ router.use(verifyToken, adminOnly);
 
 const qdrantUrl =
   process.env.QDRANT_URL ||
-  process.env.cluster_endpoint ||
-  "https://a2528ffa-9391-47df-ae3c-e4a0ad004f76.eu-central-1-0.aws.cloud.qdrant.io";
+  process.env.cluster_endpoint;
 
 const qdrantApiKey =
   process.env.QDRANT_API_KEY ||
@@ -169,9 +168,13 @@ router.post("/users/:id/toggle-role", async (req, res) => {
       return res.status(404).json({ error: "User not found." });
     }
 
-    // Do not allow demoting primary root admin
-    if (targetUser.email?.toLowerCase() === "r19216871@gamil.com") {
-      return res.status(400).json({ error: "Primary system admin account cannot be demoted." });
+    // Do not allow self-demotion or demoting designated environment admins
+    if (req.user._id.toString() === targetUser._id.toString()) {
+      return res.status(400).json({ error: "Cannot demote your own administrator account." });
+    }
+    const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase());
+    if (adminEmails.includes(targetUser.email?.toLowerCase())) {
+      return res.status(400).json({ error: "Designated system admin account cannot be demoted." });
     }
 
     const newRole = targetUser.role === "admin" ? "user" : "admin";

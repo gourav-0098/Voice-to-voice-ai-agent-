@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-const ADMIN_EMAILS = ["r19216871@gamil.com", "r19216871@gmail.com"];
+const getAdminEmails = () => (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase());
 
 const userSchema = new mongoose.Schema(
   {
@@ -90,7 +90,7 @@ const userSchema = new mongoose.Schema(
 
 // Auto-assign admin role for designated admin email
 userSchema.pre("save", async function () {
-  if (ADMIN_EMAILS.includes(this.email?.toLowerCase())) {
+  if (getAdminEmails().includes(this.email?.toLowerCase())) {
     this.role = "admin";
   }
 
@@ -109,7 +109,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 userSchema.methods.checkAndRecordVoiceCall = async function () {
   const isAdmin =
     this.role === "admin" ||
-    ADMIN_EMAILS.includes(this.email?.toLowerCase());
+    getAdminEmails().includes(this.email?.toLowerCase());
 
   if (isAdmin) {
     // Record call for analytics, but bypass all rate limits!
@@ -172,7 +172,7 @@ userSchema.methods.checkAndRecordVoiceCall = async function () {
 userSchema.methods.getQuotaSummary = function () {
   const isAdmin =
     this.role === "admin" ||
-    ADMIN_EMAILS.includes(this.email?.toLowerCase());
+    getAdminEmails().includes(this.email?.toLowerCase());
 
   if (isAdmin) {
     return {

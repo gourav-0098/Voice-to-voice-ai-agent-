@@ -51,10 +51,7 @@ export default function LoginPage() {
         localStorage.setItem("chatly_user", JSON.stringify(data.user));
       }
 
-      const isAdmin =
-        data.user?.role === "admin" ||
-        data.user?.email?.toLowerCase() === "r19216871@gamil.com" ||
-        data.user?.email?.toLowerCase() === "r19216871@gmail.com";
+      const isAdmin = data.user?.role === "admin";
 
       const targetPath = isAdmin ? "/admin" : "/dashboard";
       setSuccessMsg(`Welcome back, ${data.user.name}! Redirecting to ${isAdmin ? "Admin Console" : "Dashboard"}...`);

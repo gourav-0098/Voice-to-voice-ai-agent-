@@ -25,11 +25,21 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 console.log("📍 [CHECKPOINT 1] Config loaded. Port:", process.env.PORT || 5000, "Vercel mode:", !!process.env.VERCEL);
 
 const app = express();
+app.set("trust proxy", 1);
+
+// Production Secret Verification
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    throw new Error("FATAL: JWT_SECRET environment variable is missing in production.");
+  } else {
+    console.warn("⚠️ [SECURITY WARNING] JWT_SECRET is not configured in environment variables.");
+  }
+}
 
 // Request logging middleware (logs every single incoming request)
 app.use((req, res, next) => {
   const start = Date.now();
-  console.log(`➡️  [HTTP ${req.method}] ${req.url} - IP: ${req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown"}`);
+  console.log(`➡️  [HTTP ${req.method}] ${req.url} - IP: ${req.ip || "unknown"}`);
   
   res.on("finish", () => {
     const duration = Date.now() - start;
@@ -66,14 +76,15 @@ const allowedOrigins = [
   "https://voice-to-voice-ai-agent-eta.vercel.app",
 ];
 
+const vercelOriginPattern = /^https:\/\/voice-to-voice-ai-agent(-[a-z0-9-]+)?\.vercel\.app$/i;
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log(`📍 [CHECKPOINT CORS] Request Origin: ${origin || "Same-Origin / Direct"}`);
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+      if (!origin || allowedOrigins.includes(origin) || vercelOriginPattern.test(origin)) {
         callback(null, true);
       } else {
-        callback(null, true);
+        callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
@@ -103,13 +114,6 @@ app.get("/", (req, res) => {
     service: "Chatly Voice AI Backend",
     environment: process.env.NODE_ENV || (process.env.VERCEL ? "production (vercel)" : "development"),
     timestamp: new Date().toISOString(),
-    diagnostics: {
-      hasMongoUri: !!process.env.MONGODB_URI,
-      hasGeminiKey: !!process.env.GEMINI_API_KEY,
-      hasJwtSecret: !!process.env.JWT_SECRET,
-      hasDeepgramKey: !!process.env.DEEPGRAM_API_KEY,
-      hasQdrantKey: !!process.env.QDRANT_API_KEY,
-    },
   });
 });
 
@@ -122,10 +126,12 @@ app.use((req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error(`💥 [CHECKPOINT 500 CRITICAL ERROR]:`, err.message || err);
-  console.error(err.stack);
+  if (err.message === "Not allowed by CORS") {
+    return res.status(403).json({ error: "Access denied by CORS policy." });
+  }
   res.status(500).json({
     error: "Internal server error",
-    details: err.message,
+    details: process.env.NODE_ENV === "development" ? err.message : undefined,
     timestamp: new Date().toISOString(),
   });
 });

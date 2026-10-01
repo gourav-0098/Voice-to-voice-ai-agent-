@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { isSafeHttpUrl } from "../utils/urlSecurity";
 
 export interface GroundingDrawerData {
   ragSource: string;
@@ -217,26 +218,43 @@ export default function GroundingSourceDrawer({
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 block mb-1.5">
                 Official Grounding Citation
               </label>
-              <a
-                href={details.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`p-3.5 rounded-xl border flex items-center justify-between transition group cursor-pointer ${
-                  isDark ? "bg-white/5 border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 text-zinc-200" : "bg-slate-50 border-slate-200 hover:border-emerald-500/50 hover:bg-emerald-50 text-slate-800"
-                }`}
-              >
-                <div className="truncate pr-3">
-                  <span className="font-semibold text-xs block truncate group-hover:text-emerald-500">
-                    {details.sourceTitle || details.sourceUrl}
+              {isSafeHttpUrl(details.sourceUrl) ? (
+                <a
+                  href={details.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`p-3.5 rounded-xl border flex items-center justify-between transition group cursor-pointer ${
+                    isDark ? "bg-white/5 border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 text-zinc-200" : "bg-slate-50 border-slate-200 hover:border-emerald-500/50 hover:bg-emerald-50 text-slate-800"
+                  }`}
+                >
+                  <div className="truncate pr-3">
+                    <span className="font-semibold text-xs block truncate group-hover:text-emerald-500">
+                      {details.sourceTitle || details.sourceUrl}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 truncate block">
+                      {details.sourceUrl}
+                    </span>
+                  </div>
+                  <span className="text-sm select-none opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition">
+                    ↗️
                   </span>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-500 truncate block">
-                    {details.sourceUrl}
-                  </span>
+                </a>
+              ) : (
+                <div
+                  className={`p-3.5 rounded-xl border flex items-center justify-between ${
+                    isDark ? "bg-white/5 border-white/10 text-zinc-400" : "bg-slate-50 border-slate-200 text-slate-600"
+                  }`}
+                >
+                  <div className="truncate pr-3">
+                    <span className="font-semibold text-xs block truncate">
+                      {details.sourceTitle || "Non-clickable reference"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 truncate block">
+                      {details.sourceUrl}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-sm select-none opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition">
-                  ↗️
-                </span>
-              </a>
+              )}
             </div>
           )}
         </div>

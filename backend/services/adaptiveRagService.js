@@ -40,14 +40,11 @@ try {
   console.warn("⚠️ [ADAPTIVE RAG] Could not preload local datasets:", err.message);
 }
 
-const QDRANT_URL =
-  process.env.QDRANT_URL ||
-  process.env.cluster_endpoint ||
-  "https://a2528ffa-9391-47df-ae3c-e4a0ad004f76.eu-central-1-0.aws.cloud.qdrant.io";
+const QDRANT_URL = process.env.QDRANT_URL;
+if (!QDRANT_URL) console.warn('[adaptiveRag] QDRANT_URL not set');
 
-const QDRANT_API_KEY =
-  process.env.QDRANT_API_KEY ||
-  process.env.Qdrant_api;
+const QDRANT_API_KEY = process.env.QDRANT_API_KEY || process.env.Qdrant_api;
+if (!QDRANT_API_KEY) console.warn('[adaptiveRag] QDRANT_API_KEY not set');
 
 const EMBEDDER_URL = process.env.EMBEDDER_URL || "http://127.0.0.1:5005";
 
@@ -229,7 +226,7 @@ export function searchLocalFallback(queryText, limit = 2) {
       text: item.fact_check_summary,
       claim: item.claim,
       sourceType: item.source_type || "Fact-Check Record",
-      sourceUrl: "https://factcheck.org",
+      sourceUrl: item.source_url || null,
       score,
       origin: "local_fact_checks",
     });
@@ -239,8 +236,8 @@ export function searchLocalFallback(queryText, limit = 2) {
     if (item.stats_and_facts) {
       evidence.push({
         text: item.stats_and_facts,
-        sourceType: "Reported Governance & Economic Stats",
-        sourceUrl: "https://www.pmindia.gov.in",
+        sourceType: item.source_type || "Reported Governance & Economic Stats",
+        sourceUrl: item.source_url || null,
         score,
         origin: "local_dataset_stats",
       });
@@ -376,7 +373,7 @@ export async function searchPoliticalDebates(vector, queryText = "", limit = 2, 
         targetEntity: p.payload?.graph_relations?.target_entity || (p.payload?.entity_targets ? p.payload.entity_targets[0] : "Government / Nation"),
         counterEntity: p.payload?.graph_relations?.counter_entity || "Opposition",
         sourceType: p.payload?.source_type || "Political Discourse",
-        sourceUrl: p.payload?.source_url || "https://sansad.in",
+        sourceUrl: p.payload?.source_url || null,
         authority: p.payload?.authority || 0.70,
       }));
 
@@ -566,7 +563,7 @@ export async function getPersonaGrounding(queryText, persona = "conversational")
       claim: fc.claim,
       context: fc.context,
       sourceType: fc.sourceType || "Fact Check Organization",
-      sourceUrl: "https://factcheck.org",
+      sourceUrl: fc.sourceUrl || null,
       authorityScore: 0.88,
       score: fc.rerankScore || fc.score,
       category: "evidence",
@@ -581,7 +578,7 @@ export async function getPersonaGrounding(queryText, persona = "conversational")
         text: d.statsAndFacts || d.text,
         topic: d.topic,
         sourceType: d.sourceType || "Reported Governance & Historical Records",
-        sourceUrl: d.sourceUrl || "https://www.pmindia.gov.in",
+        sourceUrl: d.sourceUrl || null,
         authorityScore: d.authority || 0.90,
         score: d.rerankScore || d.score,
         category: "evidence",

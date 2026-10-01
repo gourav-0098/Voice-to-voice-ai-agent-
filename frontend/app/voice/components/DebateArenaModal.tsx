@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { API_BASE } from "../../config";
 import { FactCheckData } from "./FactCheckHUD";
+import { isSafeHttpUrl } from "../utils/urlSecurity";
 
 export interface DebateTurn {
   round: number;
@@ -61,6 +62,7 @@ export default function DebateArenaModal({
   const debateGenerationIdRef = useRef<number>(0);
   const activeFetchAbortControllerRef = useRef<AbortController | null>(null);
   const activeAudioResolveRef = useRef<(() => void) | null>(null);
+  const turnsRef = useRef<DebateTurn[]>([]);
 
   useEffect(() => {
     isDebatingRef.current = isDebating;
@@ -69,6 +71,29 @@ export default function DebateArenaModal({
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
+
+  // Tab Backgrounding & Visibility Resilience
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (audioPlayerRef.current) {
+          try {
+            audioPlayerRef.current.pause();
+          } catch (_) {}
+        }
+      } else {
+        if (isDebatingRef.current && !isPausedRef.current && audioPlayerRef.current && audioPlayerRef.current.src) {
+          audioPlayerRef.current.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -100,8 +125,10 @@ export default function DebateArenaModal({
   // Stop debate and audio on close or unmount
   const stopDebate = () => {
     setIsDebating(false);
+    isDebatingRef.current = false;
     setIsTurnLoading(false);
     setIsPaused(false);
+    isPausedRef.current = false;
     setIsSpeakingAudio(false);
     setIsAnchorMode(false);
     setDebateError(null);
@@ -150,6 +177,7 @@ export default function DebateArenaModal({
         try {
           audioPlayerRef.current.pause();
           audioPlayerRef.current.src = "";
+          audioPlayerRef.current.load();
         } catch (_) {}
       }
 
@@ -188,6 +216,21 @@ export default function DebateArenaModal({
     // Advance monotonic generation ID so obsolete responses are discarded
     debateGenerationIdRef.current++;
     const thisGenId = debateGenerationIdRef.current;
+
+    // Immediately stop and unload any active audio before starting the next turn
+    if (activeAudioResolveRef.current) {
+      activeAudioResolveRef.current();
+      activeAudioResolveRef.current = null;
+    }
+    if (audioPlayerRef.current) {
+      try {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.src = "";
+        audioPlayerRef.current.load();
+      } catch (_) {}
+      audioPlayerRef.current = null;
+    }
+    setIsSpeakingAudio(false);
 
     // Abort previous in-flight fetch if any
     if (activeFetchAbortControllerRef.current) {
@@ -230,7 +273,7 @@ export default function DebateArenaModal({
       }
 
       const data = await response.json();
-      if (thisGenId !== debateGenerationIdRef.current) return;
+      if (thisGenId !== debateGenerationIdRef.current || !isDebatingRef.current || isPausedRef.current) return;
 
       setIsTurnLoading(false);
 
@@ -247,11 +290,12 @@ export default function DebateArenaModal({
         factCheck: data.factCheck || null,
       };
 
-      const updatedHistory = [...currentHistory, newTurn];
+      const updatedHistory = [...turnsRef.current, newTurn];
+      turnsRef.current = updatedHistory;
       setTurns(updatedHistory);
 
-      // Play spoken audio for this turn
-      if (data.audio && thisGenId === debateGenerationIdRef.current) {
+      // Play spoken audio for this turn only if generation ID matches and debate is still active & unpaused
+      if (data.audio && thisGenId === debateGenerationIdRef.current && isDebatingRef.current && !isPausedRef.current) {
         await playTurnAudio(data.audio, data.audioFormat || "audio/mp3");
       }
 
@@ -268,7 +312,7 @@ export default function DebateArenaModal({
       if (speaker === "andhbhakt") {
         debateTimerRef.current = setTimeout(() => {
           if (thisGenId === debateGenerationIdRef.current && isDebatingRef.current && !isPausedRef.current) {
-            executeDebateTurn("rational", roundNum, updatedHistory);
+            executeDebateTurn("rational", roundNum, turnsRef.current);
           }
         }, 800);
       } else {
@@ -276,17 +320,18 @@ export default function DebateArenaModal({
           setCurrentRound(roundNum + 1);
           debateTimerRef.current = setTimeout(() => {
             if (thisGenId === debateGenerationIdRef.current && isDebatingRef.current && !isPausedRef.current) {
-              executeDebateTurn("andhbhakt", roundNum + 1, updatedHistory);
+              executeDebateTurn("andhbhakt", roundNum + 1, turnsRef.current);
             }
           }, 1200);
         } else {
           setIsDebating(false);
+          isDebatingRef.current = false;
           setIsSpeakingAudio(false);
         }
       }
     } catch (err: any) {
       if (err.name === "AbortError" || thisGenId !== debateGenerationIdRef.current) {
-        // Deliberately cancelled by anchor interruption or user stop
+        // Deliberately cancelled by anchor interruption, pause, or user stop
         return;
       }
       console.error("Debate turn failed:", err);
@@ -299,9 +344,12 @@ export default function DebateArenaModal({
   const handleStartDebate = () => {
     stopDebate();
     setTurns([]);
+    turnsRef.current = [];
     setCurrentRound(1);
     setIsDebating(true);
+    isDebatingRef.current = true;
     setIsPaused(false);
+    isPausedRef.current = false;
     setDebateError(null);
     executeDebateTurn("andhbhakt", 1, []);
   };
@@ -309,20 +357,34 @@ export default function DebateArenaModal({
   const handleTogglePause = () => {
     if (isPaused) {
       setIsPaused(false);
+      isPausedRef.current = false;
       setDebateError(null);
-      // Resume from next speaker
-      const lastTurn = turns[turns.length - 1];
-      const nextSpeaker = lastTurn?.speaker === "andhbhakt" ? "rational" : "andhbhakt";
+      setIsDebating(true);
+      isDebatingRef.current = true;
+      // Resume from next speaker using synchronous ref
+      const currentHistory = turnsRef.current;
+      const lastTurn = currentHistory[currentHistory.length - 1];
+      const nextSpeaker = lastTurn ? (lastTurn.speaker === "andhbhakt" ? "rational" : "andhbhakt") : "andhbhakt";
       const nextRound = lastTurn?.speaker === "rational" ? currentRound + 1 : currentRound;
       if (nextRound <= rounds) {
         setCurrentRound(nextRound);
-        executeDebateTurn(nextSpeaker, nextRound, turns);
+        executeDebateTurn(nextSpeaker, nextRound, currentHistory);
+      } else {
+        setIsDebating(false);
+        isDebatingRef.current = false;
       }
     } else {
       setIsPaused(true);
+      isPausedRef.current = true;
       if (debateTimerRef.current) {
         clearTimeout(debateTimerRef.current);
         debateTimerRef.current = null;
+      }
+      // Invalidate current generation to abort in-flight requests and prevent rogue continuations
+      debateGenerationIdRef.current++;
+      if (activeFetchAbortControllerRef.current) {
+        activeFetchAbortControllerRef.current.abort();
+        activeFetchAbortControllerRef.current = null;
       }
       if (activeAudioResolveRef.current) {
         activeAudioResolveRef.current();
@@ -331,9 +393,13 @@ export default function DebateArenaModal({
       if (audioPlayerRef.current) {
         try {
           audioPlayerRef.current.pause();
+          audioPlayerRef.current.src = "";
+          audioPlayerRef.current.load();
         } catch (_) {}
+        audioPlayerRef.current = null;
       }
       setIsSpeakingAudio(false);
+      setIsTurnLoading(false);
     }
   };
 
@@ -383,13 +449,16 @@ export default function DebateArenaModal({
       text: interventionText,
     };
 
-    const updated = [...turns, anchorTurn];
+    const updated = [...turnsRef.current, anchorTurn];
+    turnsRef.current = updated;
     setTurns(updated);
 
     // Opposing speaker directly responds to Anchor
     const nextSpeaker = activeSpeaker === "andhbhakt" ? "rational" : "andhbhakt";
     setIsDebating(true);
+    isDebatingRef.current = true;
     setIsPaused(false);
+    isPausedRef.current = false;
     executeDebateTurn(nextSpeaker, currentRound, updated);
   };
 
@@ -757,9 +826,11 @@ export default function DebateArenaModal({
                   onClick={() => {
                     setDebateError(null);
                     setIsDebating(true);
+                    isDebatingRef.current = true;
                     setIsPaused(false);
+                    isPausedRef.current = false;
                     const speakerToRun = activeSpeaker === "rational" ? "rational" : "andhbhakt";
-                    executeDebateTurn(speakerToRun, currentRound, turns);
+                    executeDebateTurn(speakerToRun, currentRound, turnsRef.current);
                   }}
                   className="px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer"
                 >
@@ -857,7 +928,7 @@ export default function DebateArenaModal({
                     ))}
 
                     {/* Verified Source Link */}
-                    {turn.factCheck?.primaryCitation?.url && (
+                    {turn.factCheck?.primaryCitation?.url && isSafeHttpUrl(turn.factCheck.primaryCitation.url) && (
                       <a
                         href={turn.factCheck.primaryCitation.url}
                         target="_blank"

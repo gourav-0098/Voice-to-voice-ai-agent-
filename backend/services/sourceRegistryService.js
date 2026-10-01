@@ -71,8 +71,10 @@ export function evaluateSourceAuthority({ url = "", publisher = "", topic = "" }
   // 1. Direct match in registry sources
   for (const src of reg.sources) {
     const pattern = src.pattern.toLowerCase();
-    const isDomainMatch = domain && (domain === pattern || domain.endsWith(pattern));
-    const isNameMatch = normPub && (normPub.includes(pattern) || src.name.toLowerCase().includes(normPub));
+    // Enforce exact domain or true subdomain boundary (.pattern)
+    const isDomainMatch = domain && (domain === pattern || domain.endsWith("." + pattern));
+    // Strict publisher match: exact name match or exact pattern match
+    const isNameMatch = normPub && (normPub === pattern || normPub === src.name.toLowerCase());
 
     if (isDomainMatch || isNameMatch) {
       let score = src.authority_score;
@@ -89,9 +91,11 @@ export function evaluateSourceAuthority({ url = "", publisher = "", topic = "" }
         }
       }
 
+      const authorityTier = score >= 0.90 ? "TIER_1" : score >= 0.80 ? "TIER_2" : score >= 0.70 ? "TIER_3" : "TIER_4";
       return {
         authorityScore: Math.round(score * 100) / 100,
         tier: score >= 0.90 ? "tier_1_official" : score >= 0.80 ? "tier_2_established" : "tier_3_factcheck",
+        authorityTier,
         sourceName: src.name,
         isPrimary,
         domain: domain || pattern,
@@ -99,21 +103,23 @@ export function evaluateSourceAuthority({ url = "", publisher = "", topic = "" }
     }
   }
 
-  // 2. Heuristic checks if not in registry
-  if (domain.endsWith(".gov.in") || domain.endsWith(".nic.in")) {
+  // 2. Heuristic checks for verified official government or academic TLDs (Unregistered in primary registry)
+  if (domain && (domain === "gov.in" || domain.endsWith(".gov.in") || domain === "nic.in" || domain.endsWith(".nic.in"))) {
     return {
-      authorityScore: 0.94,
-      tier: "tier_1_official",
+      authorityScore: 0.85,
+      tier: "tier_2_established",
+      authorityTier: "TIER_2",
       sourceName: publisher || "Government of India Portal",
-      isPrimary: true,
+      isPrimary: false,
       domain,
     };
   }
 
-  if (domain.endsWith(".edu") || domain.endsWith(".ac.in")) {
+  if (domain && (domain === "edu" || domain.endsWith(".edu") || domain === "ac.in" || domain.endsWith(".ac.in"))) {
     return {
       authorityScore: 0.82,
       tier: "tier_2_established",
+      authorityTier: "TIER_2",
       sourceName: publisher || "Academic Institution",
       isPrimary: false,
       domain,
@@ -124,6 +130,7 @@ export function evaluateSourceAuthority({ url = "", publisher = "", topic = "" }
   return {
     authorityScore: reg.default_tiers.tier_4_general_web.authority_score || 0.45,
     tier: "tier_4_general_web",
+    authorityTier: "TIER_4",
     sourceName: publisher || domain || "Web Source",
     isPrimary: false,
     domain,

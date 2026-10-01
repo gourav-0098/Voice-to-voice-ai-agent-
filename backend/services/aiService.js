@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GoogleGenAI } from "@google/genai";
 import toolService, { GROQ_TOOLS, GEMINI_FUNCTION_DECLARATIONS, executeTool } from "./toolService.js";
+import { toolExecutor } from "../tools/toolExecutor.js";
 import { geminiKeyManager } from "./geminiKeyManager.js";
 import { systemSettingsService } from "./systemSettingsService.js";
 
@@ -274,25 +274,37 @@ async function callGemini({ prompt, history = [], systemInstruction }) {
         if (functionCalls.length > 0) {
           contents.push(candidate.content);
 
+          const toolCalls = functionCalls.map((fc) => ({
+            toolName: fc.functionCall.name,
+            args: fc.functionCall.args || {},
+          }));
+
+          console.log(`⚡ [GEMINI TOOL CALLS] Parallel dispatching ${toolCalls.length} calls:`, toolCalls.map(c => c.toolName));
+          const parallelResults = await toolExecutor.executeToolsParallel(toolCalls, { timeoutMs: 8000 });
+
           const toolParts = [];
-          for (const fc of functionCalls) {
+          for (let i = 0; i < functionCalls.length; i++) {
+            const fc = functionCalls[i];
             const toolName = fc.functionCall.name;
-            const toolArgs = fc.functionCall.args || {};
-            console.log(`⚡ [GEMINI TOOL CALL] ${model} triggered: ${toolName}`, toolArgs);
+            const res = parallelResults[i];
 
             if (!toolUsed) {
               toolUsed = {
                 name: toolName,
-                detail: toolArgs.location || toolArgs.query || toolArgs.expression || toolArgs.url || "",
-                args: toolArgs,
+                detail: res.voiceSummary || fc.functionCall.args?.query || fc.functionCall.args?.location || "",
+                args: fc.functionCall.args || {},
+                sources: res.sources || [],
               };
             }
 
-            const toolResult = await executeTool(toolName, toolArgs);
+            const toolOutput = res.ok
+              ? (res.voiceSummary || JSON.stringify(res.data))
+              : `Error: ${res.error?.message || "Tool execution failed"}`;
+
             toolParts.push({
               functionResponse: {
                 name: toolName,
-                response: { result: toolResult },
+                response: { result: toolOutput },
               },
             });
           }
@@ -411,33 +423,44 @@ async function callGroq({ prompt, history = [], systemInstruction, model = "qwen
       if (message?.tool_calls && message.tool_calls.length > 0) {
         messages.push(message);
 
-        for (const toolCall of message.tool_calls) {
-          const toolName = toolCall.function.name;
+        const toolCalls = message.tool_calls.map((tc) => {
           let toolArgs = {};
           try {
-            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+            toolArgs = JSON.parse(tc.function.arguments || "{}");
           } catch (_) {}
+          return {
+            toolName: tc.function.name,
+            args: toolArgs,
+          };
+        });
 
-          console.log(`⚡ [GROQ BACKUP TOOL CALL] Model triggered tool: ${toolName}`, toolArgs);
-          const toolDetail =
-            toolArgs.expression || toolArgs.query || toolArgs.location || toolArgs.url || "";
+        console.log(`⚡ [GROQ TOOL CALLS] Parallel dispatching ${toolCalls.length} calls:`, toolCalls.map(c => c.toolName));
+        const parallelResults = await toolExecutor.executeToolsParallel(toolCalls, { timeoutMs: 8000 });
+
+        for (let i = 0; i < message.tool_calls.length; i++) {
+          const tc = message.tool_calls[i];
+          const call = toolCalls[i];
+          const res = parallelResults[i];
 
           if (!toolUsed) {
             toolUsed = {
-              name: toolName,
-              detail: toolDetail,
-              queryOrUrl: toolDetail,
-              args: toolArgs,
+              name: call.toolName,
+              detail: res.voiceSummary || call.args.query || call.args.expression || call.args.location || "",
+              queryOrUrl: call.args.query || call.args.url || "",
+              args: call.args,
+              sources: res.sources || [],
             };
           }
 
-          const toolResult = await executeTool(toolName, toolArgs);
+          const toolOutput = res.ok
+            ? (res.voiceSummary || JSON.stringify(res.data))
+            : `Error: ${res.error?.message || "Tool execution failed"}`;
 
           messages.push({
             role: "tool",
-            tool_call_id: toolCall.id,
-            name: toolName,
-            content: String(toolResult),
+            tool_call_id: tc.id,
+            name: call.toolName,
+            content: String(toolOutput),
           });
         }
         continue;

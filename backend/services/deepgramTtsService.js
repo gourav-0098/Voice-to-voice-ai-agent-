@@ -5,9 +5,8 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const DEEPGRAM_API_KEY =
-  process.env.DEEPGRAM_API_KEY ||
-  "910e2755e332885f111ed17c514acb5ba03e81ab";
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+if (!DEEPGRAM_API_KEY) console.warn('[deepgramTts] DEEPGRAM_API_KEY not set');
 
 const MODEL_NAME = "flux-alexis-en";
 const MODEL_UUID = "36f312ab-d06a-4c1c-9071-ba18bebb29e9";

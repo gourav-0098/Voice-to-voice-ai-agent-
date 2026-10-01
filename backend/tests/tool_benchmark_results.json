@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-10-01T09:00:44.405Z",
+  "metrics": {
+    "router": {
+      "accuracy": 100,
+      "p50Ms": 0.11,
+      "p95Ms": 0.38
+    },
+    "calculator": {
+      "p50Ms": 0.03,
+      "p95Ms": 0.36
+    },
+    "webSearch": {
+      "p50Ms": 1635.63,
+      "p95Ms": 2417.11,
+      "avgResults": 4.3,
+      "citationCompleteness": 100
+    },
+    "extraction": {
+      "successRate": 100,
+      "p50Ms": 202.86,
+      "p95Ms": 482.87
+    },
+    "parallel": {
+      "p50Ms": 263,
+      "p95Ms": 2029.43,
+      "successRate": 100
+    },
+    "telemetry": {
+      "calculate_expression": {
+        "toolName": "calculate_expression",
+        "totalCalls": 22,
+        "successCount": 22,
+        "failureCount": 0,
+        "successRate": 1,
+        "cacheHitRate": 0,
+        "p50LatencyMs": 0,
+        "p95LatencyMs": 1,
+        "providers": {
+          "default": 22
+        },
+        "errors": {}
+      },
+      "get_current_time": {
+        "toolName": "get_current_time",
+        "totalCalls": 2,
+        "successCount": 2,
+        "failureCount": 0,
+        "successRate": 1,
+        "cacheHitRate": 0,
+        "p50LatencyMs": 16,
+        "p95LatencyMs": 16,
+        "providers": {
+          "default": 2
+        },
+        "errors": {}
+      },
+      "currency_conversion": {
+        "toolName": "currency_conversion",
+        "totalCalls": 1,
+        "successCount": 1,
+        "failureCount": 0,
+        "successRate": 1,
+        "cacheHitRate": 0,
+        "p50LatencyMs": 247,
+        "p95LatencyMs": 247,
+        "providers": {
+          "default": 1
+        },
+        "errors": {}
+      },
+      "get_weather": {
+        "toolName": "get_weather",
+        "totalCalls": 1,
+        "successCount": 1,
+        "failureCount": 0,
+        "successRate": 1,
+        "cacheHitRate": 0,
+        "p50LatencyMs": 2029,
+        "p95LatencyMs": 2029,
+        "providers": {
+          "default": 1
+        },
+        "errors": {}
+      }
+    }
+  }
+}

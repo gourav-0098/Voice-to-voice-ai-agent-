@@ -7,7 +7,11 @@
     "build": "echo 'Build ready'",
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/security_regression.test.mjs && node scripts/rag/security_benchmark.mjs",
+    "test:security": "node tests/security_regression.test.mjs",
+    "test:rag-security": "node scripts/rag/security_benchmark.mjs",
+    "test:tools": "node tests/tool_engine.test.mjs && node tests/web_search.test.mjs && node tests/tool_security.test.mjs",
+    "benchmark:tools": "node tests/tool_benchmark.mjs"
   },
   "keywords": [],
   "author": "",

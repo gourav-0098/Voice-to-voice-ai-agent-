@@ -10,8 +10,11 @@ const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 // Helper to generate JWT
 const generateToken = (userId, email) => {
-  const secret = process.env.JWT_SECRET || "chatly_default_secret_key_change_in_production";
-  return jwt.sign({ id: userId, email }, secret, { expiresIn: "7d" });
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("FATAL: JWT_SECRET environment variable is missing.");
+  }
+  return jwt.sign({ id: userId, email }, secret, { expiresIn: "7d", algorithm: "HS256" });
 };
 
 // Format comprehensive user response

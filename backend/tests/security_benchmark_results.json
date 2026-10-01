@@ -1,0 +1,235 @@
+{
+  "timestamp": "2026-10-01T09:01:11.451Z",
+  "environment": "test",
+  "suites": [
+    {
+      "id": "RAG-SEC-01",
+      "name": "Malicious Retrieved Document Containment",
+      "description": "Verifies retrieved vector payloads cannot forge [SYSTEM] headers or escape untrusted boundaries.",
+      "tests": [
+        {
+          "name": "Spoken context is wrapped in <untrusted_retrieved_evidence> boundary",
+          "status": "PASS"
+        },
+        {
+          "name": "Forged [SYSTEM] header brackets are stripped to prevent LLM prompt confusion",
+          "status": "PASS"
+        },
+        {
+          "name": "Forged [SHARED EVIDENCE PACK] bracket header is stripped",
+          "status": "PASS"
+        },
+        {
+          "name": "Spoken context explicitly issues external data boundary disclaimer",
+          "status": "PASS"
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-02",
+      "name": "Prompt Injection in Web Result",
+      "description": "Verifies untrusted web scrape content cannot hijack spoken context or inject fake instructions.",
+      "tests": [
+        {
+          "name": "Web results are categorized under untrusted evidence boundary",
+          "status": "PASS"
+        },
+        {
+          "name": "Web injection bracket [SYSTEM OVERRIDE] is neutralized into raw text",
+          "status": "PASS"
+        },
+        {
+          "name": "Raw web URL is stripped from spoken text while preserved in UI citations",
+          "status": "PASS"
+        }
+      ],
+      "passed": 3,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-03",
+      "name": "Fake Citation & XSS URL Sanitization",
+      "description": "Verifies javascript:, data:, and vbscript: URIs are stripped from citation payloads.",
+      "tests": [
+        {
+          "name": "sanitizeCitationUrl rejects javascript: scheme",
+          "status": "PASS"
+        },
+        {
+          "name": "sanitizeCitationUrl rejects data: scheme",
+          "status": "PASS"
+        },
+        {
+          "name": "sanitizeCitationUrl rejects vbscript: scheme",
+          "status": "PASS"
+        },
+        {
+          "name": "sanitizeCitationUrl accepts valid https: URL",
+          "status": "PASS"
+        },
+        {
+          "name": "Evidence pack uiCitations strips dangerous URI schemes from all outputs",
+          "status": "PASS"
+        }
+      ],
+      "passed": 5,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-04",
+      "name": "Conflicting Evidence & Authority Prioritization",
+      "description": "Verifies Tier-1 official government evidence is weighted over low-authority adversarial blogs.",
+      "tests": [
+        {
+          "name": "Official government source receives Tier-1 authority (>= 0.95)",
+          "status": "PASS"
+        },
+        {
+          "name": "Unverified blog receives Tier-4 authority (<= 0.50)",
+          "status": "PASS"
+        },
+        {
+          "name": "Official source is marked as primary authority for employment/statistics topic",
+          "status": "PASS"
+        },
+        {
+          "name": "factCheckService correctly recognizes Tier-1 citation without tier property mismatch",
+          "status": "PASS"
+        },
+        {
+          "name": "Credibility score is boosted to >= 80% for official Tier-1 evidence",
+          "status": "PASS"
+        }
+      ],
+      "passed": 5,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-05",
+      "name": "Tenant Isolation & Semantic Cache Partitioning",
+      "description": "Verifies personalized cache entries and user memories cannot be leaked across tenants or guests.",
+      "tests": [
+        {
+          "name": "User A can retrieve their own personalized cached response",
+          "status": "PASS"
+        },
+        {
+          "name": "User B CANNOT retrieve User A's personalized cached response (Tenant Isolation)",
+          "status": "PASS"
+        },
+        {
+          "name": "Anonymous guest CANNOT retrieve User A's personalized cached response",
+          "status": "PASS"
+        },
+        {
+          "name": "Public unpersonalized queries are retrievable across all users",
+          "status": "PASS"
+        }
+      ],
+      "passed": 4,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-06",
+      "name": "Instruction Injection & Client History Neutralization",
+      "description": "Verifies client-supplied turns and bracket delimiters cannot overwrite system instruction boundaries.",
+      "tests": [
+        {
+          "name": "Client-forged 'system' role turns are strictly stripped",
+          "status": "PASS"
+        },
+        {
+          "name": "Bracket markers in assistant history are stripped to prevent header mimicry",
+          "status": "PASS"
+        },
+        {
+          "name": "User recalled memories strip brackets preventing fake system blocks inside memory tags",
+          "status": "PASS"
+        }
+      ],
+      "passed": 3,
+      "failed": 0,
+      "status": "PASSED"
+    },
+    {
+      "id": "RAG-SEC-07",
+      "name": "Source Impersonation & Suffix Spoofing Defense",
+      "description": "Verifies malicious domains matching suffix patterns (e.g. evil-mospi.gov.in) cannot hijack Tier-1 status.",
+      "tests": [
+        {
+          "name": "evil-mospi.gov.in does NOT match MoSPI and receives unregistered portal authority (<= 0.85)",
+          "status": "PASS"
+        },
+        {
+          "name": "mospi.gov.in.attacker.com does NOT receive Tier-1 authority",
+          "status": "PASS"
+        },
+        {
+          "name": "evil-mospi.org receives Tier-4 authority (<= 0.50)",
+          "status": "PASS"
+        },
+        {
+          "name": "Authentic mospi.gov.in receives Tier-1 authority",
+          "status": "PASS"
+        },
+        {
+          "name": "Authentic subdomain www.mospi.gov.in receives Tier-1 authority",
+          "status": "PASS"
+        },
+        {
+          "name": "Publisher substring match does NOT grant Tier-1 to unauthorized domains",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks loopback IPv4 127.0.0.1",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks AWS/Cloud metadata service 169.254.169.254",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks RFC1918 private 10.0.0.1",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks RFC1918 private 192.168.1.1",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks RFC1918 private 172.16.0.1",
+          "status": "PASS"
+        },
+        {
+          "name": "Blocks IPv6 loopback ::1",
+          "status": "PASS"
+        },
+        {
+          "name": "Allows legitimate public IPv4 8.8.8.8",
+          "status": "PASS"
+        },
+        {
+          "name": "Allows legitimate public IPv4 1.1.1.1",
+          "status": "PASS"
+        }
+      ],
+      "passed": 14,
+      "failed": 0,
+      "status": "PASSED"
+    }
+  ],
+  "summary": {
+    "totalSuites": 7,
+    "totalTests": 38,
+    "passed": 38,
+    "failed": 0,
+    "status": "PASSED"
+  }
+}

@@ -9,14 +9,11 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const qdrantUrl =
-  process.env.QDRANT_URL ||
-  process.env.cluster_endpoint ||
-  "https://a2528ffa-9391-47df-ae3c-e4a0ad004f76.eu-central-1-0.aws.cloud.qdrant.io";
+const qdrantUrl = process.env.QDRANT_URL;
+if (!qdrantUrl) console.warn('[memoryService] QDRANT_URL not set');
 
-const qdrantApiKey =
-  process.env.QDRANT_API_KEY ||
-  process.env.Qdrant_api;
+const qdrantApiKey = process.env.QDRANT_API_KEY || process.env.Qdrant_api;
+if (!qdrantApiKey) console.warn('[memoryService] QDRANT_API_KEY not set');
 
 let qdrantClient = null;
 
@@ -61,6 +58,11 @@ export async function getEmbedding(text) {
 export async function searchUserMemory(queryText, userId = null, limit = 2) {
   if (!qdrantClient || !queryText) return [];
 
+  // Reject unauthenticated or guest memory retrieval to prevent cross-tenant exposure
+  if (!userId || String(userId).trim() === "" || userId === "guest_user" || String(userId).startsWith("guest_")) {
+    return [];
+  }
+
   try {
     const vector = await getEmbedding(queryText);
     if (!vector) return [];
@@ -69,27 +71,15 @@ export async function searchUserMemory(queryText, userId = null, limit = 2) {
       query: vector,
       limit,
       with_payload: true,
-    };
-
-    // Filter by user if userId provided
-    if (userId) {
-      queryOptions.filter = {
-        should: [
+      filter: {
+        must: [
           {
             key: "user_id",
             match: { value: String(userId) },
           },
-          {
-            key: "user_id",
-            match: { value: "global" },
-          },
-          {
-            key: "user_id",
-            match: { value: "r19216871@gamil.com" },
-          },
         ],
-      };
-    }
+      },
+    };
 
     const res = await qdrantClient.query("first_cluster", queryOptions);
 
@@ -117,10 +107,13 @@ export async function searchUserMemory(queryText, userId = null, limit = 2) {
 }
 
 /**
- * Save new memory into Qdrant 'first_cluster' for any user
+ * Save new memory into Qdrant 'first_cluster' for any authenticated user
  */
-export async function saveUserMemory(text, userId = "general_user") {
+export async function saveUserMemory(text, userId = null) {
   if (!qdrantClient || !text || text.length < 5) return false;
+  if (!userId || String(userId).trim() === "" || userId === "guest_user" || String(userId).startsWith("guest_")) {
+    return false; // Do not persist unauthenticated or guest memories
+  }
 
   try {
     const vector = await getEmbedding(text);

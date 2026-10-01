@@ -3,10 +3,10 @@ export const adminOnly = (req, res, next) => {
     return res.status(401).json({ error: "Authentication required." });
   }
 
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
   const isAdmin =
     req.user.role === "admin" ||
-    req.user.email?.toLowerCase() === "r19216871@gamil.com" ||
-    req.user.email?.toLowerCase() === "r19216871@gmail.com";
+    adminEmails.includes(req.user.email?.toLowerCase());
 
   if (!isAdmin) {
     return res.status(403).json({

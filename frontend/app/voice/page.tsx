@@ -1937,7 +1937,7 @@ export default function VoicePage() {
     }
   };
 
-  const isAdmin = currentUser?.role === "admin" || currentUser?.email === "r19216871@gamil.com";
+  const isAdmin = currentUser?.role === "admin";
 
   // =========================================================
   // SHARED SETTINGS PANEL PROPS

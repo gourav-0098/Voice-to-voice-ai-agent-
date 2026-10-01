@@ -10,8 +10,10 @@ import { systemSettingsService } from "./systemSettingsService.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const DEEPGRAM_API_KEY =
-  process.env.DEEPGRAM_API_KEY || "910e2755e332885f111ed17c514acb5ba03e81ab";
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+if (!DEEPGRAM_API_KEY) {
+  console.warn("⚠️ [streamingVoiceService] DEEPGRAM_API_KEY is not configured in environment.");
+}
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 // Clean text for speech synthesis (strip markdown, asterisks, brackets, latex)

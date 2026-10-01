@@ -256,10 +256,7 @@ export default function UserDashboard() {
     );
   }
 
-  const isAdmin =
-    user?.role === "admin" ||
-    user?.email?.toLowerCase() === "r19216871@gamil.com" ||
-    user?.email?.toLowerCase() === "r19216871@gmail.com";
+  const isAdmin = user?.role === "admin";
 
   const remainingHourly = typeof user?.quota?.remainingHourly === "number" ? user.quota.remainingHourly : 30;
   const remainingDaily = "Unlimited";

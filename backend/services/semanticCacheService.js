@@ -46,7 +46,16 @@ class SemanticQueryCache {
    * @param {string} [persona] - Active persona
    * @returns {Object|null} Cached response entry or null
    */
-  get(queryText, queryVector = null, persona = "conversational", voiceModel = "") {
+  /**
+   * Search cache for an exact or semantically equivalent response
+   * @param {string} queryText - Spoken prompt
+   * @param {number[]} [queryVector] - Dense 384d embedding
+   * @param {string} [persona] - Active persona
+   * @param {string} [voiceModel] - Active voice
+   * @param {string} [userId] - Authenticated user identifier (enforces tenant isolation)
+   * @returns {Object|null} Cached response entry or null
+   */
+  get(queryText, queryVector = null, persona = "conversational", voiceModel = "", userId = null) {
     if (!queryText) return null;
     let vector = queryVector;
     let personaKey = persona || "conversational";
@@ -56,13 +65,26 @@ class SemanticQueryCache {
       vector = null;
     }
 
+    const userKey = (userId && typeof userId === "string" && !userId.startsWith("guest_") && userId !== "guest_user")
+      ? `user_${userId}`
+      : "public";
+
     const norm = normalizeQuery(queryText);
-    const exactKey = voiceKey ? `${personaKey}:::${voiceKey}:::${norm}` : `${personaKey}:::${norm}`;
+    const exactKey = `${userKey}:::${personaKey}:::${voiceKey}:::${norm}`;
     const now = Date.now();
 
     // 1. Fast-Path: Exact normalized key lookup (0.1ms)
-    if (this.cache.has(exactKey)) {
-      const entry = this.cache.get(exactKey);
+    let entry = this.cache.get(exactKey);
+    let matchedKey = exactKey;
+    if (!entry && userKey !== "public") {
+      const publicKey = `public:::${personaKey}:::${voiceKey}:::${norm}`;
+      if (this.cache.has(publicKey)) {
+        entry = this.cache.get(publicKey);
+        matchedKey = publicKey;
+      }
+    }
+
+    if (entry) {
       if (now - entry.timestamp < this.ttlMs) {
         let audio = entry.data?.audio;
         if (voiceKey && entry.voiceModel && entry.voiceModel !== voiceKey) {
@@ -70,14 +92,14 @@ class SemanticQueryCache {
         }
         this.stats.hits += 1;
         this.stats.savedTokensEstimate += 120;
-        console.log(`⚡ [SEMANTIC CACHE] Exact match hit in 1ms! Query: "${queryText.slice(0, 50)}" (voice: ${voiceKey || "any"})`);
+        console.log(`⚡ [SEMANTIC CACHE] Exact match hit in 1ms! Query: "${queryText.slice(0, 50)}" (user: ${entry.userKey}, voice: ${voiceKey || "any"})`);
         return { ...entry.data, audio, cachedAt: entry.timestamp, matchType: "exact" };
       } else {
-        this.cache.delete(exactKey);
+        this.cache.delete(matchedKey);
       }
     }
 
-    // 2. Semantic-Path: Cosine vector similarity scan (1-2ms across 400 items)
+    // 2. Semantic-Path: Cosine vector similarity scan (1-2ms across items)
     if (queryVector && Array.isArray(queryVector) && queryVector.length > 0) {
       let bestMatch = null;
       let highestSim = 0;
@@ -88,7 +110,8 @@ class SemanticQueryCache {
           continue;
         }
 
-        // Must match persona to maintain ideological tone integrity
+        // Strict tenant & persona isolation: match exact userKey or shared public key
+        if (entry.userKey !== userKey && entry.userKey !== "public") continue;
         if (entry.persona !== personaKey) continue;
         if (voiceKey && entry.voiceModel && entry.voiceModel !== voiceKey) continue;
 
@@ -127,7 +150,7 @@ class SemanticQueryCache {
   /**
    * Save a newly computed query response into the semantic cache
    */
-  set(queryText, queryVector, persona, voiceModel, data) {
+  set(queryText, queryVector, persona, voiceModel, data, userId = null, isPersonalized = false) {
     let vector = queryVector;
     let personaKey = persona || "conversational";
     let voiceKey = typeof voiceModel === "string" ? voiceModel : "";
@@ -145,8 +168,17 @@ class SemanticQueryCache {
 
     if (!queryText || !payload) return;
 
+    const userKey = (userId && typeof userId === "string" && !userId.startsWith("guest_") && userId !== "guest_user")
+      ? `user_${userId}`
+      : "public";
+
+    // Never cache personalized or history-dependent responses in public scope
+    if (isPersonalized && userKey === "public") {
+      return;
+    }
+
     const norm = normalizeQuery(queryText);
-    const exactKey = voiceKey ? `${personaKey}:::${voiceKey}:::${norm}` : `${personaKey}:::${norm}`;
+    const exactKey = `${userKey}:::${personaKey}:::${voiceKey}:::${norm}`;
 
     // Evict oldest entry if size limit reached
     if (this.cache.size >= this.maxSize) {
@@ -159,6 +191,7 @@ class SemanticQueryCache {
       vector,
       persona: personaKey,
       voiceModel: voiceKey,
+      userKey,
       data: payload,
       timestamp: Date.now(),
     });

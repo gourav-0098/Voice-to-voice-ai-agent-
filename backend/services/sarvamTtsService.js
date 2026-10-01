@@ -19,7 +19,8 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const SARVAM_API_KEY = process.env.SARVAM_API_KEY || "sk_0gdrnoej_SAYp7VZIEvtfix20VrGu2YLt";
+const SARVAM_API_KEY = process.env.SARVAM_API_KEY;
+if (!SARVAM_API_KEY) console.warn('[sarvamTts] SARVAM_API_KEY not set');
 const SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech";
 
 export const SARVAM_SPEAKERS = {

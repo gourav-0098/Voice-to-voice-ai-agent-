@@ -98,9 +98,7 @@ export default function Home() {
                 Dashboard
               </Link>
 
-              {((currentUser as any)?.role === "admin" ||
-                currentUser?.email?.toLowerCase() === "r19216871@gamil.com" ||
-                currentUser?.email?.toLowerCase() === "r19216871@gmail.com") && (
+              {((currentUser as any)?.role === "admin") && (
                 <Link
                   href="/admin"
                   className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 shadow-xs hover:bg-slate-200/70 dark:hover:bg-white/10 transition"

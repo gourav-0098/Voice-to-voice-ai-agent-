@@ -146,21 +146,28 @@ export async function analyzeTurnFactCheck({
   const primaryCitation = uniqueCitations[0] || null;
 
   if (primaryCitation) {
-    if (primaryCitation.authorityTier === "TIER_1") {
+    const rawTier = String(primaryCitation.authorityTier || primaryCitation.tier || "").toUpperCase();
+    const authScore = primaryCitation.authorityScore || 0;
+    const isTier1 = rawTier === "TIER_1" || rawTier === "TIER_1_OFFICIAL" || authScore >= 0.90;
+    const isTier2 = rawTier === "TIER_2" || rawTier === "TIER_2_ESTABLISHED" || authScore >= 0.80;
+
+    const publisherName = primaryCitation.publisher || primaryCitation.title || "source";
+
+    if (isTier1) {
       credibilityScore = 92;
       verdict = "VERIFIED_FACT";
       verdictLabel = "Verified Official Data";
-      explanation = `Directly corroborated by ${primaryCitation.publisher} official documentation.`;
-    } else if (primaryCitation.authorityTier === "TIER_2") {
+      explanation = `Directly corroborated by ${publisherName} official documentation.`;
+    } else if (isTier2) {
       credibilityScore = 84;
       verdict = "VERIFIED_FACT";
       verdictLabel = "Verified by News Record";
-      explanation = `Reported and fact-checked by ${primaryCitation.publisher}.`;
+      explanation = `Reported and fact-checked by ${publisherName}.`;
     } else {
       credibilityScore = 68;
       verdict = "CONTESTED_NARRATIVE";
       verdictLabel = "Contested Political Stance";
-      explanation = `Claim reflects partisan debate reported in ${primaryCitation.publisher}.`;
+      explanation = `Claim reflects partisan debate reported in ${publisherName}.`;
     }
   } else {
     credibilityScore = 55;

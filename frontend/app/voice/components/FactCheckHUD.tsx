@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { isSafeHttpUrl } from "../utils/urlSecurity";
 
 export interface FallacyItem {
   type: string;
@@ -175,15 +176,21 @@ export const FactCheckHUD: React.FC<FactCheckHUDProps> = ({ data, onClose }) => 
               )}
             </div>
 
-            <a
-              href={primaryCitation.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 shrink-0"
-            >
-              <span>View Source</span>
-              <span>↗</span>
-            </a>
+            {isSafeHttpUrl(primaryCitation.url) ? (
+              <a
+                href={primaryCitation.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 shrink-0"
+              >
+                <span>View Source</span>
+                <span>↗</span>
+              </a>
+            ) : (
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500">
+                Source Reference
+              </span>
+            )}
           </div>
         )}
 
@@ -207,7 +214,7 @@ export const FactCheckHUD: React.FC<FactCheckHUDProps> = ({ data, onClose }) => 
                       {c.publisher} {c.date && `• ${c.date}`}
                     </p>
                   </div>
-                  {c.url && c.url !== "#" && (
+                  {isSafeHttpUrl(c.url) && (
                     <a
                       href={c.url}
                       target="_blank"
