@@ -2368,54 +2368,13 @@ export default function VoicePage() {
               {pipelineState === "listening"
                 ? "🎙️ Listening... (Barge-in active: speak anytime to interrupt)"
                 : pipelineState === "speaking"
-                ? "🔊 Chatly is speaking aloud (Speak or click Interrupt to cut in)"
+                ? "🔊 Chatly is speaking (Click Interrupt to cut in)"
                 : pipelineState === "synthesizing"
-                ? "✨ Chatly is thinking & generating voice..."
+                ? "✨ Chatly is thinking..."
                 : pipelineState === "transcribing"
-                ? "⚡ Transcribing your voice..."
-                : !currentUser
-                ? "🎙️ Free Guest Mode: Speak freely (10 calls/hr, 50/day) • Powered by Groq"
-                : "Click the microphone button to talk (30 calls/hr, unlimited daily)"}
+                ? "⚡ Transcribing..."
+                : "Click the microphone button or start speaking"}
             </p>
-
-            {/* Real-time Streaming & Quota Telemetry Pill */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-              {!currentUser ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                  Free Quota: {quota?.remainingHourly ?? 10}/10 hr • {quota?.remainingDaily ?? 50}/50 day • Groq API
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  Member Quota: {quota?.remainingHourly ?? 30}/30 hr • Unlimited Daily
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                ⚡ Sub-300ms Streaming
-              </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                🎯 FlashRank Reranker + HyDE
-              </span>
-              {lastTtfa && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                  ⚡ First Spoken: {lastTtfa}ms
-                </span>
-              )}
-              {/* Truth Meter HUD Toggle Chip */}
-              <button
-                type="button"
-                onClick={() => setIsFactCheckHudEnabled((prev) => !prev)}
-                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer border ${
-                  isFactCheckHudEnabled
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                    : "bg-slate-500/10 text-slate-500 dark:text-zinc-500 border-slate-500/20 opacity-60"
-                }`}
-                title="Toggle Real-Time Truth Meter & Fallacy HUD"
-              >
-                <span>⚖️ Truth HUD: {isFactCheckHudEnabled ? "ON" : "OFF"}</span>
-              </button>
-            </div>
 
             {/* AUDIO REACTIVE CANVAS + ORB CONTAINER */}
             <div className="relative mb-6 flex items-center justify-center" style={{ width: 280, height: 280 }}>
