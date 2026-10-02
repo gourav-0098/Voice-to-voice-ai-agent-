@@ -62,6 +62,29 @@ export async function webSearch(query = "") {
 }
 
 /**
+ * Detailed web search returning structured sources alongside voice summary
+ */
+export async function searchWebDetailed(query = "") {
+  const cleanQuery = String(query || "").trim();
+  if (!cleanQuery) return { text: "Please specify what you would like to search for.", results: [] };
+
+  const result = await toolExecutor.executeTool("web_search", { query: cleanQuery });
+  if (result.ok) {
+    const rawResults = Array.isArray(result.sources) && result.sources.length > 0
+      ? result.sources
+      : (Array.isArray(result.data?.results) ? result.data.results : []);
+    return {
+      text: result.voiceSummary || "Search completed.",
+      results: rawResults,
+    };
+  }
+  return {
+    text: `Web search could not be completed: ${result.error?.message || "Search failed."}`,
+    results: [],
+  };
+}
+
+/**
  * Backward-compatible scrapeWebPage
  */
 export async function scrapeWebPage(url = "") {
@@ -121,6 +144,7 @@ export default {
   getWeather,
   getCurrentTimeAndDate,
   webSearch,
+  searchWebDetailed,
   scrapeWebPage,
   calculateExpression,
   executeTool,

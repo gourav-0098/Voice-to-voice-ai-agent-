@@ -185,10 +185,12 @@ export function setupVoiceWebSocket(httpServer) {
             retrievalTasks.push(Promise.resolve({ contextPrompt: "", ragSource: null }));
           }
 
-          // 4. Parallel Live Web Search (if current events / statement today)
+          // 4. Parallel Live Web Search (if current events / statement today / factual inquiry)
           if (route.needsLiveSearch) {
             retrievalTasks.push(
-              toolService.webSearch(prompt).then((res) => ({ text: res, title: "Live Web Search" })).catch(() => null)
+              typeof toolService.searchWebDetailed === "function"
+                ? toolService.searchWebDetailed(prompt).catch(() => null)
+                : toolService.webSearch(prompt).then((res) => ({ text: res, results: [] })).catch(() => null)
             );
           } else {
             retrievalTasks.push(Promise.resolve(null));
@@ -204,23 +206,29 @@ export function setupVoiceWebSocket(httpServer) {
           // Format clean Shared Evidence Pack if RAG or Live Search was retrieved
           if (adaptiveRag && adaptiveRag.spokenContext) {
             if (liveWebResult) {
+              const webItems = (Array.isArray(liveWebResult.results) && liveWebResult.results.length > 0)
+                ? liveWebResult.results
+                : [{ text: liveWebResult.text || liveWebResult, title: "Live Web Search" }];
               evidencePack = buildEvidencePack({
                 query: prompt,
                 topic: route.detectedTopic,
                 qdrantResults: adaptiveRag.evidence || (adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : []),
                 discourseResults: adaptiveRag.discourse || [],
-                webResults: [liveWebResult],
+                webResults: webItems,
                 intent: route.intent,
               });
             } else {
               evidencePack = adaptiveRag;
             }
           } else if (liveWebResult) {
+            const webItems = (Array.isArray(liveWebResult.results) && liveWebResult.results.length > 0)
+              ? liveWebResult.results
+              : [{ text: liveWebResult.text || liveWebResult, title: "Live Web Search" }];
             evidencePack = buildEvidencePack({
               query: prompt,
               topic: route.detectedTopic,
               qdrantResults: [],
-              webResults: [liveWebResult],
+              webResults: webItems,
               intent: route.intent,
             });
           }
@@ -268,6 +276,8 @@ export function setupVoiceWebSocket(httpServer) {
                 intensityLevel: route.intensityLevel || 0,
                 intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
                 recentHistory,
+                intent: route.intent,
+                isFactual: route.intent === "FACTUAL_INQUIRY",
               })
             : DEFAULT_SYSTEM_INSTRUCTION;
 

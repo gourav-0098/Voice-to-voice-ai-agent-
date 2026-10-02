@@ -24,6 +24,9 @@ const DEEP_VERIFICATION_PATTERN = /\b(deep fact check|thoroughly verify|detail m
 
 const FACT_CHECK_PATTERN = /\b(fact check|is it true|sach hai|fake news|claim|stat|percentage|crore jobs|did modi|did congress|kya yeh sach hai|jhuth hai|asliyat kya hai)\b/i;
 
+// Factual & biographical inquiry pattern (DOB, birthdate, parents, family, education, lookup requests)
+const FACTUAL_INQUIRY_PATTERN = /\b(dob|date of birth|born|birthday|birth date|birthplace|janam|janmadin|father|mother|parents|parent|family|wife|husband|spouse|son|daughter|brother|sister|children|education|degree|qualification|college|school|real name|full name|age|umar|kiske bete|pita|mata|kon the|kaun the|who was|who is|when was|where was|village|hometown|net worth|height|biography|biodata|tell me the|tell me about|batao|dhundo|search for|what is the name of|kiske pita|kab paida|kab mare|death date|passed away|died|cause of death)\b/i;
+
 // Political keywords checked with word boundaries to avoid false positives (e.g. 'aap' in 'aap kaise ho')
 const POLITICAL_KEYWORDS = [
   "\\bmodi\\b", "\\bbjp\\b", "\\bcongress\\b", "\\brahul\\b", "\\bgandhi\\b", "\\bkejriwal\\b", "\\bsarkar\\b",
@@ -93,7 +96,15 @@ export function routeQuery(queryText, { persona = "default", historyLength = 0 }
       needsLiveSearch = true;
     }
   }
-  // Check 4: Political detection
+  // Check 4: Factual & Biographical Inquiries (Must search web live, bypass ideological RAG chunks)
+  else if (FACTUAL_INQUIRY_PATTERN.test(lowerQ)) {
+    intent = "FACTUAL_INQUIRY";
+    needsLiveSearch = true;
+    needsRag = false;
+    detectedTopic = "factual_biography";
+    confidence = 0.98;
+  }
+  // Check 5: Political detection
   else {
     const isPolitical = POLITICAL_KEYWORDS.some((kw) => new RegExp(kw, "i").test(lowerQ));
 
@@ -140,7 +151,10 @@ export function routeQuery(queryText, { persona = "default", historyLength = 0 }
   const HEATED_CHALLENGE_PATTERN = /\b(dictator|tanashah|godi media|jumla|scam|ghotala|chor|fake news|fooling|loot liya|propaganda|andhbhakt|bhakt ho kya|bakwas|nonsense|rubbish|bullshit|phenku|pagal|dimag kharab|chup kar|gundaraj|mafiaraj|modi.*(chor|kharab|fail|fraud|dictator|loot|hate|panauti)|yogi.*(gunda|mafia|dictator|kharab|corrupt|hate)|bjp.*(chor|corrupt|fail|hate|loot|gunda))\b/i;
   const DISAGREEMENT_PATTERN = /\b(par|lekin|but|however|kyun nahi|kahan hua|unemployment|berojgari|mehangai|inflation|adani|scam|contested|disagree|opposition says|actual|paper leak|hoti hai kya)\b/i;
 
-  if (DEBATE_MODE_PATTERN.test(lowerQ)) {
+  if (intent === "FACTUAL_INQUIRY") {
+    intensityLevel = 0;
+    intensityLabel = "CASUAL_FRIEND";
+  } else if (DEBATE_MODE_PATTERN.test(lowerQ)) {
     intensityLevel = 4;
     intensityLabel = "EXPLICIT_DEBATE";
   } else if (ABUSE_PATTERN.test(lowerQ) || HEATED_CHALLENGE_PATTERN.test(lowerQ)) {

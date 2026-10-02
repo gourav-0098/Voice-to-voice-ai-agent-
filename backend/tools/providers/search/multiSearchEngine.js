@@ -131,6 +131,12 @@ export class MultiSearchEngine {
     const q = query.trim();
     const expansions = [q];
 
+    // Strip common conversational prefixes to create a laser-focused search query
+    const conversationalStripped = q.replace(/^(tell me (the|about|what is)?|what is the|who is|please tell me|batao|dhundo|search for|what was the)\s+/i, "").trim();
+    if (conversationalStripped.length > 3 && conversationalStripped.toLowerCase() !== q.toLowerCase()) {
+      expansions.push(conversationalStripped);
+    }
+
     // If query has recency intent ("latest", "today", "news"), create a clean entity query
     if (/\b(today|latest|breaking|recent|news|update)\b/i.test(q)) {
       const stripped = q.replace(/\b(today|latest|breaking|recent|news|update|tell me about|what is the)\b/gi, "").trim();
@@ -139,7 +145,7 @@ export class MultiSearchEngine {
       }
     }
 
-    return expansions.slice(0, 2);
+    return expansions.slice(0, 3);
   }
 
   /**

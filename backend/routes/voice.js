@@ -289,7 +289,9 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     // Parallel Live Web Search
     if (route.needsLiveSearch) {
       retrievalTasks.push(
-        toolService.webSearch(userText).then((res) => ({ text: res, title: "Live Web Search" })).catch(() => null)
+        typeof toolService.searchWebDetailed === "function"
+          ? toolService.searchWebDetailed(userText).catch(() => null)
+          : toolService.webSearch(userText).then((res) => ({ text: res, results: [] })).catch(() => null)
       );
     } else {
       retrievalTasks.push(Promise.resolve(null));
@@ -305,23 +307,29 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     // Build structured Shared Evidence Pack
     if (adaptiveRag && adaptiveRag.spokenContext) {
       if (liveWebResult) {
+        const webItems = (Array.isArray(liveWebResult.results) && liveWebResult.results.length > 0)
+          ? liveWebResult.results
+          : [{ text: liveWebResult.text || liveWebResult, title: "Live Web Search" }];
         evidencePack = buildEvidencePack({
           query: userText,
           topic: route.detectedTopic,
           qdrantResults: adaptiveRag.evidence || (adaptiveRag.groundingDetails ? [adaptiveRag.groundingDetails] : []),
           discourseResults: adaptiveRag.discourse || [],
-          webResults: [liveWebResult],
+          webResults: webItems,
           intent: route.intent,
         });
       } else {
         evidencePack = adaptiveRag;
       }
     } else if (liveWebResult) {
+      const webItems = (Array.isArray(liveWebResult.results) && liveWebResult.results.length > 0)
+        ? liveWebResult.results
+        : [{ text: liveWebResult.text || liveWebResult, title: "Live Web Search" }];
       evidencePack = buildEvidencePack({
         query: userText,
         topic: route.detectedTopic,
         qdrantResults: [],
-        webResults: [liveWebResult],
+        webResults: webItems,
         intent: route.intent,
       });
     }
@@ -353,6 +361,8 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
           intensityLevel: route.intensityLevel || 0,
           intensityLabel: route.intensityLabel || "CASUAL_FRIEND",
           recentHistory,
+          intent: route.intent,
+          isFactual: route.intent === "FACTUAL_INQUIRY",
         })
       : DEFAULT_SYSTEM_INSTRUCTION;
 

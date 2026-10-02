@@ -126,10 +126,16 @@ export class ToolRegistry {
 
       if (tool.parameters?.properties) {
         for (const [key, prop] of Object.entries(tool.parameters.properties)) {
+          const type = (prop.type || "STRING").toUpperCase();
           geminiProps[key] = {
-            type: (prop.type || "STRING").toUpperCase(),
+            type,
             description: prop.description || "",
           };
+          if (type === "ARRAY") {
+            geminiProps[key].items = {
+              type: (prop.items?.type || "STRING").toUpperCase(),
+            };
+          }
         }
       }
 

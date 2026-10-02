@@ -73,7 +73,7 @@ export const webSearchTool = {
       return `No recent web search results were found for "${result.data?.query || "your query"}".`;
     }
 
-    const items = result.data.results.slice(0, 3);
+    const items = result.data.results.slice(0, 5);
     const summaryLines = items.map((item, i) => `${i + 1}. ${item.title}: ${item.snippet} (${item.publisher})`);
     return `Web search findings for "${result.data.query}":\n${summaryLines.join("\n")}`;
   },
