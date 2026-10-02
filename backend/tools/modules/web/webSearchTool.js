@@ -1,6 +1,77 @@
 import { multiSearchEngine } from "../../providers/search/multiSearchEngine.js";
 import { toolCache } from "../../caching/toolCache.js";
 
+/**
+ * Standardized search result normalizer (Bug 3)
+ * Maps any raw response (null, {}, empty array, or unusable items) into strict states:
+ * - SEARCH_SUCCESS (>= 3 usable sources)
+ * - SEARCH_PARTIAL (1-2 usable sources)
+ * - SEARCH_EMPTY (0 usable sources)
+ * - SEARCH_ERROR (network or parsing failure)
+ */
+export function normalizeSearchResult(rawResult, query = "") {
+  if (!rawResult || typeof rawResult !== "object" || Object.keys(rawResult).length === 0) {
+    return {
+      ok: false,
+      tool: "web_search",
+      state: "SEARCH_EMPTY",
+      data: { query, results: [] },
+      sources: [],
+      voiceSummary: `[SEARCH_EMPTY] Search returned no usable evidence for "${query}".`,
+      metadata: { resultCount: 0, state: "SEARCH_EMPTY" },
+    };
+  }
+
+  if (rawResult.state === "SEARCH_ERROR") {
+    return {
+      ok: false,
+      tool: "web_search",
+      state: "SEARCH_ERROR",
+      data: { query, results: [] },
+      sources: [],
+      error: rawResult.error || { code: "SEARCH_ERROR", message: "Search error occurred." },
+      voiceSummary: `Search error occurred for "${query}".`,
+      metadata: { resultCount: 0, state: "SEARCH_ERROR" },
+    };
+  }
+
+  const results = Array.isArray(rawResult.sources)
+    ? rawResult.sources
+    : Array.isArray(rawResult.data?.results)
+    ? rawResult.data.results
+    : Array.isArray(rawResult.results)
+    ? rawResult.results
+    : [];
+
+  const usableResults = results.filter(
+    (r) => r && (r.snippet || r.evidence || r.title) && r.url
+  );
+
+  if (usableResults.length === 0) {
+    return {
+      ok: false,
+      tool: "web_search",
+      state: "SEARCH_EMPTY",
+      data: { query, results: [] },
+      sources: [],
+      error: { code: "SEARCH_EMPTY", message: `Search returned no usable evidence for "${query}".` },
+      voiceSummary: `[SEARCH_EMPTY] Search returned no usable evidence for "${query}".`,
+      metadata: { resultCount: 0, state: "SEARCH_EMPTY" },
+    };
+  }
+
+  const state = usableResults.length >= 3 ? "SEARCH_SUCCESS" : "SEARCH_PARTIAL";
+  return {
+    ok: true,
+    tool: "web_search",
+    state,
+    data: { query, results: usableResults },
+    sources: usableResults,
+    voiceSummary: webSearchTool.formatVoiceSummary({ ok: true, state, data: { query, results: usableResults } }),
+    metadata: { resultCount: usableResults.length, state },
+  };
+}
+
 export const webSearchTool = {
   name: "web_search",
   description: "Search the live web across multiple search providers for current events, facts, official updates, and real-time knowledge.",
@@ -28,11 +99,7 @@ export const webSearchTool = {
   async execute(args, context = {}) {
     const query = String(args.query || "").trim();
     if (!query) {
-      return {
-        ok: false,
-        tool: "web_search",
-        error: { code: "INVALID_ARGUMENT", message: "Search query cannot be empty.", retryable: false },
-      };
+      return normalizeSearchResult({}, "");
     }
 
     const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 8);
@@ -40,30 +107,10 @@ export const webSearchTool = {
     // Cache check
     const cached = toolCache.get("search", query);
     if (cached) {
-      const state = cached.results?.length >= 3 ? "SEARCH_SUCCESS" : cached.results?.length > 0 ? "SEARCH_PARTIAL" : "SEARCH_EMPTY";
-      if (state === "SEARCH_EMPTY") {
-        return {
-          ok: false,
-          tool: "web_search",
-          state: "SEARCH_EMPTY",
-          error: { code: "SEARCH_EMPTY", message: `No recent web search results found for query: "${query}"` },
-          data: cached,
-          sources: [],
-          metadata: { cached: true, resultCount: 0, state: "SEARCH_EMPTY" },
-        };
-      }
-      return {
-        ok: true,
-        tool: "web_search",
-        state,
-        data: cached,
-        sources: cached.results || [],
-        metadata: { cached: true, resultCount: cached.results?.length || 0, state },
-      };
+      return normalizeSearchResult({ ok: true, data: cached, sources: cached.results || [] }, query);
     }
 
     let results = [];
-    let state = "SEARCH_EMPTY";
     let activeQuery = query;
 
     try {
@@ -86,14 +133,7 @@ export const webSearchTool = {
         }
       }
     } catch (err) {
-      return {
-        ok: false,
-        tool: "web_search",
-        state: "SEARCH_ERROR",
-        error: { code: "SEARCH_ERROR", message: `Search engine failure: ${err.message}` },
-        sources: [],
-        metadata: { state: "SEARCH_ERROR", error: err.message },
-      };
+      return normalizeSearchResult({ state: "SEARCH_ERROR", error: { code: "SEARCH_ERROR", message: err.message } }, query);
     }
 
     if (!results || results.length === 0) {
@@ -103,20 +143,9 @@ export const webSearchTool = {
         retrievedAt: new Date().toISOString(),
       };
       toolCache.set("search", query, emptyPayload, 60);
-
-      // Explicit SEARCH_EMPTY contract: An empty result must NEVER be considered successful
-      return {
-        ok: false,
-        tool: "web_search",
-        state: "SEARCH_EMPTY",
-        error: { code: "SEARCH_EMPTY", message: `No recent web search results found for query: "${query}"` },
-        data: emptyPayload,
-        sources: [],
-        metadata: { cached: false, resultCount: 0, state: "SEARCH_EMPTY" },
-      };
+      return normalizeSearchResult({}, query);
     }
 
-    state = results.length >= 3 ? "SEARCH_SUCCESS" : "SEARCH_PARTIAL";
     const payload = {
       query: activeQuery,
       originalQuery: query,
@@ -126,19 +155,12 @@ export const webSearchTool = {
 
     toolCache.set("search", query, payload, 300);
 
-    return {
-      ok: true,
-      tool: "web_search",
-      state,
-      data: payload,
-      sources: results,
-      metadata: { cached: false, resultCount: results.length, state },
-    };
+    return normalizeSearchResult({ ok: true, data: payload, sources: results }, query);
   },
 
   formatVoiceSummary(result) {
-    if (!result.ok || result.state === "SEARCH_EMPTY" || !result.data?.results?.length) {
-      return `[SEARCH_EMPTY] No verified web search results were found for "${result.data?.query || "the inquiry"}".`;
+    if (!result || !result.ok || result.state === "SEARCH_EMPTY" || !result.data?.results?.length) {
+      return `[SEARCH_EMPTY] Search returned no usable evidence for "${result?.data?.query || "the inquiry"}".`;
     }
 
     const items = result.data.results.slice(0, 5);

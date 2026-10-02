@@ -1,40 +1,41 @@
 {
-  "timestamp": "2026-10-02T10:48:26.710Z",
+  "timestamp": "2026-10-02T11:13:51.577Z",
   "results": [
     {
       "testId": "TEST_1_OCTOBER_2026_VOICE_PROVIDERS",
       "title": "October 2026 AI Voice-Provider Comparison",
       "query": "As of October 2026, compare the leading AI model/API providers for building a real-time voice AI assistant. Compare model quality, latency, tool calling, multimodal ability, context window, pricing, reliability, and developer ecosystem.",
       "passed": true,
-      "researchIntent": "COMPARISON",
-      "queriesGeneratedCount": 4,
+      "researchIntent": "CURRENT_EVENT",
+      "queriesGeneratedCount": 5,
       "queriesGenerated": [
-        "2026 reliability uptime SLA pricing developer ecosystem community support for AI model APIs used in voice assistants",
-        "2026 AI model API market share and leaderboards for real-time voice AI assistants",
-        "latest specifications, performance metrics, and feature sets of leading AI model APIs for real-time voice assistants (model quality, latency, tool calling, multimodal, context window) 2026",
-        "2026 voice AI API uptime SLA reliability status page OpenAI Google Anthropic"
+        "OpenAI GPT-4o, Google DeepMind Gemini 1.5, Anthropic Claude 3.5, Microsoft Azure AI Speech + OpenAI, Meta Llama 3 voice API October 2026 performance benchmarks official documentation",
+        "OpenAI API pricing 2026 voice, Google Gemini API pricing and SLA October 2026, Anthropic Claude pricing 2026, Microsoft Azure AI Speech pricing and reliability report 2026, Meta Llama API cost and uptime 2026 official release notes",
+        "OpenAI function calling and tool integration docs 2026, Google Gemini tool use API 2026, Anthropic tool use SDK 2026, Microsoft Azure AI tool calling and extensions 2026, Meta Llama developer portal multimodal tool support October 2026",
+        "2026 Gartner Magic Quadrant AI APIs voice assistants, Forrester Wave real‑time voice AI platforms 2026, IDC market share AI model providers for voice assistants October 2026",
+        "OpenAI GPT-4o vs Gemini 1.5 vs Claude 3.5 voice API latency ms pricing per token context window 2026 benchmarks"
       ],
       "searchProvidersUsed": [
         "web_search (DuckDuckGo + Wikipedia + MultiEngine)"
       ],
       "searchStates": [
-        "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
+        "SEARCH_PARTIAL",
+        "SEARCH_PARTIAL",
+        "SEARCH_PARTIAL",
+        "SEARCH_PARTIAL",
         "SEARCH_SUCCESS"
       ],
       "urlsOpenedCount": 0,
       "sourceTiersDistribution": {
-        "ESTABLISHED_REPORTING": 7,
-        "GENERAL_WEB": 3
+        "ESTABLISHED_REPORTING": 8
       },
-      "evidenceCount": 10,
+      "evidenceCount": 8,
       "followupsCount": 1,
-      "finalAnswerLatencyMs": 15680,
+      "finalAnswerLatencyMs": 15811,
       "citationCompleteness": 100,
       "freshnessCorrectness": true,
-      "cognitiveStepsCount": 19,
-      "spokenAnswerSample": "As of October 2026, OpenAI with GPT-Realtime-2, Google with Gemini 3.1 Flash Live, Anthropic with Claude Voice API, and Sesame with their Voice Model are recognized as leading prov..."
+      "cognitiveStepsCount": 18,
+      "spokenAnswerSample": "October 2026 mein, real-time voice AI assistants ke liye OpenAI GPT-4o, Google Gemini 1.5, aur Anthropic Claude 3.5 jaise providers model quality, latency, tool calling, aur multim..."
     },
     {
       "testId": "TEST_2_SEPTEMBER_2026_CHANGES",
@@ -44,34 +45,34 @@
       "researchIntent": "CURRENT_EVENT",
       "queriesGeneratedCount": 5,
       "queriesGenerated": [
-        "Groq September 2026 new model API changes announcement site:groq.com September 2026",
-        "OpenAI September 2026 release notes model updates API changes announcement site:openai.com September 2026",
-        "Anthropic September 2026 new model API changelog announcement site:anthropic.com September 2026",
-        "Google AI September 2026 model/API announcements 2026 official overview",
-        "September 2026 AI model update developer impact OpenAI Anthropic Google Groq"
+        "OpenAI September 2026 function calling API update pricing changes developer impact site:openai.com/blog",
+        "OpenAI September 2026 release notes GPT-4 Turbo v2 model API changes announcement date site:openai.com",
+        "Anthropic September 2026 Claude 3.5 release notes API changes announcement site:anthropic.com",
+        "Anthropic developer tooling updates September 2026 2026 overview",
+        "Google Gemini API changes September 2026 OR Groq LPU model updates September 2026 site:developers.google.com OR site:groq.com"
       ],
       "searchProvidersUsed": [
         "web_search (DuckDuckGo + Wikipedia + MultiEngine)"
       ],
       "searchStates": [
-        "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
+        "SEARCH_PARTIAL",
+        "SEARCH_PARTIAL",
+        "SEARCH_PARTIAL",
         "SEARCH_SUCCESS",
         "SEARCH_SUCCESS"
       ],
       "urlsOpenedCount": 0,
       "sourceTiersDistribution": {
         "ESTABLISHED_REPORTING": 10,
-        "GENERAL_WEB": 3
+        "GENERAL_WEB": 6
       },
-      "evidenceCount": 13,
+      "evidenceCount": 16,
       "followupsCount": 1,
-      "finalAnswerLatencyMs": 16248,
+      "finalAnswerLatencyMs": 13276,
       "citationCompleteness": 100,
       "freshnessCorrectness": true,
-      "cognitiveStepsCount": 20,
-      "spokenAnswerSample": "September 2026 mein major AI labs jaise OpenAI, Anthropic, Google, aur Groq ne apne frontier models aur APIs mein important updates release kiye hain. Is dauran OpenAI aur Anthropi..."
+      "cognitiveStepsCount": 19,
+      "spokenAnswerSample": "September 2026 mein kai bade AI updates aaye hain. Anthropic ne twenty eighth September ko Claude Sonnet 5.5 launch kiya hai jo improved thinking behavior aur tool use ke sath avai..."
     },
     {
       "testId": "TEST_3_WEBRTC_VS_WEBSOCKET_STREAMING",
@@ -81,11 +82,11 @@
       "researchIntent": "TECHNICAL_RESEARCH",
       "queriesGeneratedCount": 5,
       "queriesGenerated": [
-        "WebRTC browser support 2026 Chrome Edge Safari Firefox WebSocket binary audio streaming support HTTP/3 server‑sent events implementation complexity comparison",
-        "WebRTC barge‑in speech AI assistant interruption handling WebSocket pause resume audio streaming HTTP streaming speech-to-speech 2026",
-        "scaling architecture WebRTC SFU vs WebSocket load‑balanced servers vs HTTP streaming CDN for low‑latency speech AI 2026",
-        "2026 benchmark latency WebSocket audio streaming vs WebRTC audio vs HTTP/2 server‑sent events speech-to-speech",
-        "WebRTC packet loss impact on real-time speech-to-speech AI assistant latency"
+        "WebSocket vs WebRTC vs HTTP streaming scalability reliability production deployment case studies architecture trade‑offs official whitepapers Google Cloud, Microsoft Azure, Amazon Web Services",
+        "WebRTC audio streaming latency jitter buffer interruption barge‑in handling RFC 8839 RFC 7742 browser support official W3C specifications",
+        "HTTP streaming audio latency comparison Server‑Sent Events HTTP/2 push HTTP/3 QUIC real‑time speech streaming official IETF drafts",
+        "WebSocket streaming latency and duplex characteristics for real‑time audio overview",
+        "WebSocket vs WebRTC vs HTTP streaming latency barge-in interruption handling real-time speech AI"
       ],
       "searchProvidersUsed": [
         "web_search (DuckDuckGo + Wikipedia + MultiEngine)"
@@ -94,7 +95,7 @@
         "SEARCH_SUCCESS",
         "SEARCH_SUCCESS",
         "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
+        "SEARCH_PARTIAL",
         "SEARCH_SUCCESS"
       ],
       "urlsOpenedCount": 3,
@@ -104,11 +105,11 @@
       },
       "evidenceCount": 17,
       "followupsCount": 1,
-      "finalAnswerLatencyMs": 17253,
+      "finalAnswerLatencyMs": 12560,
       "citationCompleteness": 100,
       "freshnessCorrectness": true,
       "cognitiveStepsCount": 22,
-      "spokenAnswerSample": "WebRTC gives the lowest latency and native barge‑in with built‑in packet‑loss recovery and jitter buffering, making it ideal for production speech‑to‑speech assistants, but it requ..."
+      "spokenAnswerSample": "For the fastest time‑to‑first‑audio and strongest interruption handling, WebRTC’s UDP‑based peer‑to‑peer streaming delivers the most robust media performance, but it adds signaling..."
     },
     {
       "testId": "TEST_4_BEST_AI_PROVIDERS_REGRESSION",
@@ -116,12 +117,11 @@
       "query": "What are the best AI providers?",
       "passed": true,
       "researchIntent": "COMPARISON",
-      "queriesGeneratedCount": 4,
+      "queriesGeneratedCount": 3,
       "queriesGenerated": [
-        "2026 AI provider latency pricing context window multimodal capability comparison",
-        "2026 AI model provider market share leaderboard performance ranking",
-        "leading AI providers 2026 comparative analysis overview",
-        "2026 AI provider reliability metrics uptime SLA performance"
+        "OpenAI GPT-4o vs Anthropic Claude 3 vs Google Gemini vs Meta Llama 3 performance latency multimodal context window 2026 benchmark",
+        "2026 pricing tiers reliability SLA developer ecosystem tools SDKs OpenAI Anthropic Google Meta AI platforms comparison",
+        "2026 AI provider market landscape 2026 overview"
       ],
       "searchProvidersUsed": [
         "web_search (DuckDuckGo + Wikipedia + MultiEngine)"
@@ -129,21 +129,20 @@
       "searchStates": [
         "SEARCH_SUCCESS",
         "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS",
-        "SEARCH_SUCCESS"
+        "SEARCH_PARTIAL"
       ],
-      "urlsOpenedCount": 0,
+      "urlsOpenedCount": 1,
       "sourceTiersDistribution": {
-        "ESTABLISHED_REPORTING": 8,
-        "GENERAL_WEB": 6
+        "ESTABLISHED_REPORTING": 5,
+        "GENERAL_WEB": 7
       },
-      "evidenceCount": 14,
-      "followupsCount": 1,
-      "finalAnswerLatencyMs": 12491,
+      "evidenceCount": 12,
+      "followupsCount": 0,
+      "finalAnswerLatencyMs": 11678,
       "citationCompleteness": 100,
       "freshnessCorrectness": true,
       "cognitiveStepsCount": 18,
-      "spokenAnswerSample": "2026 mein leading AI providers mein OpenAI, Anthropic, Google aur Meta sabse aage hain, jo apne advanced frontier models aur strong enterprise platforms ke liye jaane jaate hain. A..."
+      "spokenAnswerSample": "Main dekh raha hoon ki aaj ke AI market mein OpenAI, Anthropic, Google, aur Meta sabhi ke apne alag-alag strong points hain. Agar aapko rapid features aur strong general performanc..."
     }
   ]
 }

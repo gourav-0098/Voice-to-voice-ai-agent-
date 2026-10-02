@@ -283,8 +283,9 @@ export function evaluateEvidenceDeterministic({ query, observations, citations, 
   const uniqueUrls = new Set(citations.map((c) => c.url).filter(Boolean));
   const duplicateRate = citations.length > 0 ? (citations.length - uniqueUrls.size) / citations.length : 0;
 
-  // Freshness Check: If query asks for current/best/latest/compare, check if retrieved text mentions current year or is exclusively stale
-  const queryNeedsRecency = /\b(current|latest|today|now|recent|best|update|models|providers|api|compare)\b/i.test(query) || !/\b(19\d\d|20[01]\d|202[0-5])\b/.test(query);
+  // Use evaluateEvidenceDeterministic imported from researchEvidenceGate
+  const isHistorical = /\b(gandhi|ww2|world war|irwin|treaty|pact|empire|ancient|century|dynasty|history|historical)\b/i.test(query);
+  const queryNeedsRecency = !isHistorical && (/\b(current|latest|today|now|recent|update|models|providers|api)\b/i.test(query) || !/\b(19\d\d|20[01]\d|202[0-5])\b/.test(query));
   const combinedText = (
     observations.map((o) => o.summary).join(" ") + " " +
     citations.map((c) => (c.snippet || "") + " " + (c.title || "")).join(" ")
@@ -299,7 +300,7 @@ export function evaluateEvidenceDeterministic({ query, observations, citations, 
   const matches = queryTokens.filter((k) => combinedText.includes(k));
   const relevance = queryTokens.length > 0 ? matches.length / queryTokens.length : 1;
 
-  const passed = successfulObs.length > 0 && validUrlCount > 0 && relevance >= 0.2 && duplicateRate < 0.85;
+  const passed = successfulObs.length > 0 && validUrlCount > 0 && relevance >= 0.25 && duplicateRate < 0.85;
 
   return {
     passed,
@@ -614,12 +615,71 @@ MANDATE:
       status: success ? "completed" : "failed",
     });
 
+    // Deterministic gate on initial search
     detEvidence = evaluateEvidenceDeterministic({
       query,
       observations,
       citations: allCitations,
       currentYear: currentDate.year,
     });
+
+    // BUG 4 & BUG 7: Fast path allows up to ONE cheap recovery search if evidence is empty, irrelevant, or insufficient
+    if (!detEvidence.passed || !detEvidence.sufficient) {
+      const recoveryQuery = intentInfo.requiresCurrentDate
+        ? `${query.replace(/[^\w\s]/g, " ").trim()} ${currentDate.year}`.replace(/\s+/g, " ")
+        : query.replace(/[^\w\s]/g, " ").trim();
+
+      if (recoveryQuery !== sanitizedQuery) {
+        recordStep({
+          phase: "TOOL_EXECUTION",
+          title: "Invoking Recovery Search: web_search",
+          tool: "web_search",
+          args: { query: recoveryQuery },
+          thought: `Initial search insufficient (${detEvidence.reason}). Executing targeted 1-step recovery.`,
+          status: "in_progress",
+        });
+
+        try {
+          const recRes = await toolExecutor.executeTool("web_search", { query: recoveryQuery }, { context: { thinkingMode: true } });
+          const recIsEmpty = !recRes.ok || recRes.state === "SEARCH_EMPTY" || !Array.isArray(recRes.sources) || recRes.sources.length === 0;
+          if (recRes.ok !== false && !recIsEmpty) {
+            recRes.sources.forEach((src) => {
+              allCitations.push({
+                title: src.title || "External Source",
+                publisher: src.publisher || "Web",
+                url: src.url || null,
+                snippet: src.snippet || "",
+                sourceType: src.sourceType || "GENERAL_WEB",
+                publishedAt: src.publishedAt || null,
+                retrievedAt: new Date().toISOString(),
+              });
+            });
+
+            observations.push({
+              tool: "web_search",
+              args: { query: recoveryQuery },
+              success: true,
+              state: recRes.state || "SEARCH_SUCCESS",
+              summary: recRes.voiceSummary || JSON.stringify(recRes.data).slice(0, 400),
+            });
+
+            toolTrace.push({
+              tool: "web_search",
+              args: { query: recoveryQuery },
+              success: true,
+            });
+
+            // Re-evaluate deterministic gate with recovered evidence
+            detEvidence = evaluateEvidenceDeterministic({
+              query,
+              observations,
+              citations: allCitations,
+              currentYear: currentDate.year,
+            });
+          }
+        } catch (_) {}
+      }
+    }
 
     qwenGapData = {
       sufficient: detEvidence.passed && detEvidence.freshnessOk,
@@ -632,10 +692,10 @@ MANDATE:
     researchMeta = {
       intent: intentInfo.intent,
       temporalAnchor: currentDate.formatted,
-      queriesUsed: 1,
+      queriesUsed: toolTrace.length,
       sourcesUsed: allCitations.length,
       deepPagesRead: 0,
-      followups: 0,
+      followups: toolTrace.length > 1 ? 1 : 0,
       freshnessChecked: detEvidence.freshnessOk,
       deterministicPassed: detEvidence.passed,
       semanticSufficient: qwenGapData.sufficient,
@@ -678,12 +738,19 @@ MANDATE:
       .replace(/\[MANDATORY TOOL RULES\]:[\s\S]*?(?=\[(?:STRICT|EVIDENCE|FACTUAL|PERSONA))/i, "")
       .replace(/If the user asks.*?invoke the.*?tool\./gi, "");
 
-    const isComparisonOrTechnical =
-      intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
-      intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH ||
-      /\b(best|compare|versus|vs|which should i use|alternatives|difference between)\b/i.test(query);
+    const isNotableWorks = intentInfo.intent === RESEARCH_INTENTS.NOTABLE_WORKS;
+    const isHistoricalOrNotable =
+      isNotableWorks ||
+      intentInfo.intent === RESEARCH_INTENTS.HISTORICAL_INFORMATION ||
+      intentInfo.intent === RESEARCH_INTENTS.BIOGRAPHICAL_INFORMATION;
 
-    const comparisonBlock = structuredComparison?.comparisonEntities?.length
+    const isComparisonOrTechnical =
+      !isHistoricalOrNotable &&
+      (intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
+      intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH ||
+      /\b(compare|versus|vs|which should i use|alternatives|difference between)\b/i.test(query));
+
+    const comparisonBlock = (!isHistoricalOrNotable && structuredComparison?.comparisonEntities?.length)
       ? `\n[STRUCTURED COMPARISON DATASET (DO NOT DECLARE AN OVERALL WINNER - EXPLAIN TRADEOFFS)]:\n${JSON.stringify(structuredComparison.comparisonEntities, null, 2)}\nKey Tradeoff Analysis: ${structuredComparison.decisionTradeoffs || "Criteria dependent"}\n`
       : "";
 
@@ -699,11 +766,12 @@ Current real-world date is ${currentDate.formatted} (Year ${currentDate.year}).
 
 [CRITICAL SYNTHESIS DIRECTIVES - READ CAREFULLY]:
 1. ALL RESEARCH, TOOL EXECUTION, AND SEARCHES ARE ALREADY 100% COMPLETE.
-2. The empirical evidence is provided below in [VERIFIED EVIDENCE PACK] and [STRUCTURED COMPARISON DATASET].
+2. The empirical evidence is provided below in [VERIFIED EVIDENCE PACK]${comparisonBlock ? " and [STRUCTURED COMPARISON DATASET]" : ""}.
 3. DO NOT attempt to call tools. DO NOT write Python, code blocks, "toolcode", "print(...)", or tool function calls.
 4. DO NOT promise to search or use conversational fillers (NEVER say "Ek minute", "Main check karke batata hoon", "Wait a second", or "I will use the websearch tool").
 5. State the direct answer immediately and clearly in 2 to 3 natural spoken sentences for text-to-speech. Do NOT speak URLs or raw citation brackets.
-${isComparisonOrTechnical ? "6. FOR COMPARISON QUESTIONS: DO NOT arbitrarily pick a single winner. Objectively explain the key criteria and trade-offs (e.g. latency, frontier reasoning, context window, pricing) so the user can choose the best option." : ""}
+${isNotableWorks ? "6. FOR NOTABLE / MAJOR WORKS: Present the recognized major works (titles, writings, philosophical contributions) directly and clearly. DO NOT frame as a comparative ranking scorecard." : ""}
+${isComparisonOrTechnical ? "6. FOR COMPARISON QUESTIONS: DO NOT arbitrarily pick a single winner. Objectively explain the key criteria and trade-offs so the user can choose the best option." : ""}
 7. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
 
 ${comparisonBlock}

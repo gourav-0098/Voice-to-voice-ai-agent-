@@ -12,8 +12,8 @@
  *  7. Deterministic Evidence Quality Gate
  *  8. Semantic Gap & Conflict Audit (Qwen 27B)
  *  9. Targeted Follow-Up Search (budget-constrained)
- * 10. Structured Comparison Matrix (for COMPARISON & TECHNICAL_RESEARCH)
- * 11. Research Provenance & Metadata Compilation
+ * 10. Structured Comparison Matrix (for COMPARISON & TECHNICAL_RESEARCH ONLY)
+ * 11. Research Provenance & Concise UI Telemetry
  */
 
 import { classifyResearchIntent, RESEARCH_INTENTS } from "./researchIntentClassifier.js";
@@ -28,6 +28,7 @@ import {
 import { toolExecutor } from "../../tools/toolExecutor.js";
 import { safeOutboundRequest, isUrlSafe } from "../../tools/network/safeHttpClient.js";
 import { extractCleanArticleText } from "../../tools/modules/web/extractWebpageTool.js";
+import { normalizeSearchResult } from "../../tools/modules/web/webSearchTool.js";
 
 export const RESEARCH_LIMITS = {
   MAX_PLANNED_QUERIES: 4,
@@ -105,7 +106,7 @@ export function extractKeyPassages(text = "", query = "", dimensions = [], maxPa
       if (lower.includes(term)) score += 1;
     }
     // Boost sentences containing numbers, dates, version numbers or technical specs
-    if (/\b(202[4-6]|\d+\s*(?:ms|gb|mb|tokens|billion|\$|%))\b/i.test(sentence)) {
+    if (/\b(202[4-6]|\d+\s*(?:ms|gb|mb|tokens|billion|million|\$|%))\b/i.test(sentence)) {
       score += 1.5;
     }
     return { sentence, score };
@@ -120,7 +121,7 @@ export function extractKeyPassages(text = "", query = "", dimensions = [], maxPa
 }
 
 /**
- * Builds structured comparison dataset across dimensions for comparison & technical inquiries
+ * Builds structured comparison dataset across dimensions for comparison & technical inquiries ONLY
  *
  * @param {Object} params
  * @param {string} params.query
@@ -139,9 +140,18 @@ export async function buildComparisonMatrix({
   callModel,
   currentDateFormatted,
 }) {
+  // CRITICAL GUARD: Never build an AI provider comparison matrix for historical or notable works! (Bug 1)
+  if (
+    intent === RESEARCH_INTENTS.NOTABLE_WORKS ||
+    intent === RESEARCH_INTENTS.HISTORICAL_INFORMATION ||
+    intent === RESEARCH_INTENTS.BIOGRAPHICAL_INFORMATION
+  ) {
+    return null;
+  }
+
   const comparisonPrompt = `User Query: "${query}"
 Classified Intent: ${intent}
-Current Real-World Date: ${currentDateFormatted}
+Date Context: ${currentDateFormatted}
 Dimensions: ${dimensions.join(", ")}
 
 Normalized Research Evidence (${evidencePack.length} items):
@@ -149,7 +159,7 @@ ${evidencePack.map((e, idx) => `[Evidence ${idx + 1} (${e.sourceRole} - ${e.sour
 
 Instructions:
 1. Construct an objective, structured comparison matrix mapping each relevant entity/protocol across the key inquiry dimensions.
-2. DO NOT declare an arbitrary overall winner. Focus on architectural or operational TRADEOFFS (e.g. latency vs frontier reasoning vs pricing vs implementation complexity).
+2. DO NOT declare an arbitrary overall winner. Focus on architectural or operational TRADEOFFS.
 3. If information on a dimension is not in evidence, mark it as "Not specified in current evidence".
 
 Respond strictly in JSON format:
@@ -165,7 +175,7 @@ Respond strictly in JSON format:
       "bestSuitedFor": "Recommended operational use case"
     }
   ],
-  "decisionTradeoffs": "2-3 sentences synthesizing the core architectural/operational trade-offs without declaring a single winner."
+  "decisionTradeoffs": "2-3 sentences synthesizing the core trade-offs without declaring a single winner."
 }`;
 
   try {
@@ -229,11 +239,12 @@ export async function executeAdaptiveResearch({
 
   recordStep({
     phase: "PLANNING",
-    title: `Research Intent: ${intentInfo.intent}`,
-    thought: `Classified as ${intentInfo.intent} (confidence: ${(intentInfo.confidence * 100).toFixed(0)}%). Deep research: ${intentInfo.requiresDeepResearch ? "Active" : "Bypassed"}.`,
+    title: `Researching: ${intentInfo.intent.replace(/_/g, " ").toLowerCase()}`,
+    thought: `Inquiry categorized as ${intentInfo.intent}. Freshness required: ${intentInfo.requiresCurrentDate ? "Yes" : "No (Historical/Timeless)"}.`,
     intent: intentInfo.intent,
     confidence: intentInfo.confidence,
     requiresDeepResearch: intentInfo.requiresDeepResearch,
+    requiresCurrentDate: intentInfo.requiresCurrentDate,
     dimensions: intentInfo.dimensions,
     status: "completed",
   });
@@ -243,8 +254,8 @@ export async function executeAdaptiveResearch({
   // =========================================================================
   recordStep({
     phase: "PLANNING",
-    title: "Formulating Multi-Query Research Plan",
-    thought: `Decomposing inquiry with temporal anchor ${dateCtx.formatted} (${dateCtx.year}).`,
+    title: "Planning research",
+    thought: `Decomposing inquiry across dimensions: ${intentInfo.dimensions.slice(0, 3).join(", ")}.`,
     status: "in_progress",
   });
 
@@ -253,18 +264,18 @@ export async function executeAdaptiveResearch({
     intent: intentInfo.intent,
     dimensions: intentInfo.dimensions,
     callModel,
+    requiresCurrentDate: intentInfo.requiresCurrentDate,
   });
 
   const searchTasks = Array.isArray(researchPlan.searchTasks) && researchPlan.searchTasks.length > 0
     ? researchPlan.searchTasks.slice(0, RESEARCH_LIMITS.MAX_PLANNED_QUERIES)
-    : [{ topic: "Primary search", query: sanitizePlannerQuery(query, query, dateCtx.year), freshness: "current" }];
+    : [{ topic: "Primary search", query: sanitizePlannerQuery(query, query, dateCtx.year, intentInfo.requiresCurrentDate), freshness: intentInfo.requiresCurrentDate ? "current" : "historical" }];
 
   recordStep({
     phase: "PLANNING",
-    title: `Research Plan: ${searchTasks.length} Targeted Task(s)`,
-    thought: `Plan formulated covering dimensions: ${researchPlan.dimensions.join(", ")}.`,
+    title: `${searchTasks.length} search tasks planned`,
+    thought: `Targeting: ${searchTasks.map((t) => t.topic).join("; ")}.`,
     plan: searchTasks.map((t) => `${t.topic}: "${t.query}"`),
-    temporalAnchor: dateCtx.monthYear,
     status: "completed",
   });
 
@@ -274,38 +285,44 @@ export async function executeAdaptiveResearch({
   const observations = [];
 
   const searchPromises = searchTasks.map(async (task, taskIdx) => {
-    let currentTaskQuery = sanitizePlannerQuery(task.query, query, dateCtx.year);
+    let currentTaskQuery = sanitizePlannerQuery(task.query, query, dateCtx.year, intentInfo.requiresCurrentDate);
 
     recordStep({
       phase: "TOOL_EXECUTION",
-      title: `Search Task ${taskIdx + 1}: ${task.topic}`,
+      title: `Executing search: ${task.topic}`,
       tool: "web_search",
       args: { query: currentTaskQuery },
       status: "in_progress",
     });
 
-    let execRes = null;
+    let rawExecRes = null;
     try {
-      execRes = await toolExecutor.executeTool(
+      rawExecRes = await toolExecutor.executeTool(
         "web_search",
         { query: currentTaskQuery },
         { context: { thinkingMode: true } }
       );
     } catch (err) {
-      execRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
+      rawExecRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
     }
 
-    // PHASE 7: QUERY REWRITE & RECOVERY IF SEARCH IS EMPTY
-    const isSearchEmpty = !execRes.ok || execRes.state === "SEARCH_EMPTY" || !Array.isArray(execRes.sources) || execRes.sources.length === 0;
+    // Centralized normalization (Bug 3)
+    let execRes = normalizeSearchResult(rawExecRes, currentTaskQuery);
 
-    if (isSearchEmpty) {
-      // Formulate non-identical fallback query
-      const rewrittenQuery = `${task.topic.replace(/[?"'.,!]/g, "")} ${dateCtx.year} official overview`.trim();
+    // PHASE 7: QUERY REWRITE & RECOVERY IF SEARCH IS EMPTY
+    if (!execRes.ok || execRes.state === "SEARCH_EMPTY" || execRes.sources.length === 0) {
+      const yearSuffix = intentInfo.requiresCurrentDate ? ` ${dateCtx.year}` : "";
+      const rewrittenQuery = sanitizePlannerQuery(
+        `${task.topic.replace(/[?"'.,!]/g, "")}${yearSuffix} overview`,
+        query,
+        dateCtx.year,
+        intentInfo.requiresCurrentDate
+      );
 
       recordStep({
         phase: "EVALUATION",
-        title: `Search Task ${taskIdx + 1}: Empty Result - Triggering Query Rewrite`,
-        thought: `Query "${currentTaskQuery}" returned SEARCH_EMPTY. Rewriting to: "${rewrittenQuery}".`,
+        title: `Search returned no usable evidence. Retrying with focused query`,
+        thought: `Initial search returned SEARCH_EMPTY. Executing recovery: "${rewrittenQuery}".`,
         status: "in_progress",
       });
 
@@ -315,14 +332,15 @@ export async function executeAdaptiveResearch({
           { query: rewrittenQuery },
           { context: { thinkingMode: true } }
         );
-        if (retryRes.ok && Array.isArray(retryRes.sources) && retryRes.sources.length > 0) {
-          execRes = retryRes;
+        const normalizedRetry = normalizeSearchResult(retryRes, rewrittenQuery);
+        if (normalizedRetry.ok && normalizedRetry.sources.length > 0) {
+          execRes = normalizedRetry;
           currentTaskQuery = rewrittenQuery;
         }
       } catch (_) {}
     }
 
-    const success = execRes.ok !== false && execRes.state !== "SEARCH_EMPTY" && Array.isArray(execRes.sources) && execRes.sources.length > 0;
+    const success = execRes.ok !== false && execRes.state !== "SEARCH_EMPTY" && execRes.sources.length > 0;
     const summary = execRes.voiceSummary || (execRes.data ? JSON.stringify(execRes.data).slice(0, 400) : "Search completed");
 
     // Ingest citations
@@ -349,7 +367,7 @@ export async function executeAdaptiveResearch({
       task: task.topic,
       query: currentTaskQuery,
       success,
-      state: execRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
+      state: execRes.state,
       summary,
     });
 
@@ -357,12 +375,12 @@ export async function executeAdaptiveResearch({
       tool: "web_search",
       args: { query: currentTaskQuery },
       success,
-      state: execRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
+      state: execRes.state,
     });
 
     recordStep({
       phase: "TOOL_OBSERVATION",
-      title: success ? `Results: ${task.topic}` : `No Results: ${task.topic}`,
+      title: success ? `Found ${execRes.sources.length} sources: ${task.topic}` : `Search returned no usable evidence: ${task.topic}`,
       tool: "web_search",
       observation: summary.slice(0, 300),
       status: success ? "completed" : "failed",
@@ -395,8 +413,8 @@ export async function executeAdaptiveResearch({
   if (candidatesToOpen.length > 0) {
     recordStep({
       phase: "TOOL_EXECUTION",
-      title: `Opening & Extracting ${candidatesToOpen.length} Authoritative Source(s)`,
-      thought: `Extracting deep technical/factual evidence from top URLs: ${candidatesToOpen.map((c) => c.publisher || c.title).join(", ")}.`,
+      title: `Opening ${candidatesToOpen.length} authoritative sources`,
+      thought: `Extracting primary evidence from: ${candidatesToOpen.map((c) => c.publisher || c.title).slice(0, 2).join(", ")}.`,
       urls: candidatesToOpen.map((c) => c.url),
       status: "in_progress",
     });
@@ -438,8 +456,8 @@ export async function executeAdaptiveResearch({
     if (openedPages.length > 0) {
       recordStep({
         phase: "TOOL_OBSERVATION",
-        title: `Extracted Deep Evidence from ${openedPages.length} Source(s)`,
-        thought: `Extracted primary verified passages from ${openedPages.map((p) => p.publisher || p.title).join(", ")}.`,
+        title: `Extracted verified passages from ${openedPages.length} source(s)`,
+        thought: `Primary documentation verified from ${openedPages.map((p) => p.publisher || p.title).join(", ")}.`,
         status: "completed",
       });
     }
@@ -462,14 +480,16 @@ export async function executeAdaptiveResearch({
     observations,
     citations: allCitations,
     currentYear: dateCtx.year,
+    intent: intentInfo.intent,
+    requiresCurrentDate: intentInfo.requiresCurrentDate,
   });
 
   recordStep({
     phase: "EVALUATION",
-    title: detGate.passed ? "Deterministic Quality Gate: PASSED" : "Deterministic Quality Gate: WARNING",
+    title: detGate.passed ? "Quality Gate: Evidence validated" : "Quality Gate: Insufficient evidence",
     thought: detGate.passed
-      ? `Validated ${allCitations.length} source(s), diversity: ${detGate.sourceDiversity}, freshnessOk: ${detGate.freshnessOk}.`
-      : `Quality gate flagged: ${detGate.reason}`,
+      ? `Validated ${allCitations.length} sources (diversity: ${detGate.sourceDiversity}).`
+      : detGate.reason,
     deterministicEvaluation: detGate,
     status: detGate.passed ? "completed" : "failed",
   });
@@ -490,13 +510,6 @@ export async function executeAdaptiveResearch({
   let followupsExecuted = 0;
 
   if (evidencePack.length > 0 && detGate.passed) {
-    recordStep({
-      phase: "EVALUATION",
-      title: "Auditing Evidence Coverage (Qwen 27B)",
-      thought: `Verifying multidimensional coverage for ${query} as of ${dateCtx.formatted}.`,
-      status: "in_progress",
-    });
-
     gapAudit = await evaluateSemanticGap({
       query,
       evidencePack,
@@ -505,20 +518,25 @@ export async function executeAdaptiveResearch({
       currentDateFormatted: dateCtx.formatted,
     });
 
-    // Targeted Follow-Up if missing essential dimension
+    // Targeted Follow-Up if missing essential dimension or subtopic
     if (
-      !gapAudit.sufficient &&
+      (!gapAudit.sufficient || !detGate.passed) &&
       gapAudit.followUpTask &&
       gapAudit.followUpTask.query &&
       followupsExecuted < RESEARCH_LIMITS.MAX_FOLLOWUPS
     ) {
       followupsExecuted += 1;
-      const followQuery = sanitizePlannerQuery(gapAudit.followUpTask.query, query, dateCtx.year);
+      const followQuery = sanitizePlannerQuery(
+        gapAudit.followUpTask.query,
+        query,
+        dateCtx.year,
+        intentInfo.requiresCurrentDate
+      );
 
       recordStep({
         phase: "EVALUATION",
-        title: `Targeted Follow-up: ${gapAudit.followUpTask.topic || "Missing Dimension"}`,
-        thought: `Semantic gap detected (${gapAudit.missingInformation?.join(", ") || "missing specifics"}). Executing targeted search: "${followQuery}".`,
+        title: `Targeted follow-up: ${gapAudit.followUpTask.topic || "Missing Subtopic"}`,
+        thought: `Querying missing information: "${followQuery}".`,
         status: "in_progress",
       });
 
@@ -528,9 +546,10 @@ export async function executeAdaptiveResearch({
           { query: followQuery },
           { context: { thinkingMode: true } }
         );
+        const normFollow = normalizeSearchResult(followRes, followQuery);
 
-        if (followRes.ok && Array.isArray(followRes.sources) && followRes.sources.length > 0) {
-          followRes.sources.forEach((src) => {
+        if (normFollow.ok && normFollow.sources.length > 0) {
+          normFollow.sources.forEach((src) => {
             const key = src.url || src.title;
             if (key && !seenUrls.has(key)) {
               seenUrls.add(key);
@@ -543,7 +562,6 @@ export async function executeAdaptiveResearch({
                 publishedAt: src.publishedAt || null,
                 retrievedAt: new Date().toISOString(),
               });
-              // Append to evidence pack
               evidencePack.push({
                 source: src.publisher || src.title || "Web",
                 url: src.url,
@@ -564,22 +582,25 @@ export async function executeAdaptiveResearch({
             isFollowup: true,
           });
 
+          // Re-evaluate deterministic gate after follow-up
+          detGate = evaluateEvidenceDeterministic({
+            query,
+            observations,
+            citations: allCitations,
+            currentYear: dateCtx.year,
+            intent: intentInfo.intent,
+            requiresCurrentDate: intentInfo.requiresCurrentDate,
+          });
+
           recordStep({
             phase: "TOOL_OBSERVATION",
-            title: `Follow-up Results Retrieved`,
+            title: `Follow-up retrieved ${normFollow.sources.length} sources`,
             tool: "web_search",
-            observation: followRes.voiceSummary?.slice(0, 300) || "Follow-up completed",
+            observation: normFollow.voiceSummary?.slice(0, 300) || "Follow-up completed",
             status: "completed",
           });
         }
       } catch (_) {}
-    } else {
-      recordStep({
-        phase: "EVALUATION",
-        title: "Semantic Gap Audit: Sufficient",
-        thought: "Retrieved evidence pack satisfies key research dimensions.",
-        status: "completed",
-      });
     }
   }
 
@@ -587,16 +608,19 @@ export async function executeAdaptiveResearch({
   // STAGE 8: STRUCTURED COMPARISON MATRIX (PHASE 12 & 13)
   // =========================================================================
   let comparisonMatrix = null;
+  // CRITICAL GUARD: Only build comparison matrix if intent is COMPARISON or TECHNICAL_RESEARCH! (Bug 1)
   const isComparisonOrTechnical =
-    intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
-    intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH ||
-    /\b(best|compare|versus|vs|which should i use|alternatives|difference between)\b/i.test(query);
+    (intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
+     intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH) &&
+    intentInfo.intent !== RESEARCH_INTENTS.NOTABLE_WORKS &&
+    intentInfo.intent !== RESEARCH_INTENTS.HISTORICAL_INFORMATION &&
+    intentInfo.intent !== RESEARCH_INTENTS.BIOGRAPHICAL_INFORMATION;
 
   if (isComparisonOrTechnical && evidencePack.length > 0) {
     recordStep({
       phase: "EVALUATION",
-      title: "Synthesizing Objective Comparison Matrix",
-      thought: `Mapping trade-offs across candidate entities and dimensions (${researchPlan.dimensions.join(", ")}).`,
+      title: "Synthesizing objective comparison matrix",
+      thought: `Mapping trade-offs across candidate entities and dimensions (${researchPlan.dimensions.slice(0, 3).join(", ")}).`,
       status: "in_progress",
     });
 
@@ -612,8 +636,8 @@ export async function executeAdaptiveResearch({
     if (comparisonMatrix) {
       recordStep({
         phase: "EVALUATION",
-        title: "Comparison Matrix Formulated",
-        thought: comparisonMatrix.decisionTradeoffs || "Comparative criteria and operational trade-offs established.",
+        title: "Comparison criteria mapped",
+        thought: comparisonMatrix.decisionTradeoffs || "Comparative trade-offs established.",
         status: "completed",
       });
     }
@@ -626,7 +650,7 @@ export async function executeAdaptiveResearch({
   // =========================================================================
   const researchMeta = {
     intent: intentInfo.intent,
-    temporalAnchor: dateCtx.monthYear,
+    temporalAnchor: intentInfo.requiresCurrentDate ? dateCtx.monthYear : "Historical / Canonical",
     queriesUsed: searchTasks.length + followupsExecuted,
     sourcesUsed: allCitations.length,
     deepPagesRead: openedPages.length,

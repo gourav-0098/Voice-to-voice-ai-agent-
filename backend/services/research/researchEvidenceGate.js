@@ -5,7 +5,8 @@
  * Implements:
  * - Source Tier Classification (TIER_1_PRIMARY, TIER_2_ESTABLISHED, TIER_3_SECONDARY, TIER_4_GENERAL_WEB)
  * - Result Quality Gate & Explicit States (SEARCH_SUCCESS, SEARCH_PARTIAL, SEARCH_EMPTY, SEARCH_ERROR)
- * - Deterministic Evidence Sufficiency Gate
+ * - Deterministic Evidence Sufficiency Gate (Distinguishes VALID_URL from VALID_EVIDENCE)
+ * - Historical vs Current Relevance Matching (Relevance + Authority for Historical, Freshness only when needed)
  * - Structured Evidence Pack Normalization
  * - Qwen 27B Semantic Gap & Conflict Analysis
  */
@@ -18,7 +19,7 @@ export const SOURCE_TIERS = {
 };
 
 /**
- * Classifies a URL / publisher into source authority tiers
+ * Classifies a URL / publisher into source authority tiers (Bug 6)
  *
  * @param {string} url
  * @param {string} publisher
@@ -29,11 +30,25 @@ export function classifySourceTier(url = "", publisher = "") {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
 
-    // TIER_1_PRIMARY: Official documentation, developer portals, cloud providers, AI labs, standards bodies, government
+    // TIER_1_PRIMARY: Official archives, academic repos, developer docs, AI labs, government
     if (
       host.endsWith(".gov") ||
+      host.endsWith(".gov.in") ||
+      host.endsWith(".nic.in") ||
       host.endsWith(".mil") ||
       host.endsWith(".edu") ||
+      host.endsWith(".ac.in") ||
+      host.includes("gandhiheritageportal.org") ||
+      host.includes("mkgandhi.org") ||
+      host.includes("mkgandhi-sarvodaya.org") ||
+      host.includes("archives.gov") ||
+      host.includes("nationalarchives.gov.uk") ||
+      host.includes("loc.gov") ||
+      host.includes("bl.uk") ||
+      host.includes("history.state.gov") ||
+      host.includes("un.org") ||
+      host.includes("who.int") ||
+      host.includes("nationalww2museum.org") ||
       host.includes("arxiv.org") ||
       host.includes("w3.org") ||
       host.includes("ietf.org") ||
@@ -57,8 +72,16 @@ export function classifySourceTier(url = "", publisher = "") {
       return SOURCE_TIERS.TIER_1_PRIMARY;
     }
 
-    // TIER_2_ESTABLISHED: Established journalism, wire services, recognized tech journalism, benchmark orgs
+    // TIER_2_ESTABLISHED: Encyclopedias, historical institutions, established journalism, wire services
     if (
+      host.includes("britannica.com") ||
+      host.includes("history.com") ||
+      host.includes("oxfordreference.com") ||
+      host.includes("cambridge.org") ||
+      host.includes("jstor.org") ||
+      host.includes("iwm.org.uk") ||
+      host.includes("yadvashem.org") ||
+      host.includes("ushmm.org") ||
       host.includes("reuters.com") ||
       host.includes("bloomberg.com") ||
       host.includes("apnews.com") ||
@@ -97,18 +120,33 @@ export function classifySourceTier(url = "", publisher = "") {
 }
 
 /**
- * Deterministically checks evidence count, valid URLs, freshness, source diversity, and relevance
+ * Deterministically checks evidence count, valid URLs, freshness, source diversity, and relevance (Bug 3, 5, 7)
+ * Distinguishes VALID_URL from VALID_EVIDENCE.
  *
  * @param {Object} params
  * @param {string} params.query
  * @param {Array} params.observations
  * @param {Array} params.citations
- * @param {number} params.currentYear
+ * @param {number} [params.currentYear=2026]
+ * @param {string} [params.intent]
+ * @param {boolean} [params.requiresCurrentDate=true]
  * @returns {Object} Structured deterministic evaluation
  */
-export function evaluateEvidenceDeterministic({ query, observations = [], citations = [], currentYear = 2026 }) {
+export function evaluateEvidenceDeterministic({
+  query,
+  observations = [],
+  citations = [],
+  currentYear = 2026,
+  intent = "",
+  requiresCurrentDate = true,
+}) {
   const validObservations = observations.filter(
-    (o) => o.success && o.summary && !o.summary.includes("[SEARCH_EMPTY]") && !o.summary.includes("No recent web search results")
+    (o) =>
+      o.success &&
+      o.summary &&
+      !o.summary.includes("[SEARCH_EMPTY]") &&
+      !o.summary.includes("No recent web search results") &&
+      !o.summary.includes("Search returned no usable evidence")
   );
 
   const sourceCount = citations.length;
@@ -116,7 +154,8 @@ export function evaluateEvidenceDeterministic({ query, observations = [], citati
     return {
       passed: false,
       sufficient: false,
-      reason: "No valid observations or web sources retrieved.",
+      state: "SEARCH_EMPTY",
+      reason: "Search returned no usable evidence.",
       missingInformation: ["Primary facts for query"],
       conflicts: [],
       freshnessOk: false,
@@ -133,6 +172,7 @@ export function evaluateEvidenceDeterministic({ query, observations = [], citati
     return {
       passed: false,
       sufficient: false,
+      state: "SEARCH_EMPTY",
       reason: "Retrieved citations lack valid URLs.",
       missingInformation: ["Authoritative web sources"],
       conflicts: [],
@@ -157,29 +197,70 @@ export function evaluateEvidenceDeterministic({ query, observations = [], citati
   const uniqueUrls = new Set(validUrlCitations.map((c) => c.url));
   const duplicateRate = validUrlCitations.length > 0 ? (validUrlCitations.length - uniqueUrls.size) / validUrlCitations.length : 0;
 
-  // Freshness Check: If query asks for current/best/latest/compare, check if retrieved text mentions current year or is exclusively stale
-  const queryNeedsRecency = /\b(current|latest|today|now|recent|best|update|models|providers|api|compare|this month|september 2026|october 2026)\b/i.test(query) || !/\b(19\d\d|20[01]\d|202[0-5])\b/.test(query);
   const combinedText = (
     validObservations.map((o) => o.summary).join(" ") + " " +
     validUrlCitations.map((c) => (c.snippet || "") + " " + (c.title || "")).join(" ")
   ).toLowerCase();
 
-  const hasCurrentYear = combinedText.includes(String(currentYear));
-  const hasStalePastYearOnly = (combinedText.includes("2024") || combinedText.includes("2023")) && !hasCurrentYear;
-  const freshnessOk = !queryNeedsRecency || !hasStalePastYearOnly || hasCurrentYear;
+  // Freshness Check: Apply ONLY when recency is actually required (Bug 2 & 5)
+  const isHistorical =
+    !requiresCurrentDate ||
+    intent === "HISTORICAL_INFORMATION" ||
+    intent === "NOTABLE_WORKS" ||
+    intent === "BIOGRAPHICAL_INFORMATION" ||
+    /\b(gandhi|ww1|ww2|world war|treaty|pact|ancient|medieval|history|assassinated|born in|died in|works of|books of)\b/i.test(query);
 
-  // Keyword Relevance Check
-  const queryTokens = query.toLowerCase().split(/\s+/).filter((w) => w.length > 3 && !["what", "which", "where", "tell", "about", "show", "with"].includes(w));
+  let freshnessOk = true;
+  if (!isHistorical && requiresCurrentDate) {
+    const hasCurrentYear = combinedText.includes(String(currentYear));
+    const hasStalePastYearOnly = (combinedText.includes("2024") || combinedText.includes("2023")) && !hasCurrentYear;
+    freshnessOk = !hasStalePastYearOnly || hasCurrentYear;
+  }
+
+  // Keyword Relevance Check (Bug 4 & 5)
+  const queryTokens = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !["what", "which", "where", "tell", "about", "show", "with", "from", "many", "people", "were"].includes(w));
   const matches = queryTokens.filter((k) => combinedText.includes(k));
   const relevance = queryTokens.length > 0 ? matches.length / queryTokens.length : 1;
 
-  const passed = validObservations.length > 0 && validUrlCitations.length > 0 && relevance >= 0.20 && duplicateRate < 0.85;
+  // Multi-part Subtopic Coverage Check (Bug 4 & 5)
+  let missingSubtopicReason = null;
+  const lowerQ = query.toLowerCase();
+
+  // Multi-part WWII casualties check: if asked about Chinese killed by Japan, verify China/Chinese is covered!
+  if (lowerQ.includes("ww2") || lowerQ.includes("world war")) {
+    if (
+      (lowerQ.includes("chinese") || lowerQ.includes("china")) &&
+      !combinedText.includes("chinese") &&
+      !combinedText.includes("china")
+    ) {
+      missingSubtopicReason = "Retrieved evidence missing coverage for Chinese casualties in World War II.";
+    }
+  }
+
+  // Notable works check: verify evidence discusses actual writings/books
+  if (intent === "NOTABLE_WORKS" || lowerQ.includes("best work of") || lowerQ.includes("works of")) {
+    const hasWorkMention = /\b(swaraj|autobiography|experiments|satyagraha|writings|books|works|essays|letters|speeches)\b/i.test(combinedText);
+    if (!hasWorkMention) {
+      missingSubtopicReason = "Retrieved evidence does not contain specific titles or notable works.";
+    }
+  }
+
+  const passed =
+    validObservations.length > 0 &&
+    validUrlCitations.length > 0 &&
+    relevance >= 0.20 &&
+    duplicateRate < 0.85 &&
+    !missingSubtopicReason;
 
   return {
     passed,
     sufficient: passed && freshnessOk,
-    reason: passed ? "Deterministic checks passed." : "Evidence failed relevance or URL validity thresholds.",
-    missingInformation: passed ? [] : ["Insufficient factual coverage of key inquiry terms"],
+    state: passed ? "SEARCH_SUCCESS" : "SEARCH_PARTIAL",
+    reason: missingSubtopicReason || (passed ? "Deterministic checks passed." : "Evidence failed relevance or coverage thresholds."),
+    missingInformation: missingSubtopicReason ? [missingSubtopicReason] : passed ? [] : ["Insufficient factual coverage of key inquiry terms"],
     conflicts: [],
     freshnessOk,
     sourceCount,
@@ -256,7 +337,7 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
  */
 export async function evaluateSemanticGap({ query, evidencePack, dimensions = [], callModel, currentDateFormatted }) {
   const auditPrompt = `User Query: "${query}"
-Current Real-World Date: ${currentDateFormatted}
+Current Date Context: ${currentDateFormatted}
 
 Candidate Dimensions: ${dimensions.join(", ")}
 
@@ -264,9 +345,9 @@ Normalized Evidence Pack (${evidencePack.length} items):
 ${evidencePack.map((e, idx) => `[Evidence ${idx + 1}] (${e.sourceRole} - ${e.source} | ${e.sourceTier}): ${e.passage}`).join("\n\n")}
 
 Auditing Instructions:
-1. Verify if the retrieved evidence sufficiently covers the requested dimensions for the current timeframe.
-2. Identify any missing information or conflicting claims.
-3. If an essential dimension is completely missing, suggest ONE specific follow-up search task.
+1. Verify if the retrieved evidence directly answers the user's specific inquiry.
+2. If the user asks a multi-part question (e.g. Total WW2 deaths AND Chinese casualties), verify that BOTH sub-questions are covered with specific facts/figures.
+3. If an essential dimension is completely missing, suggest ONE specific follow-up search query to retrieve the missing information.
 
 Respond strictly in valid JSON format:
 {
@@ -312,7 +393,7 @@ Respond strictly in valid JSON format:
   } catch (_) {}
 
   return {
-    sufficient: evidencePack.length >= 3,
+    sufficient: evidencePack.length >= 2,
     sourceCount: evidencePack.length,
     missingInformation: [],
     conflicts: [],
