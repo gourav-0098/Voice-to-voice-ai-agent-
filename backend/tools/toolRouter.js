@@ -19,10 +19,10 @@ export class ToolRouter {
     const cleanQ = q.replace(/[?.,!]+$/, "").trim();
     const lower = cleanQ.toLowerCase();
 
-    // 1. Explicit Arithmetic or Percentage: "2+2", "18% of 4500", "what is 45 * 12 + 10?"
+    // 1. Explicit Arithmetic or Percentage: "2+2", "18% of 4500", "What is 17 percent of 850?", "what is 45 * 12 + 10?"
     if (
       /^(?:what is |calculate |evaluate )?[\d.\s+\-*/()^%x]+$/i.test(cleanQ) ||
-      /\b\d+\s*%\s*of\s*\d+\b/i.test(lower) ||
+      /\b\d+\s*(?:%|percent)\s*of\s*\d+\b/i.test(lower) ||
       /^(?:how much is )?[\d.]+\s*(?:km|miles|kg|lbs|celsius|fahrenheit)\s*(?:to|in)\s*(?:km|miles|kg|lbs|celsius|fahrenheit)$/i.test(lower)
     ) {
       const expr = cleanQ.replace(/^(?:what is |calculate |evaluate |compute |how much is )/i, "").trim();
@@ -72,11 +72,12 @@ export class ToolRouter {
       }
     }
 
-    // 4. Live Weather: "weather in Jaipur", "delhi ka mausam", "temperature in London", "how is the weather in Paris"
-    const weatherMatch = lower.match(/(?:weather|temperature|forecast|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i) ||
-      lower.match(/([a-zA-Z\s]+)\s+(?:ka mausam|weather)/i);
+    // 4. Live Weather: "weather in Jaipur", "Jaipur ka weather kaisa hai", "delhi ka mausam", "temperature in London"
+    const weatherSuffixMatch = lower.match(/([a-zA-Z\s]+)\s+(?:ka mausam|ka weather|weather)/i);
+    const weatherPrefixMatch = lower.match(/(?:weather|temperature|forecast|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i);
+    const weatherMatch = weatherSuffixMatch || weatherPrefixMatch;
     if (weatherMatch) {
-      const loc = weatherMatch[1].trim().replace(/\b(ka|ki|me|mein|today|aaj|\?)\b/gi, "").trim();
+      let loc = weatherMatch[1].trim().replace(/\b(ka|ki|me|mein|today|aaj|kaisa|kaisi|hai|\?)\b/gi, "").trim();
       if (loc.length > 2) {
         return {
           shouldRoute: true,

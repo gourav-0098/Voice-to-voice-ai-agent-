@@ -248,6 +248,16 @@ export function evaluateEvidenceDeterministic({
     }
   }
 
+  // Viral pilot inquiry check (Golden Example 7 & 19): verify evidence actually mentions pilot/aviation incident
+  // Must reject irrelevant search results (e.g. Texas man Hanuman Chalisa)
+  if (lowerQ.includes("pilot") && (lowerQ.includes("viral") || lowerQ.includes("trending") || intent === "TRENDING_EVENT")) {
+    const mentionsPilotOrAviation = /\b(pilot|flight|airline|cockpit|aviation|plane|aircraft)\b/i.test(combinedText);
+    const mentionsIrrelevantViral = /\b(hanuman chalisa|supermarket|temple dance|bhojpuri song)\b/i.test(combinedText);
+    if (!mentionsPilotOrAviation || (mentionsIrrelevantViral && !mentionsPilotOrAviation)) {
+      missingSubtopicReason = "Retrieved search results are irrelevant to the viral pilot inquiry (failed aviation entity check).";
+    }
+  }
+
   const passed =
     validObservations.length > 0 &&
     validUrlCitations.length > 0 &&

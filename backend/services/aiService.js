@@ -209,7 +209,26 @@ export function getSystemInstruction(personaKey = "conversational", voiceModel =
   return instruction;
 }
 
-export const DEFAULT_SYSTEM_INSTRUCTION = getSystemInstruction();
+/**
+ * Returns dynamic default system instruction evaluated at runtime call time.
+ * Prevents hardcoding static timestamps or dates into persistent module scopes.
+ */
+export function getDefaultSystemInstruction() {
+  return getSystemInstruction();
+}
+
+// Backward compatibility proxy so existing code accessing DEFAULT_SYSTEM_INSTRUCTION gets dynamic runtime instruction
+export const DEFAULT_SYSTEM_INSTRUCTION = {
+  toString() {
+    return getSystemInstruction();
+  },
+  valueOf() {
+    return getSystemInstruction();
+  },
+  [Symbol.toPrimitive]() {
+    return getSystemInstruction();
+  }
+};
 
 // List of Gemini models to cycle through (Priority 1)
 const GEMINI_CANDIDATE_MODELS = [

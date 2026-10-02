@@ -18,10 +18,12 @@
 
 export const RESEARCH_INTENTS = {
   CONVERSATIONAL: "CONVERSATIONAL",
+  CHITCHAT: "CHITCHAT",
   SIMPLE_FACT: "SIMPLE_FACT",
   CALCULATION: "CALCULATION",
   CURRENT_FACT: "CURRENT_FACT",
   CURRENT_EVENT: "CURRENT_EVENT",
+  TRENDING_EVENT: "TRENDING_EVENT",
   COMPARISON: "COMPARISON",
   TECHNICAL_RESEARCH: "TECHNICAL_RESEARCH",
   DEEP_RESEARCH: "DEEP_RESEARCH",
@@ -29,6 +31,12 @@ export const RESEARCH_INTENTS = {
   HISTORICAL_INFORMATION: "HISTORICAL_INFORMATION",
   NOTABLE_WORKS: "NOTABLE_WORKS",
   BIOGRAPHICAL_INFORMATION: "BIOGRAPHICAL_INFORMATION",
+  URL_RESEARCH: "URL_RESEARCH",
+  WEATHER: "WEATHER",
+  SPORTS_CURRENT: "SPORTS_CURRENT",
+  FINANCIAL_CURRENT: "FINANCIAL_CURRENT",
+  FOLLOW_UP: "FOLLOW_UP",
+  CLARIFICATION: "CLARIFICATION",
 };
 
 /**
@@ -56,12 +64,111 @@ export function classifyResearchIntent(query = "") {
 
   if (isConversationalPattern && !containsInformationSearch) {
     return {
-      intent: RESEARCH_INTENTS.CONVERSATIONAL,
+      intent: RESEARCH_INTENTS.CHITCHAT,
       confidence: 0.99,
       requiresDeepResearch: false,
       requiresSearch: false,
       requiresCurrentDate: false,
       dimensions: ["conversational_reply"],
+    };
+  }
+
+  // 0a. URL_RESEARCH: Explicit URL opening/extraction
+  if (/https?:\/\/[^\s]+/i.test(q) && /\b(read|open|extract|summarize|website|content|page|article)\b/i.test(lower)) {
+    return {
+      intent: RESEARCH_INTENTS.URL_RESEARCH,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: false,
+      dimensions: ["page_extraction"],
+    };
+  }
+
+  // 0b. WEATHER: Live weather/temperature requests
+  if (
+    /\b(weather|temperature|forecast|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i.test(lower) ||
+    /([a-zA-Z\s]+)\s+(?:ka mausam|weather)/i.test(lower) ||
+    /\b(barish hogi|kitni garmi hai|aaj ka mausam)\b/i.test(lower)
+  ) {
+    return {
+      intent: RESEARCH_INTENTS.WEATHER,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: true,
+      dimensions: ["live_weather"],
+    };
+  }
+
+  // 0c. FINANCIAL_CURRENT: Market cap or Stock price query
+  if (
+    /\b(market cap|marketcap|market capitalization|company valuation|valuation|total worth)\b/i.test(lower) ||
+    /\b(stock price|share price|stock quote|trading at|share ka price|stock ka price)\b/i.test(lower)
+  ) {
+    return {
+      intent: RESEARCH_INTENTS.FINANCIAL_CURRENT,
+      confidence: 0.98,
+      requiresDeepResearch: false,
+      requiresSearch: true,
+      requiresCurrentDate: true,
+      dimensions: ["financial_metrics"],
+    };
+  }
+
+  // 0d. SPORTS_CURRENT: Live sports scores, match updates, tournaments
+  if (
+    /\b(live score|match score|cricket score|ipl score|football score|who won the match|match update|today's match|aaj ka match)\b/i.test(lower)
+  ) {
+    return {
+      intent: RESEARCH_INTENTS.SPORTS_CURRENT,
+      confidence: 0.96,
+      requiresDeepResearch: false,
+      requiresSearch: true,
+      requiresCurrentDate: true,
+      dimensions: ["live_sports"],
+    };
+  }
+
+  // 0e. TRENDING_EVENT: Viral news, breaking social media events, trending controversies
+  // e.g. "Why is this Indian pilot going viral lately?", "who is going viral", "trending today"
+  if (
+    /\b(going viral|went viral|viral lately|trending lately|trending today|why is .* viral|viral video|viral incident|internet sensation)\b/i.test(lower)
+  ) {
+    return {
+      intent: RESEARCH_INTENTS.TRENDING_EVENT,
+      confidence: 0.96,
+      requiresDeepResearch: false,
+      requiresSearch: true,
+      requiresCurrentDate: true,
+      dimensions: ["entity_identification", "incident_cause", "verification_sources"],
+    };
+  }
+
+  // 0f. FOLLOW_UP / CLARIFICATION: Conversational continuations referencing prior context
+  if (
+    /^(?:tell me )?(?:the )?(?:full story|puri story|poori story|more details|aur batao|aur bataiye|detail me batao|aur kya hua|iske baad kya hua|what happened after that|what happened next|tell me more|what about that|explain that)\b/i.test(lower) ||
+    /^(?:what about|aur unka|unki|iska|uske)\s+[a-z0-9\s]+$/i.test(lower)
+  ) {
+    return {
+      intent: RESEARCH_INTENTS.FOLLOW_UP,
+      confidence: 0.95,
+      requiresDeepResearch: false,
+      requiresSearch: true,
+      requiresCurrentDate: false,
+      dimensions: ["contextual_continuity"],
+    };
+  }
+
+  // 0g. CLARIFICATION: Extremely ambiguous short requests without specific entities
+  if (/^what happened with the [a-z]+[?.]*$/i.test(lower)) {
+    return {
+      intent: RESEARCH_INTENTS.CLARIFICATION,
+      confidence: 0.90,
+      requiresDeepResearch: false,
+      requiresSearch: true,
+      requiresCurrentDate: true,
+      dimensions: ["entity_disambiguation"],
     };
   }
 

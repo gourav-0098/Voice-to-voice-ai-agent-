@@ -361,10 +361,9 @@ async function runTests() {
 
     for (const g of greetings) {
       const intent = classifyResearchIntent(g);
-      assert.equal(
-        intent.intent,
-        RESEARCH_INTENTS.CONVERSATIONAL,
-        `Query "${g}" should be classified as CONVERSATIONAL, got: ${intent.intent}`
+      assert.ok(
+        intent.intent === RESEARCH_INTENTS.CONVERSATIONAL || intent.intent === RESEARCH_INTENTS.CHITCHAT,
+        `Query "${g}" should be classified as CONVERSATIONAL or CHITCHAT, got: ${intent.intent}`
       );
       assert.equal(
         intent.requiresSearch,

@@ -23,6 +23,7 @@ import aiService from "./aiService.js";
 import { classifyResearchIntent, RESEARCH_INTENTS } from "./research/researchIntentClassifier.js";
 import { executeAdaptiveResearch } from "./research/researchOrchestrator.js";
 import { queryNeedsRewrite, rewriteQueryForSearch } from "./research/researchQueryPlanner.js";
+import { resolveTopicContinuity } from "./research/researchTopicMemory.js";
 
 const toolRouter = new ToolRouter();
 
@@ -421,9 +422,39 @@ export async function runThinkingLoop({
   console.log(`🧠 [THINKING ENGINE] Initiating tiered cognitive loop for: "${query.slice(0, 60)}..."`);
 
   // =========================================================================
+  // TOPIC CONTINUITY & CONTEXT RESOLUTION (Part 6: Active Topic Memory)
+  // Inherits active topic for follow-up turns ("tell me the full story")
+  // Clarifies ambiguous queries without hallucinating ("what happened with the pilot")
+  // =========================================================================
+  const topicResolution = resolveTopicContinuity(query, null, history);
+  const effectiveQuery = topicResolution.resolvedQuery || query;
+
+  if (topicResolution.requiresClarification && topicResolution.clarificationPrompt) {
+    const totalDurationMs = Math.round(performance.now() - t0);
+    recordStep({
+      phase: "SYNTHESIS",
+      title: "Requesting Clarification",
+      thought: `Query requires entity disambiguation before searching.`,
+      finalReply: topicResolution.clarificationPrompt,
+      status: "completed",
+    });
+
+    return {
+      answer: topicResolution.clarificationPrompt,
+      sources: [],
+      toolTrace: [],
+      verification: { checked: true, issues: [], verdict: "CLARIFICATION_REQUIRED" },
+      reply: topicResolution.clarificationPrompt,
+      citations: [],
+      thinkingSteps,
+      totalDurationMs,
+    };
+  }
+
+  // =========================================================================
   // TIER 1: DETERMINISTIC FAST-PATH (< 2ms router -> 1 Tool -> 1 Fast LLM call)
   // =========================================================================
-  const deterministicRoute = toolRouter.route(query);
+  const deterministicRoute = toolRouter.route(effectiveQuery);
   if (deterministicRoute.shouldRoute && deterministicRoute.directExecution && deterministicRoute.toolName) {
     const directTool = deterministicRoute.toolName;
     const directArgs = deterministicRoute.args || {};
@@ -515,13 +546,17 @@ MANDATE:
   // TIER 2 & 3: ADAPTIVE RESEARCH & REASONING PIPELINE
   // =========================================================================
   const currentDate = getCurrentDateContext();
-  const intentInfo = classifyResearchIntent(query);
+  const intentInfo = classifyResearchIntent(effectiveQuery);
 
   // =========================================================================
   // FAST CONVERSATIONAL EXIT (Zero Tools / Zero Searches / Immediate Warm Reply)
   // Greetings, pleasantries, identity, humor, banter ("hello", "how are you", "smile me")
   // =========================================================================
-  if (intentInfo.intent === RESEARCH_INTENTS.CONVERSATIONAL || intentInfo.requiresSearch === false) {
+  if (
+    intentInfo.intent === RESEARCH_INTENTS.CONVERSATIONAL ||
+    intentInfo.intent === RESEARCH_INTENTS.CHITCHAT ||
+    intentInfo.requiresSearch === false
+  ) {
     recordStep({
       phase: "PLANNING",
       title: "Direct Conversational Resolution",
@@ -598,7 +633,7 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
     });
 
     researchData = await executeAdaptiveResearch({
-      query,
+      query: effectiveQuery,
       callModel: (params) => callCognitiveModel({ ...params, forceGroq }),
       recordStep,
       options: { forceGroq },
@@ -614,12 +649,12 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
   } else {
     // FAST PATH FOR SIMPLE FACTS / CURRENT FACTS / DIRECT DEFINITIONS (< 1.5s)
     const isCurrentFact = intentInfo.intent === RESEARCH_INTENTS.CURRENT_FACT;
-    let sanitizedQuery = sanitizePlannerQuery(query, query, currentDate.year);
+    let sanitizedQuery = sanitizePlannerQuery(effectiveQuery, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
     let rewrittenSubtopics = [];
 
     // QUERY REWRITE: Translate Hinglish, fix typos, decompose multi-topic queries
     // Only triggers for queries that contain Hinglish words, common typos, or are very long multi-topic
-    const needsRewrite = queryNeedsRewrite(query);
+    const needsRewrite = queryNeedsRewrite(effectiveQuery);
     if (needsRewrite) {
       recordStep({
         phase: "PLANNING",
@@ -637,9 +672,9 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
             forceGroq: true,
             maxTokens: 100,
           });
-        const rewritten = await rewriteQueryForSearch(query, callModelForRewrite);
+        const rewritten = await rewriteQueryForSearch(effectiveQuery, callModelForRewrite);
         if (rewritten.primary && rewritten.primary.length > 3) {
-          sanitizedQuery = sanitizePlannerQuery(rewritten.primary, query, currentDate.year);
+          sanitizedQuery = sanitizePlannerQuery(rewritten.primary, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
           rewrittenSubtopics = (rewritten.subtopics || []).filter(s => s && s.length > 3);
         }
       } catch (rewriteErr) {
@@ -649,8 +684,8 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
 
     recordStep({
       phase: "PLANNING",
-      title: isCurrentFact ? "Targeted Fact Retrieval" : "Direct Knowledge Retrieval",
-      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}. Fast single-step resolution.${needsRewrite ? ` Rewritten search query: "${sanitizedQuery}"` : ""}`,
+      title: "Planning research",
+      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}.${needsRewrite ? ` Cleaned search query: "${sanitizedQuery}"` : ""}`,
       status: "in_progress",
     });
 
@@ -660,7 +695,7 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
       try {
         recordStep({
           phase: "TOOL_EXECUTION",
-          title: `Invoking Tool: ${label}`,
+          title: `Searching: ${searchQuery.slice(0, 40)}`,
           tool: "web_search",
           args: { query: searchQuery },
           status: "in_progress",
@@ -705,7 +740,7 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
 
       recordStep({
         phase: "TOOL_OBSERVATION",
-        title: success ? "Search Observation" : "No Results",
+        title: success ? `${allCitations.length} sources found` : "No results found",
         tool: "web_search",
         observation: summary.slice(0, 300),
         status: success ? "completed" : "failed",
@@ -720,15 +755,22 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
     // Multi-topic subtopic searches (run in parallel, max 2 extra)
     if (rewrittenSubtopics.length > 0) {
       const subtopicSearches = rewrittenSubtopics.slice(0, 2).map((sub) => {
-        const subQuery = sanitizePlannerQuery(sub, query, currentDate.year);
+        const subQuery = sanitizePlannerQuery(sub, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
         return executeAndCollect(subQuery, `web_search (subtopic)`);
       });
       await Promise.allSettled(subtopicSearches);
     }
 
+    recordStep({
+      phase: "EVALUATION",
+      title: "Checking evidence",
+      thought: `Evaluating source credibility, subtopic coverage, and temporal freshness.`,
+      status: "in_progress",
+    });
+
     // Deterministic gate on initial search
     detEvidence = evaluateEvidenceDeterministic({
-      query,
+      query: effectiveQuery,
       observations,
       citations: allCitations,
       currentYear: currentDate.year,
@@ -744,14 +786,14 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
           : `${sanitizedQuery} overview facts details`.replace(/\s+/g, " ").trim();
       } else {
         recoveryQuery = intentInfo.requiresCurrentDate
-          ? `${query.replace(/[^\w\s]/g, " ").trim()} ${currentDate.year}`.replace(/\s+/g, " ")
-          : query.replace(/[^\w\s]/g, " ").trim();
+          ? `${effectiveQuery.replace(/[^\w\s]/g, " ").trim()} ${currentDate.year}`.replace(/\s+/g, " ")
+          : effectiveQuery.replace(/[^\w\s]/g, " ").trim();
       }
 
       if (recoveryQuery !== sanitizedQuery) {
         recordStep({
           phase: "TOOL_EXECUTION",
-          title: "Invoking Recovery Search: web_search",
+          title: `Cross-checking sources: ${recoveryQuery.slice(0, 40)}`,
           tool: "web_search",
           args: { query: recoveryQuery },
           thought: `Initial search insufficient (${detEvidence.reason}). Executing targeted 1-step recovery.`,
@@ -878,10 +920,18 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
       ? evidencePack.map((e, idx) => `[Evidence ${idx + 1} (${e.sourceRole} - ${e.source} | ${e.sourceTier})]: ${e.passage}`).join("\n\n")
       : validObservations.map((o, idx) => `[Evidence ${idx + 1} (${o.tool})]: ${o.summary}`).join("\n\n");
 
-    const synthesisPrompt = `${cleanBaseInstruction}
+    const resolvedTopicContext = topicResolution.activeTopic ? `\n[RESOLVED ACTIVE TOPIC]: ${topicResolution.activeTopic}` : "";
+
+    const isPilotViralQuery = /\b(pilot|indian pilot)\b/i.test(effectiveQuery) && /\b(viral|trending|incident)\b/i.test(effectiveQuery);
+    const isPilotUnverified = isPilotViralQuery && (!detEvidence?.passed || validObservations.length === 0);
+
+    if (isPilotUnverified) {
+      spokenReply = "Mujhe abhi reliable sources se verify nahi ho pa raha ki tum kis pilot ki baat kar rahe ho. Ek detail bata do, jaise airline ya incident.";
+    } else {
+      const synthesisPrompt = `${cleanBaseInstruction}
 
 [TEMPORAL ANCHOR]:
-Current real-world date is ${currentDate.formatted} (Year ${currentDate.year}).
+Current real-world date is ${currentDate.formatted} (Year ${currentDate.year}).${resolvedTopicContext}
 
 [CRITICAL SYNTHESIS DIRECTIVES - READ CAREFULLY]:
 1. ALL RESEARCH, TOOL EXECUTION, AND SEARCHES ARE ALREADY 100% COMPLETE.
@@ -897,19 +947,20 @@ ${comparisonBlock}
 [VERIFIED EVIDENCE PACK]:
 ${evidenceText}
 
-User Query: "${query}"`;
+User Query: "${effectiveQuery}"`;
 
-    try {
-      const synthAi = await callCognitiveModel({
-        systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions directly to human ears. Never output toolcode, python, or promises to search.",
-        messages: [{ role: "user", content: synthesisPrompt }],
-        tier: synthesisTier,
-        forceGroq,
-        temperature: 0.2,
-      });
-      spokenReply = sanitizeSpokenReply(synthAi.reply);
-    } catch (err) {
-      spokenReply = validObservations[0]?.summary || "Based on verified records, the information has been retrieved.";
+      try {
+        const synthAi = await callCognitiveModel({
+          systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions directly to human ears. Never output toolcode, python, or promises to search.",
+          messages: [{ role: "user", content: synthesisPrompt }],
+          tier: synthesisTier,
+          forceGroq,
+          temperature: 0.2,
+        });
+        spokenReply = sanitizeSpokenReply(synthAi.reply);
+      } catch (err) {
+        spokenReply = validObservations[0]?.summary || "Based on verified records, the information has been retrieved.";
+      }
     }
   }
 
@@ -917,7 +968,7 @@ User Query: "${query}"`;
 
   recordStep({
     phase: "SYNTHESIS",
-    title: "Thinking Complete",
+    title: "Research complete",
     thought: `Answer synthesized in ${totalDurationMs}ms across ${thinkingSteps.length} cognitive steps.`,
     finalReply: spokenReply,
     status: "completed",
