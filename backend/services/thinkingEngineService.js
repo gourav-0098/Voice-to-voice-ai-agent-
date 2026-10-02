@@ -32,7 +32,7 @@ export const COGNITIVE_MODELS = {
 
 const STABLE_GEMINI_FALLBACKS = [
   "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
 ];
 
 /**
@@ -597,29 +597,43 @@ Return JSON:
       })
     : "Answer directly, politely, and factually.";
 
-  const synthesisPrompt = `${baseInstruction}
+  // Strip tool invocation rules from synthesis context so the model doesn't hallucinate calling tools again
+  const cleanBaseInstruction = baseInstruction
+    .replace(/\[MANDATORY TOOL RULES\]:[\s\S]*?(?=\[(?:STRICT|EVIDENCE|FACTUAL|PERSONA))/i, "")
+    .replace(/If the user asks.*?invoke the.*?tool\./gi, "");
+
+  const synthesisPrompt = `${cleanBaseInstruction}
+
+[CRITICAL SYNTHESIS DIRECTIVE - READ CAREFULLY]:
+1. ALL RESEARCH, TOOL EXECUTION, AND WEB SEARCHES ARE ALREADY 100% COMPLETE.
+2. The empirical evidence is provided below in [VERIFIED EVIDENCE PACK].
+3. DO NOT attempt to call tools. DO NOT write Python, code blocks, "toolcode", "print(...)", or tool function calls.
+4. DO NOT promise to search or use conversational fillers (NEVER say "Ek minute", "Main check karke batata hoon", "Wait a second", or "I will use the websearch tool").
+5. State the direct answer immediately and clearly in 1 to 2 natural spoken sentences for text-to-speech.
+6. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
 
 [VERIFIED EVIDENCE PACK]:
 ${observations.map((o, idx) => `[Evidence ${idx + 1} (${o.tool})]: ${o.summary}`).join("\n\n")}
 
-User Query: "${query}"
-
-CRITICAL MANDATE:
-1. Deliver the final answer DIRECTLY in 1 to 2 natural spoken sentences.
-2. KEEP INTERNAL REASONING INTERNAL. DO NOT include thoughts, tags, planning traces, or meta-commentary.
-3. State verified numbers, dates, and conclusions clearly with complete certainty.
-4. DO NOT lecture, preach, moralize, or give unsolicited political commentary.`;
+User Query: "${query}"`;
 
   let spokenReply = "";
   try {
     const synthAi = await callCognitiveModel({
-      systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions.",
+      systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions directly to human ears. Never output toolcode, python, or promises to search.",
       messages: [{ role: "user", content: synthesisPrompt }],
       tier: synthesisTier,
       forceGroq,
-      temperature: 0.3,
+      temperature: 0.2,
     });
-    spokenReply = synthAi.reply.replace(/[*#`_~[\]]/g, "").trim();
+    spokenReply = synthAi.reply
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/toolcode[\s\S]*/gi, "")
+      .replace(/print\([a-zA-Z0-9_]+\([^)]*\)\)/gi, "")
+      .replace(/^.*?(?:ek minute|ek second|hold on|let me check|main abhi check|main search karke|abhi dekh kar).*?(?:batata hoon|bata raha hoon|bata rahi hoon|dekh raha hoon)[.!?,;\s]*/i, "")
+      .replace(/^.*?(?:I will use the|I am using the).*?(?:tool).*?[.!?,;\s]*/i, "")
+      .replace(/[*#`_~[\]]/g, "")
+      .trim();
   } catch (err) {
     spokenReply = observations[0]?.summary || "Based on the verified records, the information has been confirmed.";
   }

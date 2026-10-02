@@ -98,7 +98,21 @@ export class ToolRouter {
       };
     }
 
-    // 6. Deep Research Intent: "search and read", "compare X and Y", "deep research on", "detailed investigation"
+    // 6. Live Stock / Market Value: "nvidia ke stock ka price kya h", "facebook ki market value kya h aaj ki", "tesla share price"
+    const stockKeywords = /\b(stock|share|market cap|market value|market capitalization|valuation|share price|stock price|ka price|ki value|trading at)\b/i;
+    if (stockKeywords.test(lower)) {
+      const companyMatch = lower.match(/\b(nvidia|nvda|meta|facebook|fb|apple|aapl|microsoft|msft|google|alphabet|googl|amazon|amzn|tesla|tsla|netflix|nflx|bitcoin|btc|ethereum|eth|reliance|tcs|hdfc|infosys|infy|tata motors)\b/i);
+      if (companyMatch) {
+        return {
+          shouldRoute: true,
+          directExecution: true,
+          toolName: "get_stock_quote",
+          args: { symbol: companyMatch[1] },
+        };
+      }
+    }
+
+    // 7. Deep Research Intent: "search and read", "compare X and Y", "deep research on", "detailed investigation"
     if (/\b(compare|deep research|search and read|detailed analysis of|official announcements from)\b/i.test(lower)) {
       return {
         shouldRoute: true,

@@ -7,6 +7,7 @@ import { calculatorTool } from "./modules/utility/calculatorTool.js";
 import { currentTimeTool } from "./modules/utility/currentTimeTool.js";
 import { weatherTool } from "./modules/utility/weatherTool.js";
 import { currencyTool } from "./modules/utility/currencyTool.js";
+import { stockMarketTool } from "./modules/utility/stockMarketTool.js";
 
 /**
  * Production-Grade Tool Registry
@@ -24,6 +25,11 @@ export class ToolRegistry {
       ["time", "get_current_time"],
       ["weather", "get_weather"],
       ["exchange_rate", "currency_conversion"],
+      ["stock", "get_stock_quote"],
+      ["stock_price", "get_stock_quote"],
+      ["share_price", "get_stock_quote"],
+      ["market_cap", "get_stock_quote"],
+      ["crypto", "get_stock_quote"],
     ]);
     this.registerDefaults();
   }
@@ -84,6 +90,7 @@ export class ToolRegistry {
     this.register(currentTimeTool);
     this.register(weatherTool);
     this.register(currencyTool);
+    this.register(stockMarketTool);
   }
 
   get(name) {
