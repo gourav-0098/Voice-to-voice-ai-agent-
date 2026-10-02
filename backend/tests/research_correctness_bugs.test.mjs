@@ -337,7 +337,68 @@ async function runTests() {
     console.log("  ✅ Test 8 Passed: Hinglish and multi-topic queries correctly detected and rewritten.");
   }
 
-  console.log(`\n🎉 All ${passedCount}/8 Correctness Bug Regression Tests Passed!`);
+  // =========================================================================
+  // TEST 9: Conversational greetings, pleasantries, banter & emotion
+  // Queries like: "so hello how are you smile me", "kya haal hai", "who are you"
+  // Expected:
+  // - Classified as CONVERSATIONAL intent
+  // - requiresSearch: false
+  // - requiresDeepResearch: false
+  // - Never invokes web_search or triggers tool routing
+  // =========================================================================
+  console.log("▶ [TEST 9] Conversational greeting & zero-search verification");
+  {
+    const greetings = [
+      "so hello how are you smile me",
+      "hi how are you",
+      "hello! kaise ho aap",
+      "namaste",
+      "kya haal hai bhai",
+      "who are you and what can you do",
+      "smile me please",
+      "thank you so much",
+    ];
+
+    for (const g of greetings) {
+      const intent = classifyResearchIntent(g);
+      assert.equal(
+        intent.intent,
+        RESEARCH_INTENTS.CONVERSATIONAL,
+        `Query "${g}" should be classified as CONVERSATIONAL, got: ${intent.intent}`
+      );
+      assert.equal(
+        intent.requiresSearch,
+        false,
+        `Query "${g}" must have requiresSearch === false`
+      );
+      assert.equal(
+        intent.requiresDeepResearch,
+        false,
+        `Query "${g}" must have requiresDeepResearch === false`
+      );
+    }
+
+    // Ensure actual factual or calculation inquiries are NOT classified as conversational
+    const factualQueries = [
+      "who is the CEO of Apple",
+      "weather in London",
+      "what is 2 + 2",
+      "what happened in ww2",
+    ];
+    for (const f of factualQueries) {
+      const intent = classifyResearchIntent(f);
+      assert.notEqual(
+        intent.intent,
+        RESEARCH_INTENTS.CONVERSATIONAL,
+        `Query "${f}" must NOT be classified as CONVERSATIONAL`
+      );
+    }
+
+    passedCount++;
+    console.log("  ✅ Test 9 Passed: Conversational queries correctly classified with requiresSearch: false.");
+  }
+
+  console.log(`\n🎉 All ${passedCount}/9 Correctness Bug Regression Tests Passed!`);
 }
 
 runTests().catch((err) => {

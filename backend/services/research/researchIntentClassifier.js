@@ -17,6 +17,7 @@
  */
 
 export const RESEARCH_INTENTS = {
+  CONVERSATIONAL: "CONVERSATIONAL",
   SIMPLE_FACT: "SIMPLE_FACT",
   CALCULATION: "CALCULATION",
   CURRENT_FACT: "CURRENT_FACT",
@@ -34,11 +35,35 @@ export const RESEARCH_INTENTS = {
  * Fast deterministic classification (< 1ms)
  *
  * @param {string} query
- * @returns {{ intent: string, confidence: number, requiresDeepResearch: boolean, requiresCurrentDate: boolean, dimensions: string[] }}
+ * @returns {{ intent: string, confidence: number, requiresDeepResearch: boolean, requiresSearch: boolean, requiresCurrentDate: boolean, dimensions: string[] }}
  */
 export function classifyResearchIntent(query = "") {
   const q = String(query || "").trim();
   const lower = q.toLowerCase();
+
+  // 0. CONVERSATIONAL: Casual greetings, pleasantries, identity questions, banter, empathy, gratitude
+  // Queries like: "so hello how are you smile me", "hi how are you", "kya haal hai", "namaste", "thank you", "who are you"
+  // These DO NOT need web search or deep research — they should receive direct natural conversational replies in <300ms!
+  const isConversationalPattern =
+    /^(?:so\s+)?(?:hello|hi|hey|heyy|hiya|namaste|pranam|ram ram|radhe radhe|kem cho|kya haal|kaise ho|how are you|how do you do|good morning|good afternoon|good evening|good night|bye|goodbye|see you)\b/i.test(lower) ||
+    /\b(?:how are you|kaise ho|kya chal raha|kya haal hai|sab badhiya|sab kaisa chal raha)\b/i.test(lower) ||
+    /\b(?:who are you|what is your name|tum kaun ho|aap kaun ho|what can you do|kya kar sakte ho)\b/i.test(lower) ||
+    /\b(?:smile me|make me smile|tell me a joke|koi joke sunao|say something nice|motivate me|cheer me up)\b/i.test(lower) ||
+    /\b(?:thank you|thanks|shukriya|dhanyawad|welcome|you are great|love you|hate you)\b/i.test(lower);
+
+  const containsInformationSearch =
+    /\b(vs|versus|compare|price|stock|market cap|founder|ceo|born|died|president|capital|population|news|updates|today|yesterday|treaty|pact|history|war|weather|temperature|calculate|when was|what is the)\b/i.test(lower);
+
+  if (isConversationalPattern && !containsInformationSearch) {
+    return {
+      intent: RESEARCH_INTENTS.CONVERSATIONAL,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: false,
+      dimensions: ["conversational_reply"],
+    };
+  }
 
   // Temporal Need Detection: Determine if query requires live current-year anchoring
   const hasExplicitCurrentTrigger =
@@ -58,6 +83,7 @@ export function classifyResearchIntent(query = "") {
       intent: RESEARCH_INTENTS.CALCULATION,
       confidence: 0.98,
       requiresDeepResearch: false,
+      requiresSearch: false,
       requiresCurrentDate: false,
       dimensions: ["computation"],
     };

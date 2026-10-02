@@ -517,6 +517,68 @@ MANDATE:
   const currentDate = getCurrentDateContext();
   const intentInfo = classifyResearchIntent(query);
 
+  // =========================================================================
+  // FAST CONVERSATIONAL EXIT (Zero Tools / Zero Searches / Immediate Warm Reply)
+  // Greetings, pleasantries, identity, humor, banter ("hello", "how are you", "smile me")
+  // =========================================================================
+  if (intentInfo.intent === RESEARCH_INTENTS.CONVERSATIONAL || intentInfo.requiresSearch === false) {
+    recordStep({
+      phase: "PLANNING",
+      title: "Direct Conversational Resolution",
+      thought: `Query classified as ${intentInfo.intent}. Direct natural dialogue without external search.`,
+      status: "completed",
+    });
+
+    recordStep({
+      phase: "SYNTHESIS",
+      title: "Synthesizing Conversational Response",
+      thought: `Generating warm, natural spoken response directly via ${COGNITIVE_MODELS.FAST_MODEL}.`,
+      status: "in_progress",
+    });
+
+    const isHinglishQuery = /\b(kya|kaise|haal|badhiya|namaste|batao|hoon|hai|ho|main|tum|aap)\b/i.test(query);
+    const convSystemPrompt = `You are Chatly, a warm, charismatic, and concise voice AI assistant.
+Speak naturally and warmly to human ears in 1 to 2 short, expressive conversational sentences.
+${isHinglishQuery ? "The user greeted in Hindi/Hinglish. Respond in natural, polite Hinglish using the Latin alphabet." : "Respond in warm, natural English."}
+Do NOT output tool calls, search promises, brackets, or emojis.`;
+
+    let directReply = "";
+    try {
+      const convAi = await callCognitiveModel({
+        systemPrompt: convSystemPrompt,
+        messages: [{ role: "user", content: query }],
+        tier: "FAST",
+        forceGroq,
+        temperature: 0.7,
+      });
+      directReply = sanitizeSpokenReply(convAi.reply);
+    } catch (_) {
+      directReply = isHinglishQuery
+        ? "Main ekdum badhiya hoon! Aap bataiye, aaj aapki kya madad kar sakta hoon?"
+        : "I'm doing wonderful! It's great to hear from you. How can I help you today?";
+    }
+
+    const totalDurationMs = Math.round(performance.now() - t0);
+    recordStep({
+      phase: "SYNTHESIS",
+      title: "Thinking Complete",
+      thought: `Direct conversational reply synthesized in ${totalDurationMs}ms with 0 search tool invocations.`,
+      finalReply: directReply,
+      status: "completed",
+    });
+
+    return {
+      answer: directReply,
+      sources: [],
+      toolTrace: [],
+      verification: { checked: true, issues: [], verdict: "CONVERSATIONAL_DIRECT" },
+      reply: directReply,
+      citations: [],
+      thinkingSteps,
+      totalDurationMs,
+    };
+  }
+
   let researchData = null;
   let observations = [];
   let allCitations = [];
