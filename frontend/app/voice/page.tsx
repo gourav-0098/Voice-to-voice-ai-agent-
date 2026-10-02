@@ -448,9 +448,9 @@ export default function VoicePage() {
   const router = useRouter();
 
   // Modals & Initialization
-  const [showStartPopup, setShowStartPopup] = useState(true);
+  const [showStartPopup, setShowStartPopup] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [isStarted, setIsStarted] = useState(false);
+  const [isStarted, setIsStarted] = useState(true);
   const [isSupported, setIsSupported] = useState(true);
 
   // AI vs AI Debate Arena & Grounding Source Drawer states
@@ -471,6 +471,26 @@ export default function VoicePage() {
   });
   const isThinkingModeRef = useRef(isThinkingMode);
   const [currentThinkingSteps, setCurrentThinkingSteps] = useState<ThinkingStep[]>([]);
+
+  // Thinking Level & Dynamic Iteration Depth: "quick" (1-2), "standard" (3-5), "deep" (6-8)
+  const [thinkingLevel, setThinkingLevel] = useState<"quick" | "standard" | "deep">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("chatly_thinking_level") as any) || "standard";
+    }
+    return "standard";
+  });
+  const thinkingLevelRef = useRef(thinkingLevel);
+
+  useEffect(() => {
+    thinkingLevelRef.current = thinkingLevel;
+  }, [thinkingLevel]);
+
+  const handleSetThinkingLevel = useCallback((lvl: "quick" | "standard" | "deep") => {
+    setThinkingLevel(lvl);
+    try {
+      localStorage.setItem("chatly_thinking_level", lvl);
+    } catch (_) {}
+  }, []);
 
   useEffect(() => {
     isThinkingModeRef.current = isThinkingMode;
@@ -1310,6 +1330,7 @@ export default function VoicePage() {
           history: historyPayload,
           token,
           thinkingMode: isThinkingModeRef.current,
+          thinkingLevel: thinkingLevelRef.current,
         }));
         return;
       } catch (wsErr) {
@@ -1331,6 +1352,7 @@ export default function VoicePage() {
           language: activeLanguage,
           history: historyPayload,
           thinkingMode: isThinkingModeRef.current,
+          thinkingLevel: thinkingLevelRef.current,
         }),
       });
 
@@ -2111,74 +2133,6 @@ export default function VoicePage() {
         </div>
       )}
 
-      {/* START VOICE CHAT MODAL */}
-      {showStartPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 backdrop-blur-md overflow-y-auto py-8">
-          <div
-            className={`w-full max-w-sm sm:max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden border my-auto ${
-              isDark ? "bg-zinc-950/95 border-white/10" : "bg-white border-slate-200"
-            }`}
-          >
-            <div className="absolute -top-24 -left-24 h-48 w-48 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -right-24 h-48 w-48 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
-
-            <div className="mb-6 text-center relative">
-              <div className="mx-auto mb-4 sm:mb-5 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-2xl sm:text-3xl shadow-inner shadow-emerald-500/20">
-                🎙️
-              </div>
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Chatly Voice AI</h1>
-              <p className={`mt-2.5 text-xs sm:text-sm leading-5 sm:leading-6 ${isDark ? "text-zinc-400" : "text-slate-600"}`}>
-                Real-time voice-to-voice intelligence with neural waveform visualization, web tools, and hands-free conversation.
-              </p>
-            </div>
-
-            {/* Close button */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowStartPopup(false);
-                setIsStarted(true);
-              }}
-              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5"
-              aria-label="Close dialog"
-            >
-              ✕
-            </button>
-
-            {error && (
-              <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleStartVoice}
-              className={`w-full cursor-pointer rounded-2xl py-3.5 font-semibold transition active:scale-[0.98] shadow-lg ${
-                isDark ? "bg-white text-black hover:bg-zinc-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
-              }`}
-            >
-              Enable Audio & Begin
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowStartPopup(false);
-                setIsStarted(true);
-              }}
-              className="w-full text-center mt-2.5 text-xs text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 transition cursor-pointer py-1"
-            >
-              Continue to voice studio
-            </button>
-
-            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-500">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              Two-way neural voice pipeline ready
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* =====================================================
           SETTINGS DRAWER (LAPTOP, DESKTOP & MOBILE)
       ===================================================== */}
@@ -2840,7 +2794,7 @@ export default function VoicePage() {
               )}
             </div>
 
-            {/* FALLBACK MANUAL TEXT INPUT BAR */}
+            {/* MANUAL TEXT INPUT BAR WITH MODE SELECTION & DYNAMIC ITERATION LEVEL */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -2849,23 +2803,85 @@ export default function VoicePage() {
                 setManualInput("");
                 sendVoiceToBackend(textToSend);
               }}
-              className="mt-3 flex items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
+              className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
             >
+              {/* Mode Selection Button (Beside Text Input Field) */}
+              <div className="flex items-center gap-1.5 shrink-0 px-1">
+                <button
+                  type="button"
+                  onClick={toggleThinkingMode}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer select-none border active:scale-95 ${
+                    isThinkingMode
+                      ? "border-purple-500/50 bg-purple-500/15 text-purple-700 dark:text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
+                      : "border-slate-300 dark:border-white/10 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 text-slate-700 dark:text-zinc-300 dark:hover:bg-white/10"
+                  }`}
+                  title={isThinkingMode ? "Thinking Mode active (Click to switch to Fast Mode)" : "Fast Mode active (Click to switch to Thinking Mode)"}
+                >
+                  <span>{isThinkingMode ? "🧠" : "⚡"}</span>
+                  <span className="font-medium">{isThinkingMode ? "Thinking" : "Fast"}</span>
+                </button>
+
+                {/* Dynamic Iteration Level Selector — ONLY displays when Thinking Mode is selected */}
+                {isThinkingMode && (
+                  <div className="inline-flex items-center rounded-xl p-0.5 border border-purple-500/30 bg-purple-500/10 text-xs animate-in fade-in zoom-in-95 duration-150">
+                    <button
+                      type="button"
+                      onClick={() => handleSetThinkingLevel("quick")}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                        thinkingLevel === "quick"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
+                      }`}
+                      title="Quick Thinking: 1-2 research iterations (~1.5s)"
+                    >
+                      Quick
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetThinkingLevel("standard")}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                        thinkingLevel === "standard"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
+                      }`}
+                      title="Standard Thinking: 3-4 deep research iterations (~3-5s)"
+                    >
+                      Standard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetThinkingLevel("deep")}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                        thinkingLevel === "deep"
+                          ? "bg-purple-600 text-white shadow-xs"
+                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
+                      }`}
+                      title="Deep Thinking: 6-8 comprehensive iterations with gap audit & multi-critique"
+                    >
+                      Deep
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Text Input Field */}
               <input
                 type="text"
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
                 placeholder={
-                  currentUser
-                    ? "Type a message to Chatly (30/hr, unlimited daily)..."
-                    : "Type a message (Free guest mode: 10/hr, 50/day)..."
+                  isThinkingMode
+                    ? `Ask anything (Thinking: ${thinkingLevel.toUpperCase()} iterations)...`
+                    : "Ask or chat with Chatly..."
                 }
                 className="flex-1 bg-transparent px-3 py-2 text-sm outline-none text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
               />
+
+              {/* Send Button */}
               <button
                 type="submit"
                 disabled={!manualInput.trim() || isAiLoading}
-                className="cursor-pointer rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                className="cursor-pointer shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
               >
                 Send →
               </button>
