@@ -17,6 +17,7 @@ import guestQuotaService from "../services/guestQuotaService.js";
 import factCheckService from "../services/factCheckService.js";
 import sarvamTtsService from "../services/sarvamTtsService.js";
 import { generateEdgeSpeech } from "../services/edgeTtsService.js";
+import { runThinkingLoop } from "../services/thinkingEngineService.js";
 
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -253,6 +254,80 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     // 1. Fast Deterministic Query Intelligence Router (< 2ms)
     const route = routeQuery(userText, { persona: selectedPersona, historyLength: (req.body.history || []).length });
     console.log(`🧭 [SSE ROUTE] Intent: ${route.intent} | Mode: ${route.mode} | NeedsRAG: ${route.needsRag} | NeedsLiveSearch: ${route.needsLiveSearch} (${route.routerLatencyMs}ms)`);
+
+    const isThinkingModeRequested = req.body?.thinkingMode === true || req.body?.mode === "thinking" || route.mode === "DEEP";
+
+    // Autonomous Thinking Mode: 4-5 cognitive iterations with live thought streaming
+    if (isThinkingModeRequested) {
+      console.log(`🧠 [SSE STREAM] Thinking Mode Activated for: "${userText.slice(0, 50)}"`);
+      sendEvent("mode", { mode: "THINKING", title: "Thinking Mode Activated" });
+
+      const clientHist = Array.isArray(req.body.history) ? req.body.history.slice(-8) : [];
+      const thinkingResult = await runThinkingLoop({
+        query: userText,
+        persona: selectedPersona,
+        voiceModel: selectedVoiceModel,
+        history: clientHist,
+        forceGroq: isGuest,
+        onStep: (step) => {
+          sendEvent("thinking_step", step);
+        },
+      });
+
+      const replyText = thinkingResult.reply;
+
+      // Stream tokens to UI
+      const words = replyText.split(" ");
+      for (const word of words) {
+        sendEvent("token", { token: word + " " });
+      }
+
+      // Synthesize audio
+      let audioPayload = null;
+      try {
+        if (selectedVoiceModel.startsWith("sarvam-")) {
+          const speaker = selectedVoiceModel.replace("sarvam-", "");
+          audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, speaker);
+        } else {
+          audioPayload = await deepgramTts.generateSpeech(replyText, selectedVoiceModel);
+        }
+      } catch (ttsErr) {
+        console.warn("TTS generation warning in thinking mode:", ttsErr.message);
+      }
+
+      if (audioPayload) {
+        sendEvent("audio", {
+          audio: audioPayload.audioBase64,
+          format: audioPayload.format || "audio/mp3",
+          sampleRate: 24000,
+        });
+      }
+
+      sendEvent("rag", {
+        ragSource: "thinking_engine (multi_turn_deep_reasoning)",
+        groundingDetails: thinkingResult.observations?.[0] || null,
+        latencyMs: thinkingResult.totalDurationMs,
+        intensityLevel: 0,
+        intensityLabel: "CASUAL_FRIEND",
+        citations: thinkingResult.citations || [],
+        confidence: "HIGH",
+      });
+
+      sendEvent("done", {
+        reply: replyText,
+        thinkingSteps: thinkingResult.thinkingSteps,
+        firstAudioTimeMs: thinkingResult.totalDurationMs,
+        totalLatencyMs: Date.now() - startTotal,
+        sentenceCount: 1,
+        quota,
+        isGuest,
+        ragSource: "thinking_engine",
+        citations: thinkingResult.citations,
+      });
+
+      res.end();
+      return;
+    }
 
     let adaptiveRag = { contextPrompt: "", ragSource: null, groundingDetails: null, latencyMs: 0 };
     let qdrantMemories = [];

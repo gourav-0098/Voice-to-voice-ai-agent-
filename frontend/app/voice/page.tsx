@@ -12,6 +12,7 @@ import DebateArenaModal from "./components/DebateArenaModal";
 import SettingsPanel from "./components/SettingsPanel";
 import { exportConversationTranscript, exportAudioFile } from "./utils/exportUtils";
 import { FactCheckHUD, FactCheckData } from "./components/FactCheckHUD";
+import { ThinkingLiveStepper, ThinkingAccordion, ThinkingStep } from "./components/ThinkingHUD";
 
 // Extend Window interface for Web Speech API
 declare global {
@@ -64,6 +65,7 @@ export interface ChatMessage {
   ragSource?: string | null;
   groundingDetails?: any;
   factCheck?: FactCheckData | null;
+  thinkingSteps?: ThinkingStep[];
 }
 
 // Gemini & ChatGPT Inspired Tool Usage Helper
@@ -460,6 +462,30 @@ export default function VoicePage() {
   const [activeFactCheck, setActiveFactCheck] = useState<FactCheckData | null>(null);
   const [isFactCheckHudEnabled, setIsFactCheckHudEnabled] = useState<boolean>(true);
 
+  // Thinking Mode State (Autonomous Multi-Step Cognitive Loop)
+  const [isThinkingMode, setIsThinkingMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("chatly_thinking_mode") === "true";
+    }
+    return false;
+  });
+  const isThinkingModeRef = useRef(isThinkingMode);
+  const [currentThinkingSteps, setCurrentThinkingSteps] = useState<ThinkingStep[]>([]);
+
+  useEffect(() => {
+    isThinkingModeRef.current = isThinkingMode;
+  }, [isThinkingMode]);
+
+  const toggleThinkingMode = useCallback(() => {
+    setIsThinkingMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("chatly_thinking_mode", String(next));
+      } catch (_) {}
+      return next;
+    });
+  }, []);
+
   // Responsive Drawer & Sidebar states
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
@@ -498,14 +524,14 @@ export default function VoicePage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState<boolean>(false);
 
-  // Curated Quick Debate Starter Prompts
+  // Curated Quick Debate & Deep Thinking Starter Prompts
   const QUICK_DEBATE_PROMPTS = useMemo(() => [
+    { label: "🧠 GDP Deep Compare", prompt: "Compare India's GDP growth rate with China in 2025 and 2026 and calculate the percentage difference" },
+    { label: "🔍 Modi Father Research", prompt: "Who was Narendra Modi's father, what was his date of birth and background?" },
     { label: "🚩 Article 370", prompt: "Explain why Article 370 abrogation was legally justified and constitutional." },
     { label: "📈 Economic Record", prompt: "What is the true economic track record, GDP growth and poverty reduction under Modi?" },
-    { label: "🗳️ Electoral Bonds", prompt: "What was the government's justification for Electoral Bonds?" },
     { label: "⚡ Infrastructure", prompt: "How has Vande Bharat, UPI, and highway expansion transformed India?" },
     { label: "⚖️ Uniform Civil Code", prompt: "Why is Uniform Civil Code necessary under Article 44 for gender equality?" },
-    { label: "🇮🇳 What About 1962?", prompt: "How does current border infrastructure in Ladakh and Arunachal compare to 1962?" },
   ], []);
 
   // Conversation history stream
@@ -1184,6 +1210,7 @@ export default function VoicePage() {
     activeAbortControllerRef.current = controller;
 
     const promptText = text.trim();
+    setCurrentThinkingSteps([]);
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       sender: "user",
@@ -1200,6 +1227,7 @@ export default function VoicePage() {
     let currentGroundingDetails: any = null;
     let turnAudioBase64: string | null = null;
     let currentFactCheck: FactCheckData | null = null;
+    let turnThinkingSteps: ThinkingStep[] | undefined = undefined;
     const startTurnTime = Date.now();
 
     const appendOrUpdateAiMessage = (
@@ -1207,11 +1235,13 @@ export default function VoicePage() {
       ragSource?: string | null,
       groundingDetails?: any,
       audioBase64?: string,
-      factCheck?: FactCheckData | null
+      factCheck?: FactCheckData | null,
+      thinkingSteps?: ThinkingStep[]
     ) => {
       if (groundingDetails) currentGroundingDetails = groundingDetails;
       if (audioBase64) turnAudioBase64 = audioBase64;
       if (factCheck) currentFactCheck = factCheck;
+      if (thinkingSteps) turnThinkingSteps = thinkingSteps;
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === aiMsgId);
         if (idx === -1) {
@@ -1227,6 +1257,7 @@ export default function VoicePage() {
               groundingDetails: groundingDetails || currentGroundingDetails,
               audio: audioBase64 || turnAudioBase64 || undefined,
               factCheck: factCheck || currentFactCheck || undefined,
+              thinkingSteps: thinkingSteps || turnThinkingSteps || undefined,
             },
           ];
         }
@@ -1238,6 +1269,7 @@ export default function VoicePage() {
           groundingDetails: groundingDetails || updated[idx].groundingDetails || currentGroundingDetails,
           audio: audioBase64 || updated[idx].audio || turnAudioBase64 || undefined,
           factCheck: factCheck || updated[idx].factCheck || currentFactCheck || undefined,
+          thinkingSteps: thinkingSteps || turnThinkingSteps || updated[idx].thinkingSteps || undefined,
         };
         return updated;
       });
@@ -1277,6 +1309,7 @@ export default function VoicePage() {
           voiceModel: activeVoice,
           history: historyPayload,
           token,
+          thinkingMode: isThinkingModeRef.current,
         }));
         return;
       } catch (wsErr) {
@@ -1297,6 +1330,7 @@ export default function VoicePage() {
           persona: activePersona,
           language: activeLanguage,
           history: historyPayload,
+          thinkingMode: isThinkingModeRef.current,
         }),
       });
 
@@ -1346,7 +1380,17 @@ export default function VoicePage() {
           if (!dataStr) continue;
           try {
             const data = JSON.parse(dataStr);
-            if (eventType === "rag") {
+            if (eventType === "thinking_step") {
+              setCurrentThinkingSteps((prev) => {
+                const existingIdx = prev.findIndex((s) => s.stepIndex === data.stepIndex);
+                if (existingIdx !== -1) {
+                  const updated = [...prev];
+                  updated[existingIdx] = data;
+                  return updated;
+                }
+                return [...prev, data];
+              });
+            } else if (eventType === "rag") {
               ragSourceBadge = data.ragSource;
               if (data.groundingDetails) currentGroundingDetails = data.groundingDetails;
               appendOrUpdateAiMessage(currentStreamTextRef.current, ragSourceBadge, currentGroundingDetails);
@@ -1369,7 +1413,12 @@ export default function VoicePage() {
                 setActiveFactCheck(data.factCheck);
                 currentFactCheck = data.factCheck;
               }
-              if (data.reply) appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined, currentFactCheck);
+              const finalSteps = data.thinkingSteps || undefined;
+              if (data.reply) {
+                appendOrUpdateAiMessage(data.reply, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined, currentFactCheck, finalSteps);
+              } else if (finalSteps) {
+                appendOrUpdateAiMessage(currentStreamTextRef.current, data.ragSource, currentGroundingDetails, turnAudioBase64 || undefined, currentFactCheck, finalSteps);
+              }
               if (data.firstAudioTimeMs) setLastTtfa(data.firstAudioTimeMs);
               if (data.quota) setQuota(data.quota);
               setIsAiLoading(false);
@@ -1771,6 +1820,16 @@ export default function VoicePage() {
               return updated;
             });
             setAiResponse(full);
+          } else if (msg.type === "thinking_step") {
+            setCurrentThinkingSteps((prev) => {
+              const existingIdx = prev.findIndex((s) => s.stepIndex === msg.stepIndex);
+              if (existingIdx !== -1) {
+                const updated = [...prev];
+                updated[existingIdx] = msg;
+                return updated;
+              }
+              return [...prev, msg];
+            });
           } else if (msg.type === "audio_chunk") {
             setIsAiLoading(false);
             if (!lastTtfa && msg.totalElapsedMs) {
@@ -1784,12 +1843,23 @@ export default function VoicePage() {
             }
             if (msg.factCheck) {
               setActiveFactCheck(msg.factCheck);
-              setMessages((prev) => {
-                const activeId = activeAiMsgIdRef.current;
-                if (!activeId) return prev;
-                return prev.map((m) => (m.id === activeId ? { ...m, factCheck: msg.factCheck } : m));
-              });
             }
+            if (msg.thinkingSteps) {
+              setCurrentThinkingSteps(msg.thinkingSteps);
+            }
+            setMessages((prev) => {
+              const activeId = activeAiMsgIdRef.current;
+              if (!activeId) return prev;
+              return prev.map((m) =>
+                m.id === activeId
+                  ? {
+                      ...m,
+                      factCheck: msg.factCheck || m.factCheck,
+                      thinkingSteps: msg.thinkingSteps || m.thinkingSteps,
+                    }
+                  : m
+              );
+            });
           }
         } catch (_) {}
       };
@@ -2154,6 +2224,25 @@ export default function VoicePage() {
 
           {/* Center/Right: Pipeline Status + Debate Arena + Theme Toggle + Settings */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Thinking Mode Autonomous Cognitive Agent Toggle */}
+            <button
+              type="button"
+              onClick={toggleThinkingMode}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs ${
+                isThinkingMode
+                  ? "border-purple-500/50 bg-purple-500/15 text-purple-600 dark:text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.25)] ring-1 ring-purple-500/30"
+                  : "border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+              title={
+                isThinkingMode
+                  ? "🧠 Thinking Mode Active: Autonomous 5-step cognitive loop (Planning, Tools, Verification, Critique, Synthesis)"
+                  : "⚡ Fast Mode: Ultra-low latency voice streaming (<300ms) for casual banter. Click to switch to Thinking Mode for deep research."
+              }
+            >
+              <span>{isThinkingMode ? "🧠" : "⚡"}</span>
+              <span className="hidden sm:inline">{isThinkingMode ? "Thinking Mode" : "Fast Mode"}</span>
+            </button>
+
             {/* AI vs AI Debate Arena Launcher */}
             <button
               type="button"
@@ -2708,6 +2797,13 @@ export default function VoicePage() {
                         </button>
                       )}
 
+                      {/* Thinking Mode Autonomous Cognitive Reasoning Accordion */}
+                      {msg.thinkingSteps && msg.thinkingSteps.length > 0 && (
+                        <div className="mb-2.5">
+                          <ThinkingAccordion steps={msg.thinkingSteps} />
+                        </div>
+                      )}
+
                       <p className="whitespace-pre-wrap">{msg.text}</p>
 
                       {/* Quick Actions (Copy & Replay) */}
@@ -2741,8 +2837,15 @@ export default function VoicePage() {
                 );
               })}
 
+              {/* Thinking Live Stepper (Multi-Step Autonomous Loop) */}
+              {isAiLoading && currentThinkingSteps.length > 0 && (
+                <div className="w-full">
+                  <ThinkingLiveStepper steps={currentThinkingSteps} />
+                </div>
+              )}
+
               {/* Gemini / ChatGPT Style Live Tool & Thinking Indicator */}
-              {isAiLoading && (
+              {isAiLoading && currentThinkingSteps.length === 0 && (
                 <div className="flex flex-col items-start animate-in fade-in duration-200">
                   <div className="flex items-center gap-2 mb-1 px-1">
                     <span className="text-[11px] font-semibold text-sky-600 dark:text-cyan-400">Chatly AI</span>

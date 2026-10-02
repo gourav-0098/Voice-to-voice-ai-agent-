@@ -16,15 +16,16 @@ export class ToolRouter {
     }
 
     const q = queryText.trim();
-    const lower = q.toLowerCase();
+    const cleanQ = q.replace(/[?.,!]+$/, "").trim();
+    const lower = cleanQ.toLowerCase();
 
-    // 1. Explicit Arithmetic or Percentage: "2+2", "18% of 4500", "what is 45 * 12 + 10"
+    // 1. Explicit Arithmetic or Percentage: "2+2", "18% of 4500", "what is 45 * 12 + 10?"
     if (
-      /^(?:what is |calculate |evaluate )?[\d.\s+\-*/()^%x]+$/i.test(q) ||
+      /^(?:what is |calculate |evaluate )?[\d.\s+\-*/()^%x]+$/i.test(cleanQ) ||
       /\b\d+\s*%\s*of\s*\d+\b/i.test(lower) ||
       /^(?:how much is )?[\d.]+\s*(?:km|miles|kg|lbs|celsius|fahrenheit)\s*(?:to|in)\s*(?:km|miles|kg|lbs|celsius|fahrenheit)$/i.test(lower)
     ) {
-      const expr = q.replace(/^(?:what is |calculate |evaluate |compute |how much is )/i, "").trim();
+      const expr = cleanQ.replace(/^(?:what is |calculate |evaluate |compute |how much is )/i, "").trim();
       return {
         shouldRoute: true,
         directExecution: true,

@@ -13,6 +13,9 @@ import toolService from "./toolService.js";
 import groqMemoryWorker from "./groqMemoryWorker.js";
 import factCheckService from "./factCheckService.js";
 import guestQuotaService from "./guestQuotaService.js";
+import { runThinkingLoop } from "./thinkingEngineService.js";
+import sarvamTtsService from "./sarvamTtsService.js";
+import deepgramTts from "./deepgramTtsService.js";
 
 // Helper to validate WebSocket Origin header
 function isAllowedWsOrigin(origin) {
@@ -155,6 +158,52 @@ export function setupVoiceWebSocket(httpServer) {
 
           // Fast Deterministic Query Intelligence Router (< 2ms)
           const route = routeQuery(prompt, { persona, historyLength: (data.history || []).length });
+
+          const isThinkingModeRequested = data.thinkingMode === true || data.mode === "thinking" || route.mode === "DEEP";
+
+          if (isThinkingModeRequested) {
+            console.log(`🧠 [WS VOICE TURN] Thinking Mode Active for "${prompt.slice(0, 50)}"`);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "mode", mode: "THINKING" }));
+            }
+
+            const thinkingResult = await runThinkingLoop({
+              query: prompt,
+              persona,
+              voiceModel,
+              history: Array.isArray(data.history) ? data.history.slice(-8) : [],
+              forceGroq: isGuest,
+              onStep: (step) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "thinking_step", ...step }));
+                }
+              },
+            });
+
+            // Synthesize audio
+            let audioPayload = null;
+            try {
+              if (voiceModel.startsWith("sarvam-")) {
+                audioPayload = await sarvamTtsService.generateSarvamSpeech(thinkingResult.reply, voiceModel.replace("sarvam-", ""));
+              } else {
+                audioPayload = await deepgramTts.generateSpeech(thinkingResult.reply, voiceModel);
+              }
+            } catch (_) {}
+
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "done",
+                reply: thinkingResult.reply,
+                thinkingSteps: thinkingResult.thinkingSteps,
+                audio: audioPayload?.audioBase64 || null,
+                audioFormat: audioPayload?.format || "audio/mp3",
+                citations: thinkingResult.citations,
+                firstAudioTimeMs: thinkingResult.totalDurationMs,
+                totalLatencyMs: thinkingResult.totalDurationMs,
+              }));
+            }
+            return;
+          }
 
           let adaptiveRag = { contextPrompt: "", ragSource: null, groundingDetails: null, latencyMs: 0 };
           let qdrantMemories = [];
