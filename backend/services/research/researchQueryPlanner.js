@@ -269,9 +269,121 @@ Respond strictly in valid JSON format:
   };
 }
 
+/**
+ * Unambiguous Hinglish word stems and particles (length >= 3 or unambiguous)
+ * Excludes ambiguous short words like 'me' (English pronoun), 'to' (English preposition), 'in'
+ */
+const HINGLISH_UNAMBIGUOUS = /\b(kya|kaise|kasie|usme|isme|nhi|nahi|bahut|accha|kuch|apna|unka|uska|iska|wala|wali|wale|thik|galti|chori|bachane|ladki|mandor|mandir|kiski|kaisa|kyun|kyunki|lekin|phir|abhi|yaha|waha|suar|pagal|tereko|mereko|tumko|batao|samjho|samjha|hoga|hogi|karna|karke|dekho|suno|padho|jhut|sirf|aisa|unhe|unko|inko|inhe|bol|raha|rahi|liye|liya|diya|gaya|gayi|loge|yehi)\b/i;
+
+/**
+ * Short Hinglish particles (ki, ka, ke, ko, se, ne, par, pe, ya, hai, tha, thi, the)
+ * These require at least 2 occurrences or co-occurrence with other markers to avoid false positives
+ */
+const HINGLISH_PARTICLES = /\b(hai|aur|tha|thi|the|ki|ka|ke|ko|se|ne|par|pe|ya|bhi|koi)\b/gi;
+
+/**
+ * Common English typo patterns that search engines struggle with
+ */
+const TYPO_MARKERS = /\b(wnat|jsut|teh|taht|abotu|hte|adn|thnk|thier|waht|becuase|recieve|definately|occured|seperate|accomodate)\b/i;
+
+/**
+ * Detects whether a user query needs LLM-based rewriting before web_search.
+ * Returns true for Hinglish queries, heavily typo-laden queries, or very long multi-topic queries.
+ *
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function queryNeedsRewrite(query) {
+  if (!query || typeof query !== "string") return false;
+  const q = query.trim();
+
+  // 1. Unambiguous Hinglish vocabulary
+  if (HINGLISH_UNAMBIGUOUS.test(q)) return true;
+
+  // 2. Co-occurrence of multiple short Hinglish particles (e.g. "x ne y ko")
+  const particleMatches = q.match(HINGLISH_PARTICLES);
+  if (particleMatches && particleMatches.length >= 2) return true;
+
+  // 3. Known typo patterns
+  if (TYPO_MARKERS.test(q)) return true;
+
+  // 4. Very long query (likely multi-topic or rant-style) — >150 chars with commas/conjunctions
+  if (q.length > 150 && /[,;]|\b(and|or|aur|ya)\b/i.test(q)) return true;
+
+  return false;
+}
+
+/**
+ * Rewrites a raw user query into clean English search keywords using a fast LLM call.
+ * Handles: Hinglish → English translation, typo correction, multi-topic decomposition.
+ *
+ * ONLY call this if queryNeedsRewrite(query) returns true.
+ *
+ * @param {string} rawQuery - The raw user query (may contain Hinglish, typos, multiple topics)
+ * @param {Function} callModel - The callCognitiveModel function from thinkingEngineService
+ * @returns {Promise<{ primary: string, subtopics: string[] }>} Clean search queries
+ */
+export async function rewriteQueryForSearch(rawQuery, callModel) {
+  if (!rawQuery || typeof rawQuery !== "string" || !callModel) {
+    return { primary: rawQuery || "", subtopics: [] };
+  }
+
+  const prompt = `Extract clean English search keywords from this user query.
+The query may be in Hinglish (Hindi written in Latin script), have typos, or contain multiple distinct topics.
+
+Rules:
+- Translate ALL Hinglish to proper English
+- Fix spelling errors
+- Extract only factual search keywords — remove emotional words, filler, abuse
+- If the query asks about MULTIPLE DISTINCT topics (e.g. "Hathras case AND Ram Mandir scam"), output each as a separate line prefixed with TOPIC:
+- If it's a single topic, output a single line of search keywords
+- Output ONLY the search keywords, no explanations
+
+User query: "${rawQuery.replace(/"/g, '\\"')}"`;
+
+  try {
+    const res = await callModel({
+      systemPrompt: "You are a search query optimizer. Output only clean English search keywords. No explanations.",
+      messages: [{ role: "user", content: prompt }],
+      tier: "FAST",
+      temperature: 0,
+      maxTokens: 200,
+    });
+
+    const reply = typeof res === "string" ? res.trim() : (res?.reply || "").trim();
+    if (!reply) return { primary: rawQuery, subtopics: [] };
+
+    // Parse multi-topic response
+    const lines = reply.split("\n").map((l) => l.trim()).filter(Boolean);
+    const topicLines = lines.filter((l) => /^TOPIC:\s*/i.test(l));
+
+    if (topicLines.length >= 2) {
+      // Multi-topic: first is primary, rest are subtopics
+      const cleaned = topicLines.map((l) => l.replace(/^TOPIC:\s*/i, "").trim());
+      return {
+        primary: cleaned[0],
+        subtopics: cleaned.slice(1),
+      };
+    }
+
+    // Single topic: use full reply as primary (strip any "TOPIC:" prefix if present)
+    const primary = reply.replace(/^TOPIC:\s*/i, "").replace(/\n/g, " ").trim();
+    return { primary, subtopics: [] };
+  } catch (err) {
+    // If LLM call fails, fall back to basic cleanup
+    console.warn("[QueryRewrite] LLM rewrite failed, using basic cleanup:", err.message);
+    return {
+      primary: rawQuery.replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim(),
+      subtopics: [],
+    };
+  }
+}
+
 export default {
   getSystemDateContext,
   sanitizePlannerQuery,
   extractJsonBlock,
   formulateResearchPlan,
+  queryNeedsRewrite,
+  rewriteQueryForSearch,
 };

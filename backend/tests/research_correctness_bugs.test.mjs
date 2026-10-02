@@ -289,7 +289,55 @@ async function runTests() {
     console.log("  ✅ Test 7 Passed: Honest fallback response produced without hallucinated evidence claims.");
   }
 
-  console.log(`\n🎉 All ${passedCount}/7 Correctness Bug Regression Tests Passed!`);
+  // =========================================================================
+  // TEST 8: Hinglish detection & query rewriting trigger
+  // Query: "usme modi ne thik se kam nhi kiya ya kya bat h"
+  // Query: "what do you wnat to say about godhra case"
+  // Expected:
+  // - queryNeedsRewrite returns true for Hinglish and common typos
+  // - rewriteQueryForSearch produces clean English search keywords
+  // =========================================================================
+  console.log("▶ [TEST 8] Hinglish & typo detection for search rewriting");
+  {
+    const { queryNeedsRewrite, rewriteQueryForSearch } = await import("../services/research/researchQueryPlanner.js");
+
+    const hinglish1 = "usme modi ne thik se kam nhi kiya ya kya bat h";
+    const typo1 = "what do you wnat to say about godhra case";
+    const multiTopic = "what about hathras rape case usme us ladki ko kasie jla diya rat ko hi evidence bachane ke liya , isme yogi ki galti h ya nhi or ram mandor chori me kiski galti h";
+    const cleanEnglish = "Who is the CEO of Apple";
+
+    assert.equal(queryNeedsRewrite(hinglish1), true, "Must detect Hinglish query");
+    assert.equal(queryNeedsRewrite(typo1), true, "Must detect typo 'wnat'");
+    assert.equal(queryNeedsRewrite(multiTopic), true, "Must detect multi-topic Hinglish query");
+    assert.equal(queryNeedsRewrite(cleanEnglish), false, "Clean English query should NOT trigger rewrite");
+
+    // Test rewrite logic with mock model
+    const mockModel = async ({ messages }) => {
+      const userMsg = messages[0].content;
+      if (userMsg.includes("usme modi ne")) {
+        return "Narendra Modi governance performance critique economic policies controversy";
+      }
+      if (userMsg.includes("hathras")) {
+        return "TOPIC: Hathras case victim midnight cremation controversy administration UP police\nTOPIC: Ram Mandir land purchase corruption allegations trust controversy";
+      }
+      return "Godhra train burning case 2002 Gujarat riots judicial commissions";
+    };
+
+    const res1 = await rewriteQueryForSearch(hinglish1, mockModel);
+    assert.ok(res1.primary.length > 5, "Must return valid search keywords");
+    assert.ok(!res1.primary.includes("usme"), "Rewritten query must not contain Hinglish words");
+    assert.ok(!res1.primary.includes("nhi"), "Rewritten query must not contain 'nhi'");
+
+    const resMulti = await rewriteQueryForSearch(multiTopic, mockModel);
+    assert.ok(resMulti.primary.includes("Hathras"), "Primary topic must be extracted");
+    assert.ok(resMulti.subtopics.length > 0, "Subtopics must be decomposed for multi-topic query");
+    assert.ok(resMulti.subtopics[0].includes("Ram Mandir"), "Second topic must be separated into subtopic");
+
+    passedCount++;
+    console.log("  ✅ Test 8 Passed: Hinglish and multi-topic queries correctly detected and rewritten.");
+  }
+
+  console.log(`\n🎉 All ${passedCount}/8 Correctness Bug Regression Tests Passed!`);
 }
 
 runTests().catch((err) => {

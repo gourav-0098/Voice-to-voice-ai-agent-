@@ -22,6 +22,7 @@ import { systemSettingsService } from "./systemSettingsService.js";
 import aiService from "./aiService.js";
 import { classifyResearchIntent, RESEARCH_INTENTS } from "./research/researchIntentClassifier.js";
 import { executeAdaptiveResearch } from "./research/researchOrchestrator.js";
+import { queryNeedsRewrite, rewriteQueryForSearch } from "./research/researchQueryPlanner.js";
 
 const toolRouter = new ToolRouter();
 
@@ -551,69 +552,110 @@ MANDATE:
   } else {
     // FAST PATH FOR SIMPLE FACTS / CURRENT FACTS / DIRECT DEFINITIONS (< 1.5s)
     const isCurrentFact = intentInfo.intent === RESEARCH_INTENTS.CURRENT_FACT;
-    const sanitizedQuery = sanitizePlannerQuery(query, query, currentDate.year);
+    let sanitizedQuery = sanitizePlannerQuery(query, query, currentDate.year);
+    let rewrittenSubtopics = [];
+
+    // QUERY REWRITE: Translate Hinglish, fix typos, decompose multi-topic queries
+    // Only triggers for queries that contain Hinglish words, common typos, or are very long multi-topic
+    const needsRewrite = queryNeedsRewrite(query);
+    if (needsRewrite) {
+      recordStep({
+        phase: "PLANNING",
+        title: "Query Rewrite",
+        thought: `Detected Hinglish/typo/multi-topic input. Rewriting to clean English search keywords before search.`,
+        status: "in_progress",
+      });
+
+      try {
+        const callModelForRewrite = (params) => callCognitiveModel({ ...params, forceGroq: false });
+        const rewritten = await rewriteQueryForSearch(query, callModelForRewrite);
+        if (rewritten.primary && rewritten.primary.length > 3) {
+          sanitizedQuery = sanitizePlannerQuery(rewritten.primary, query, currentDate.year);
+          rewrittenSubtopics = (rewritten.subtopics || []).filter(s => s && s.length > 3);
+        }
+      } catch (rewriteErr) {
+        console.warn("[FastPath] Query rewrite failed, using raw query:", rewriteErr.message);
+      }
+    }
 
     recordStep({
       phase: "PLANNING",
       title: isCurrentFact ? "Targeted Fact Retrieval" : "Direct Knowledge Retrieval",
-      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}. Fast single-step resolution.`,
+      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}. Fast single-step resolution.${needsRewrite ? ` Rewritten search query: "${sanitizedQuery}"` : ""}`,
       status: "in_progress",
     });
 
-    let toolRes = null;
-    try {
-      recordStep({
-        phase: "TOOL_EXECUTION",
-        title: "Invoking Tool: web_search",
-        tool: "web_search",
-        args: { query: sanitizedQuery },
-        status: "in_progress",
-      });
-
-      toolRes = await toolExecutor.executeTool("web_search", { query: sanitizedQuery }, { context: { thinkingMode: true } });
-    } catch (err) {
-      toolRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
-    }
-
-    const isSearchEmpty = !toolRes.ok || toolRes.state === "SEARCH_EMPTY" || !Array.isArray(toolRes.sources) || toolRes.sources.length === 0;
-    const success = toolRes.ok !== false && !isSearchEmpty;
-    const summary = toolRes.voiceSummary || (toolRes.data ? JSON.stringify(toolRes.data).slice(0, 400) : "Search completed");
-
-    if (Array.isArray(toolRes.sources)) {
-      toolRes.sources.forEach((src) => {
-        allCitations.push({
-          title: src.title || "External Source",
-          publisher: src.publisher || "Web",
-          url: src.url || null,
-          snippet: src.snippet || "",
-          sourceType: src.sourceType || "GENERAL_WEB",
-          publishedAt: src.publishedAt || null,
-          retrievedAt: new Date().toISOString(),
+    // Helper: execute a single search and collect results
+    const executeAndCollect = async (searchQuery, label = "web_search") => {
+      let toolRes = null;
+      try {
+        recordStep({
+          phase: "TOOL_EXECUTION",
+          title: `Invoking Tool: ${label}`,
+          tool: "web_search",
+          args: { query: searchQuery },
+          status: "in_progress",
         });
+
+        toolRes = await toolExecutor.executeTool("web_search", { query: searchQuery }, { context: { thinkingMode: true } });
+      } catch (err) {
+        toolRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
+      }
+
+      const isSearchEmpty = !toolRes.ok || toolRes.state === "SEARCH_EMPTY" || !Array.isArray(toolRes.sources) || toolRes.sources.length === 0;
+      const success = toolRes.ok !== false && !isSearchEmpty;
+      const summary = toolRes.voiceSummary || (toolRes.data ? JSON.stringify(toolRes.data).slice(0, 400) : "Search completed");
+
+      if (Array.isArray(toolRes.sources)) {
+        toolRes.sources.forEach((src) => {
+          allCitations.push({
+            title: src.title || "External Source",
+            publisher: src.publisher || "Web",
+            url: src.url || null,
+            snippet: src.snippet || "",
+            sourceType: src.sourceType || "GENERAL_WEB",
+            publishedAt: src.publishedAt || null,
+            retrievedAt: new Date().toISOString(),
+          });
+        });
+      }
+
+      observations.push({
+        tool: "web_search",
+        args: { query: searchQuery },
+        success,
+        state: toolRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
+        summary,
       });
+
+      toolTrace.push({
+        tool: "web_search",
+        args: { query: searchQuery },
+        success,
+      });
+
+      recordStep({
+        phase: "TOOL_OBSERVATION",
+        title: success ? "Search Observation" : "No Results",
+        tool: "web_search",
+        observation: summary.slice(0, 300),
+        status: success ? "completed" : "failed",
+      });
+
+      return { success, summary, toolRes };
+    };
+
+    // Primary search
+    await executeAndCollect(sanitizedQuery, "web_search");
+
+    // Multi-topic subtopic searches (run in parallel, max 2 extra)
+    if (rewrittenSubtopics.length > 0) {
+      const subtopicSearches = rewrittenSubtopics.slice(0, 2).map((sub) => {
+        const subQuery = sanitizePlannerQuery(sub, query, currentDate.year);
+        return executeAndCollect(subQuery, `web_search (subtopic)`);
+      });
+      await Promise.allSettled(subtopicSearches);
     }
-
-    observations.push({
-      tool: "web_search",
-      args: { query: sanitizedQuery },
-      success,
-      state: toolRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
-      summary,
-    });
-
-    toolTrace.push({
-      tool: "web_search",
-      args: { query: sanitizedQuery },
-      success,
-    });
-
-    recordStep({
-      phase: "TOOL_OBSERVATION",
-      title: success ? "Search Observation" : "No Results",
-      tool: "web_search",
-      observation: summary.slice(0, 300),
-      status: success ? "completed" : "failed",
-    });
 
     // Deterministic gate on initial search
     detEvidence = evaluateEvidenceDeterministic({
@@ -623,11 +665,19 @@ MANDATE:
       currentYear: currentDate.year,
     });
 
-    // BUG 4 & BUG 7: Fast path allows up to ONE cheap recovery search if evidence is empty, irrelevant, or insufficient
+    // Recovery search: use LLM-rewritten broadened query (NOT raw Hinglish with punctuation stripped)
     if (!detEvidence.passed || !detEvidence.sufficient) {
-      const recoveryQuery = intentInfo.requiresCurrentDate
-        ? `${query.replace(/[^\w\s]/g, " ").trim()} ${currentDate.year}`.replace(/\s+/g, " ")
-        : query.replace(/[^\w\s]/g, " ").trim();
+      let recoveryQuery;
+      if (needsRewrite) {
+        // Already rewritten — try broadening: add context terms
+        recoveryQuery = intentInfo.requiresCurrentDate
+          ? `${sanitizedQuery} ${currentDate.year} latest news`.replace(/\s+/g, " ").trim()
+          : `${sanitizedQuery} overview facts details`.replace(/\s+/g, " ").trim();
+      } else {
+        recoveryQuery = intentInfo.requiresCurrentDate
+          ? `${query.replace(/[^\w\s]/g, " ").trim()} ${currentDate.year}`.replace(/\s+/g, " ")
+          : query.replace(/[^\w\s]/g, " ").trim();
+      }
 
       if (recoveryQuery !== sanitizedQuery) {
         recordStep({
