@@ -567,7 +567,14 @@ MANDATE:
       });
 
       try {
-        const callModelForRewrite = (params) => callCognitiveModel({ ...params, forceGroq: false });
+        // Use Groq's FAST_REASONER (Qwen 3.8 27B) for sub-100ms ultra-low latency query rewriting
+        const callModelForRewrite = (params) =>
+          callCognitiveModel({
+            ...params,
+            tier: "FAST_REASONER",
+            forceGroq: true,
+            maxTokens: 100,
+          });
         const rewritten = await rewriteQueryForSearch(query, callModelForRewrite);
         if (rewritten.primary && rewritten.primary.length > 3) {
           sanitizedQuery = sanitizePlannerQuery(rewritten.primary, query, currentDate.year);
