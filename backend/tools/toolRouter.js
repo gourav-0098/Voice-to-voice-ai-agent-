@@ -98,18 +98,31 @@ export class ToolRouter {
       };
     }
 
-    // 6. Live Stock / Market Value: "nvidia ke stock ka price kya h", "facebook ki market value kya h aaj ki", "tesla share price"
-    const stockKeywords = /\b(stock|share|market cap|market value|market capitalization|valuation|share price|stock price|ka price|ki value|trading at)\b/i;
-    if (stockKeywords.test(lower)) {
-      const companyMatch = lower.match(/\b(nvidia|nvda|meta|facebook|fb|apple|aapl|microsoft|msft|google|alphabet|googl|amazon|amzn|tesla|tsla|netflix|nflx|bitcoin|btc|ethereum|eth|reliance|tcs|hdfc|infosys|infy|tata motors)\b/i);
-      if (companyMatch) {
-        return {
-          shouldRoute: true,
-          directExecution: true,
-          toolName: "get_stock_quote",
-          args: { symbol: companyMatch[1] },
-        };
-      }
+    const companyMatch = lower.match(/\b(nvidia|nvda|meta|facebook|fb|apple|aapl|microsoft|msft|google|alphabet|googl|amazon|amzn|tesla|tsla|netflix|nflx|bitcoin|btc|ethereum|eth|reliance|tcs|hdfc|infosys|infy|tata motors|spy|qqq|voo)\b/i);
+
+    // 6a. Market Capitalization / Company Valuation (Total Worth)
+    // Matches: "NVIDIA market cap", "Apple company value", "facebook ki market value kya h aaj ki", "valuation of tesla"
+    const marketCapKeywords = /\b(market cap|marketcap|market capitalization|market value|company value|company valuation|valuation|total worth)\b/i;
+    if (marketCapKeywords.test(lower) && companyMatch) {
+      return {
+        shouldRoute: true,
+        directExecution: true,
+        toolName: "get_market_cap",
+        args: { symbol: companyMatch[1] },
+      };
+    }
+
+    // 6b. Live Per-Share Stock / Crypto Quote (Share Price)
+    // Matches: "NVIDIA stock price", "Bitcoin price", "tesla share price", "apple stock", "trading at"
+    const stockKeywords = /\b(stock price|share price|stock quote|stock|share|trading at|current price|price of|ka price|ke share ka price|ke stock ka price|ticker)\b/i;
+    const priceKeyword = /\bprice\b/i;
+    if ((stockKeywords.test(lower) || priceKeyword.test(lower)) && companyMatch) {
+      return {
+        shouldRoute: true,
+        directExecution: true,
+        toolName: "get_stock_quote",
+        args: { symbol: companyMatch[1] },
+      };
     }
 
     // 7. Deep Research Intent: "search and read", "compare X and Y", "deep research on", "detailed investigation"

@@ -1,7 +1,11 @@
 /**
  * Stock & Crypto Live Market Quote Tool
- * Fetches real-time market prices, day range, changes, and market cap
+ * Fetches real-time market prices, day range, changes, and exchange data
  * via public financial exchange feeds (zero API key required).
+ *
+ * Distinct from get_market_cap (total company valuation):
+ *  - get_stock_quote = share price (e.g. $230.86/share)
+ *  - get_market_cap  = total company valuation (e.g. $5.57 Trillion USD)
  */
 
 import { toolCache } from "../../caching/toolCache.js";
@@ -35,8 +39,12 @@ const COMPANY_TICKER_MAP = {
   tcs: "TCS.NS",
   hdfc: "HDFCBANK.NS",
   infosys: "INFY.NS",
-  infy: "INFY.NS",
   tata: "TATAMOTORS.NS",
+  spy: "SPY",
+  qqq: "QQQ",
+  voo: "VOO",
+  iwm: "IWM",
+  sp500: "^GSPC",
 };
 
 function resolveTicker(input = "") {
@@ -47,9 +55,18 @@ function resolveTicker(input = "") {
   return input.trim().toUpperCase();
 }
 
+function resolveAssetType(instrumentType, ticker) {
+  const raw = String(instrumentType || "").toUpperCase();
+  if (raw === "EQUITY") return "EQUITY";
+  if (raw === "CRYPTOCURRENCY" || ticker.includes("-USD") || ticker === "BTC" || ticker === "ETH") return "CRYPTO";
+  if (raw === "ETF" || ["SPY", "QQQ", "VOO", "IWM"].includes(ticker)) return "ETF";
+  if (raw === "INDEX" || ticker.startsWith("^")) return "INDEX";
+  return "EQUITY";
+}
+
 export const stockMarketTool = {
   name: "get_stock_quote",
-  description: "Get real-time stock prices, market capitalization, currency, and daily trading stats for public companies (e.g. Nvidia, Meta, Apple, Tesla, Reliance, Bitcoin).",
+  description: "Get real-time per-share stock and crypto trading prices, daily changes, and 52-week ranges for public companies (e.g. Nvidia, Meta, Apple, Tesla, Reliance, Bitcoin).",
   category: "finance",
   risk: "low",
   timeoutMs: 4000,
@@ -123,11 +140,17 @@ export const stockMarketTool = {
       const yearHigh = meta.fiftyTwoWeekHigh || null;
       const yearLow = meta.fiftyTwoWeekLow || null;
       const companyName = meta.longName || meta.shortName || ticker;
+      const assetType = resolveAssetType(meta.instrumentType, ticker);
+      const isCrypto = assetType === "CRYPTO";
 
-      // Approximate market cap for mega-caps if shares outstanding available or standard formula
+      const marketTimestamp = meta.regularMarketTime
+        ? new Date(meta.regularMarketTime * 1000).toISOString()
+        : new Date().toISOString();
+
       const payload = {
         symbol: meta.symbol || ticker,
         companyName,
+        assetType,
         currentPrice: price,
         currency,
         changePercent: changePct,
@@ -135,6 +158,10 @@ export const stockMarketTool = {
         dayRange: `${dayLow} - ${dayHigh}`,
         fiftyTwoWeekRange: yearLow && yearHigh ? `${yearLow} - ${yearHigh}` : null,
         exchange: meta.fullExchangeName || meta.exchangeName || "Exchange",
+        source: isCrypto ? "Live 24/7 Crypto Feed" : "Exchange Feed (Yahoo Finance)",
+        isDelayed: !isCrypto, // Standard 15-minute public exchange delay for equities
+        delayNotice: isCrypto ? "Real-time" : "15-minute exchange delay during trading hours",
+        marketTime: marketTimestamp,
         timestamp: new Date().toISOString(),
       };
 
@@ -164,7 +191,10 @@ export const stockMarketTool = {
 
     const d = result.data;
     const sign = d.changePercent >= 0 ? "+" : "";
-    let summary = `${d.companyName} (${d.symbol}) is currently trading at ${d.currency} ${d.currentPrice} (${sign}${d.changePercent}% today). Day range is ${d.dayRange} ${d.currency}.`;
+    const delayText = d.isDelayed ? " (Subject to standard 15-minute exchange delay)" : "";
+    const unit = d.assetType === "CRYPTO" ? "" : d.assetType === "INDEX" ? " points" : " per share";
+
+    let summary = `${d.companyName} (${d.assetType}: ${d.symbol}) is currently trading at ${d.currency} ${d.currentPrice}${unit} (${sign}${d.changePercent}% today). Day range is ${d.dayRange} ${d.currency}${delayText}.`;
     if (d.fiftyTwoWeekRange) {
       summary += ` 52-week range is ${d.fiftyTwoWeekRange} ${d.currency}.`;
     }

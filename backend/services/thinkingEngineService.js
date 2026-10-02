@@ -20,6 +20,8 @@ import { toolRegistry } from "../tools/toolRegistry.js";
 import { ToolRouter } from "../tools/toolRouter.js";
 import { systemSettingsService } from "./systemSettingsService.js";
 import aiService from "./aiService.js";
+import { classifyResearchIntent, RESEARCH_INTENTS } from "./research/researchIntentClassifier.js";
+import { executeAdaptiveResearch } from "./research/researchOrchestrator.js";
 
 const toolRouter = new ToolRouter();
 
@@ -196,6 +198,184 @@ function extractJsonBlock(text) {
   }
 }
 
+export const RESEARCH_BUDGET = {
+  MAX_RESEARCH_QUERIES: 4,
+  MAX_TOOL_CALLS: 5,
+  MAX_FOLLOWUPS: 1,
+  MAX_TOTAL_RESEARCH_TIME_MS: 12000,
+};
+
+/**
+ * Returns current real-world date context
+ */
+export function getCurrentDateContext() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const month = monthNames[now.getMonth()];
+  const day = now.getDate();
+  return {
+    year,
+    month,
+    day,
+    formatted: `${month} ${day}, ${year}`,
+    isoDate: now.toISOString().split("T")[0],
+  };
+}
+
+/**
+ * Sanitizes planner-generated search queries to prevent accidental stale-year queries
+ */
+export function sanitizePlannerQuery(searchQuery, rawUserQuery, currentYear) {
+  if (!searchQuery || typeof searchQuery !== "string") return "";
+  const clean = searchQuery.trim();
+  const userHasExplicitPastYear = /\b(19\d\d|20[01]\d|202[0-5])\b/.test(rawUserQuery);
+  if (!userHasExplicitPastYear) {
+    // If the planner outputs a past year (2020-2025) while user did not request it, replace with currentYear
+    return clean.replace(/\b(202[0-5]|201\d)\b/g, String(currentYear));
+  }
+  return clean;
+}
+
+/**
+ * Deterministically checks evidence count, valid URLs, relevance, and freshness
+ */
+export function evaluateEvidenceDeterministic({ query, observations, citations, currentYear }) {
+  const successfulObs = observations.filter(
+    (o) => o.success && o.summary && !o.summary.includes("[SEARCH_EMPTY]") && !o.summary.includes("No recent web search results")
+  );
+  const sourceCount = citations.length;
+
+  if (successfulObs.length === 0 || sourceCount === 0) {
+    return {
+      passed: false,
+      sufficient: false,
+      reason: "No valid observations or web sources retrieved.",
+      missingInformation: ["Primary facts for query"],
+      conflicts: [],
+      freshnessOk: false,
+      sourceCount: 0,
+      duplicateRate: 0,
+      relevance: 0,
+    };
+  }
+
+  // Valid URLs
+  const validUrlCount = citations.filter((c) => c.url && (c.url.startsWith("http://") || c.url.startsWith("https://"))).length;
+  if (validUrlCount === 0) {
+    return {
+      passed: false,
+      sufficient: false,
+      reason: "Retrieved citations lack valid URLs.",
+      missingInformation: ["Authoritative web sources"],
+      conflicts: [],
+      freshnessOk: false,
+      sourceCount,
+      duplicateRate: 0,
+      relevance: 0,
+    };
+  }
+
+  // Duplicate Rate
+  const uniqueUrls = new Set(citations.map((c) => c.url).filter(Boolean));
+  const duplicateRate = citations.length > 0 ? (citations.length - uniqueUrls.size) / citations.length : 0;
+
+  // Freshness Check: If query asks for current/best/latest/compare, check if retrieved text mentions current year or is exclusively stale
+  const queryNeedsRecency = /\b(current|latest|today|now|recent|best|update|models|providers|api|compare)\b/i.test(query) || !/\b(19\d\d|20[01]\d|202[0-5])\b/.test(query);
+  const combinedText = (
+    observations.map((o) => o.summary).join(" ") + " " +
+    citations.map((c) => (c.snippet || "") + " " + (c.title || "")).join(" ")
+  ).toLowerCase();
+
+  const hasCurrentYear = combinedText.includes(String(currentYear));
+  const hasStalePastYearOnly = (combinedText.includes("2024") || combinedText.includes("2023")) && !hasCurrentYear;
+  const freshnessOk = !queryNeedsRecency || !hasStalePastYearOnly || hasCurrentYear;
+
+  // Relevance Check
+  const queryTokens = query.toLowerCase().split(/\s+/).filter((w) => w.length > 3 && !["what", "which", "where", "tell", "about", "show", "with"].includes(w));
+  const matches = queryTokens.filter((k) => combinedText.includes(k));
+  const relevance = queryTokens.length > 0 ? matches.length / queryTokens.length : 1;
+
+  const passed = successfulObs.length > 0 && validUrlCount > 0 && relevance >= 0.2 && duplicateRate < 0.85;
+
+  return {
+    passed,
+    sufficient: passed && freshnessOk,
+    reason: passed ? "Deterministic checks passed." : "Evidence failed relevance or URL validity thresholds.",
+    missingInformation: passed ? [] : ["Insufficient factual coverage of key inquiry terms"],
+    conflicts: [],
+    freshnessOk,
+    sourceCount,
+    duplicateRate: Number(duplicateRate.toFixed(2)),
+    relevance: Number(relevance.toFixed(2)),
+  };
+}
+
+/**
+ * Builds structured comparison dataset across dimensions for comparison inquiries
+ */
+export async function buildStructuredComparison({ query, observations, citations, forceGroq }) {
+  const comparisonPrompt = `User Query: "${query}"
+Retrieved research evidence:
+${observations.map((o, idx) => `[Evidence ${idx + 1} (${o.tool})]: ${o.summary}`).join("\n\n")}
+
+Based strictly on the verified evidence above, construct an objective, structured comparison dataset.
+Respond strictly in JSON format:
+{
+  "comparisonEntities": [
+    {
+      "provider": "Provider / Contender Name",
+      "currentModels": "Key current models in production",
+      "reasoning": "Reasoning capabilities",
+      "speed": "Latency / throughput characteristics",
+      "multimodal": "Vision / audio / multimodal support",
+      "toolCalling": "Tool calling / structured output support",
+      "context": "Context window limit",
+      "pricing": "Pricing tier / cost structure",
+      "notableStrengths": "Top strengths",
+      "limitations": "Known limitations or trade-offs"
+    }
+  ],
+  "decisionTradeoffs": "1-2 sentences summarizing key trade-off axes (e.g. ultra-low latency vs deep reasoning vs cost)"
+}`;
+
+  try {
+    const compAi = await callCognitiveModel({
+      systemPrompt: "You are an objective technology benchmarking analyst. Return only valid JSON without declaring an overall winner.",
+      messages: [{ role: "user", content: comparisonPrompt }],
+      tier: "FAST_REASONER", // Qwen 27B
+      forceGroq,
+      temperature: 0.1,
+    });
+    return extractJsonBlock(compAi.reply);
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Sanitizes spoken reply text for text-to-speech rendering.
+ * Acts as a strict last-resort fallback to remove code fences, raw toolcode artifacts,
+ * and conversational lead-in fillers without corrupting normal factual speech containing words like 'print' or 'search'.
+ *
+ * @param {string} rawReply
+ * @returns {string}
+ */
+export function sanitizeSpokenReply(rawReply) {
+  if (!rawReply || typeof rawReply !== "string") return "";
+  return rawReply
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\btoolcode\b[\s\S]*/gi, "")
+    .replace(/print\([a-zA-Z0-9_]+\([^)]*\)\)/gi, "")
+    .replace(/^.*?(?:ek minute|ek second|hold on|let me check|main abhi check|main search karke|abhi dekh kar).*?(?:batata hoon|bata raha hoon|bata rahi hoon|dekh raha hoon)[.!?,;\s]*/i, "")
+    .replace(/^(?:I will use|I am using|Let me use|Using).*?\btool\b[^.!?]*[.!?]\s*/i, "")
+    .replace(/[*#`_~[\]]/g, "")
+    .trim();
+}
+
 /**
  * Tiered Thinking Engine Orchestrator
  *
@@ -218,8 +398,6 @@ export async function runThinkingLoop({
 }) {
   const t0 = performance.now();
   const thinkingSteps = [];
-  const allCitations = [];
-  const seenUrls = new Set();
 
   const recordStep = (stepObj) => {
     const elapsedMs = Math.round(performance.now() - t0);
@@ -332,310 +510,220 @@ MANDATE:
   }
 
   // =========================================================================
-  // TIER 2 & 3: COMPLEX / MULTI-STEP REASONING PIPELINE
+  // TIER 2 & 3: ADAPTIVE RESEARCH & REASONING PIPELINE
   // =========================================================================
+  const currentDate = getCurrentDateContext();
+  const intentInfo = classifyResearchIntent(query);
 
-  // Step 1: Complex Planning via REASONING_MODEL (GPT-OSS 120B)
-  recordStep({
-    phase: "PLANNING",
-    title: "Decomposing Query & Strategic Planning",
-    thought: `Analyzing complex inquiry via ${COGNITIVE_MODELS.REASONING_MODEL}. Decomposing factual dimensions.`,
-    status: "in_progress",
-  });
+  let researchData = null;
+  let observations = [];
+  let allCitations = [];
+  let structuredComparison = null;
+  let detEvidence = null;
+  let qwenGapData = null;
+  let toolTrace = [];
+  let researchMeta = null;
 
-  const availableToolsList = toolRegistry.list().map((t) => `${t.name}: ${t.description}`).join("\n");
-
-  const planPrompt = `Analyze the user's inquiry and formulate a strategic investigation plan.
-Query: "${query}"
-
-Available tools:
-${availableToolsList}
-
-Respond strictly in valid JSON format:
-{
-  "analysis": "1-sentence assessment of required investigation",
-  "complexity": "LOW" | "MEDIUM" | "HIGH",
-  "steps": ["Step 1", "Step 2"],
-  "initialTools": [
-    { "tool": "web_search", "args": { "query": "..." } }
-  ]
-}`;
-
-  let planResult = null;
-  try {
-    const planAi = await callCognitiveModel({
-      systemPrompt: "You are a strategic reasoning and planning agent. Return only valid JSON.",
-      messages: [{ role: "user", content: planPrompt }],
-      tier: "REASONING", // GPT-OSS 120B
-      forceGroq,
-      temperature: 0.2,
-    });
-    planResult = extractJsonBlock(planAi.reply) || {
-      analysis: "Factual investigation required.",
-      complexity: "MEDIUM",
-      steps: ["Gather facts", "Synthesize findings"],
-      initialTools: [{ tool: "web_search", args: { query } }],
-    };
-  } catch (err) {
-    planResult = {
-      analysis: "Direct retrieval required.",
-      complexity: "MEDIUM",
-      steps: ["Search authoritative records", "Synthesize response"],
-      initialTools: [{ tool: "web_search", args: { query } }],
-    };
-  }
-
-  const isHighComplexity = planResult.complexity === "HIGH" || query.toLowerCase().includes("deep research");
-
-  recordStep({
-    phase: "PLANNING",
-    title: "Plan Formulated",
-    thought: planResult.analysis || "Investigation roadmap established.",
-    plan: planResult.steps || [],
-    complexity: planResult.complexity || "MEDIUM",
-    status: "completed",
-  });
-
-  // Step 2: Parallel Tool Execution
-  const observations = [];
-  const plannedTools = Array.isArray(planResult.initialTools) && planResult.initialTools.length > 0
-    ? planResult.initialTools
-    : [{ tool: "web_search", args: { query } }];
-
-  // Execute initial planned tools in parallel for speed
-  const toolExecPromises = plannedTools.slice(0, 3).map(async (toolReq) => {
-    const toolName = toolReq.tool;
-    const toolArgs = toolReq.args || {};
-
+  if (intentInfo.requiresDeepResearch) {
+    // RUN ADAPTIVE RESEARCH ORCHESTRATOR (PHASES 1 - 14)
     recordStep({
-      phase: "TOOL_EXECUTION",
-      title: `Invoking Tool: ${toolName}`,
-      tool: toolName,
-      args: toolArgs,
+      phase: "PLANNING",
+      title: `Activating Adaptive Research (${intentInfo.intent})`,
+      thought: `Inquiry requires multi-source evidence grounding across dimensions: ${intentInfo.dimensions.join(", ")}. Anchor: ${currentDate.formatted}.`,
       status: "in_progress",
     });
 
+    researchData = await executeAdaptiveResearch({
+      query,
+      callModel: (params) => callCognitiveModel({ ...params, forceGroq }),
+      recordStep,
+      options: { forceGroq },
+    });
+
+    observations = researchData.observations || [];
+    allCitations = researchData.citations || [];
+    structuredComparison = researchData.comparisonMatrix;
+    detEvidence = researchData.deterministicGate;
+    qwenGapData = researchData.gapAudit;
+    toolTrace = researchData.toolTrace;
+    researchMeta = researchData.researchMeta;
+  } else {
+    // FAST PATH FOR SIMPLE FACTS / CURRENT FACTS / DIRECT DEFINITIONS (< 1.5s)
+    const isCurrentFact = intentInfo.intent === RESEARCH_INTENTS.CURRENT_FACT;
+    const sanitizedQuery = sanitizePlannerQuery(query, query, currentDate.year);
+
+    recordStep({
+      phase: "PLANNING",
+      title: isCurrentFact ? "Targeted Fact Retrieval" : "Direct Knowledge Retrieval",
+      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}. Fast single-step resolution.`,
+      status: "in_progress",
+    });
+
+    let toolRes = null;
     try {
-      const execRes = await toolExecutor.executeTool(toolName, toolArgs, { context: { thinkingMode: true } });
-      const summary = execRes.voiceSummary || (execRes.data ? JSON.stringify(execRes.data).slice(0, 500) : "Completed");
-
-      if (Array.isArray(execRes.sources)) {
-        execRes.sources.forEach((src) => {
-          const key = src.url || src.title;
-          if (key && !seenUrls.has(key)) {
-            seenUrls.add(key);
-            allCitations.push({
-              title: src.title || "External Source",
-              publisher: src.publisher || "Web",
-              url: src.url || null,
-              snippet: src.snippet || "",
-            });
-          }
-        });
-      }
-
-      const obsItem = { tool: toolName, args: toolArgs, success: execRes.ok !== false, summary };
-      observations.push(obsItem);
-
       recordStep({
-        phase: "TOOL_OBSERVATION",
-        title: `Result from ${toolName}`,
-        tool: toolName,
-        observation: summary.slice(0, 300),
-        status: "completed",
+        phase: "TOOL_EXECUTION",
+        title: "Invoking Tool: web_search",
+        tool: "web_search",
+        args: { query: sanitizedQuery },
+        status: "in_progress",
       });
-    } catch (toolErr) {
-      observations.push({ tool: toolName, args: toolArgs, success: false, summary: `Error: ${toolErr.message}` });
-      recordStep({
-        phase: "TOOL_OBSERVATION",
-        title: `Error in ${toolName}`,
-        tool: toolName,
-        observation: toolErr.message,
-        status: "failed",
+
+      toolRes = await toolExecutor.executeTool("web_search", { query: sanitizedQuery }, { context: { thinkingMode: true } });
+    } catch (err) {
+      toolRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
+    }
+
+    const isSearchEmpty = !toolRes.ok || toolRes.state === "SEARCH_EMPTY" || !Array.isArray(toolRes.sources) || toolRes.sources.length === 0;
+    const success = toolRes.ok !== false && !isSearchEmpty;
+    const summary = toolRes.voiceSummary || (toolRes.data ? JSON.stringify(toolRes.data).slice(0, 400) : "Search completed");
+
+    if (Array.isArray(toolRes.sources)) {
+      toolRes.sources.forEach((src) => {
+        allCitations.push({
+          title: src.title || "External Source",
+          publisher: src.publisher || "Web",
+          url: src.url || null,
+          snippet: src.snippet || "",
+          sourceType: src.sourceType || "GENERAL_WEB",
+          publishedAt: src.publishedAt || null,
+          retrievedAt: new Date().toISOString(),
+        });
       });
     }
-  });
 
-  await Promise.all(toolExecPromises);
+    observations.push({
+      tool: "web_search",
+      args: { query: sanitizedQuery },
+      success,
+      state: toolRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
+      summary,
+    });
 
-  // Step 3: Fast Gap Checking via FAST_REASONER (Qwen 27B, ~350ms)
-  let followUpExecuted = false;
-  if (observations.length > 0) {
-    const gapPrompt = `User Query: "${query}"
-Observations retrieved:
-${observations.map((o, idx) => `[${idx + 1}] ${o.tool}: ${o.summary}`).join("\n")}
+    toolTrace.push({
+      tool: "web_search",
+      args: { query: sanitizedQuery },
+      success,
+    });
 
-Determine if we have sufficient factual evidence to answer with complete accuracy or if ONE critical follow-up tool is needed.
-Respond strictly in JSON:
-{
-  "hasSufficientFacts": true | false,
-  "followUpTool": null | { "tool": "calculate_expression" | "extract_webpage" | "web_search", "args": { ... } }
-}`;
+    recordStep({
+      phase: "TOOL_OBSERVATION",
+      title: success ? "Search Observation" : "No Results",
+      tool: "web_search",
+      observation: summary.slice(0, 300),
+      status: success ? "completed" : "failed",
+    });
 
-    try {
-      const gapAi = await callCognitiveModel({
-        systemPrompt: "You are a fast factual gap auditor. Return only valid JSON.",
-        messages: [{ role: "user", content: gapPrompt }],
-        tier: "FAST_REASONER", // Qwen 27B
-        forceGroq,
-        temperature: 0.1,
-      });
+    detEvidence = evaluateEvidenceDeterministic({
+      query,
+      observations,
+      citations: allCitations,
+      currentYear: currentDate.year,
+    });
 
-      const gapData = extractJsonBlock(gapAi.reply);
-      if (!gapData?.hasSufficientFacts && gapData?.followUpTool) {
-        followUpExecuted = true;
-        const ft = gapData.followUpTool;
-        recordStep({
-          phase: "EVALUATION",
-          title: "Gap Detected: Invoking Follow-up Tool",
-          thought: `Querying missing data via ${ft.tool}.`,
-          nextTool: ft.tool,
-          status: "in_progress",
-        });
+    qwenGapData = {
+      sufficient: detEvidence.passed && detEvidence.freshnessOk,
+      missingInformation: detEvidence.missingInformation,
+      conflicts: [],
+      freshnessOk: detEvidence.freshnessOk,
+      sourceCount: allCitations.length,
+    };
 
-        try {
-          const followRes = await toolExecutor.executeTool(ft.tool, ft.args || {}, { context: { thinkingMode: true } });
-          const followSum = followRes.voiceSummary || (followRes.data ? JSON.stringify(followRes.data).slice(0, 500) : "Completed");
-          observations.push({ tool: ft.tool, args: ft.args, success: followRes.ok !== false, summary: followSum });
-
-          recordStep({
-            phase: "TOOL_OBSERVATION",
-            title: `Result from ${ft.tool}`,
-            tool: ft.tool,
-            observation: followSum.slice(0, 300),
-            status: "completed",
-          });
-        } catch (_) {}
-      } else {
-        recordStep({
-          phase: "EVALUATION",
-          title: "Factual Sufficiency Achieved",
-          thought: "Retrieved evidence is complete and answers all inquiry dimensions.",
-          status: "completed",
-        });
-      }
-    } catch (_) {}
+    researchMeta = {
+      intent: intentInfo.intent,
+      temporalAnchor: currentDate.formatted,
+      queriesUsed: 1,
+      sourcesUsed: allCitations.length,
+      deepPagesRead: 0,
+      followups: 0,
+      freshnessChecked: detEvidence.freshnessOk,
+      deterministicPassed: detEvidence.passed,
+      semanticSufficient: qwenGapData.sufficient,
+      researchDurationMs: Math.round(performance.now() - t0),
+    };
   }
 
-  // Step 4: Conditional Critique Stage (Skip when not needed to save 120B latency)
-  let isCritiqueRun = false;
-  let critiqueData = { isVerified: true, issues: [], verdict: "VERIFIED" };
-
-  const isContestedOrFactCheck =
-    query.toLowerCase().match(/\b(controversy|allegation|fake|true or false|fact check|claim|scam|lie|hoax)\b/) != null;
-
-  if (isHighComplexity || isContestedOrFactCheck) {
-    // Only run model verification when there are contested claims or high complexity
-    isCritiqueRun = true;
-    recordStep({
-      phase: "CRITIQUE",
-      title: "Auditing Contested Facts & Nuance",
-      thought: `Cross-checking dates, names, and claims via ${COGNITIVE_MODELS.FAST_REASONER}.`,
-      status: "in_progress",
-    });
-
-    const critiquePrompt = `User question: "${query}"
-Retrieved observations:
-${observations.map((o) => `- ${o.summary}`).join("\n")}
-
-Verify:
-1. Are there date discrepancies, contradictions, or unsubstantiated claims?
-Return JSON:
-{
-  "isVerified": true,
-  "issues": [],
-  "verdict": "VERIFIED" | "CONTESTED"
-}`;
-
-    try {
-      const critiqueAi = await callCognitiveModel({
-        systemPrompt: "You are a rigorous factual verifier. Return only valid JSON.",
-        messages: [{ role: "user", content: critiquePrompt }],
-        tier: "FAST_REASONER", // Qwen 27B instead of slow 120B!
-        forceGroq,
-        temperature: 0.1,
-      });
-      critiqueData = extractJsonBlock(critiqueAi.reply) || critiqueData;
-    } catch (_) {}
-
-    recordStep({
-      phase: "CRITIQUE",
-      title: "Verification Complete",
-      thought: critiqueData.issues?.length > 0 ? critiqueData.issues.join("; ") : "Claims verified against primary observations.",
-      verdict: critiqueData.verdict,
-      status: "completed",
-    });
-  } else {
-    // Deterministic Sanity Check: All tools succeeded & non-empty
-    const allSucceeded = observations.every((o) => o.success);
-    recordStep({
-      phase: "CRITIQUE",
-      title: "Deterministic Sanity Check Passed",
-      thought: allSucceeded ? "Observations verified non-empty and consistent. Critique skipped to optimize latency." : "Observations logged.",
-      verdict: "VERIFIED",
-      status: "completed",
-    });
-  }
-
-  // Step 5: Final Synthesis (Gemini Flash or Qwen 27B for fast natural voice; 120B only for Deep Research)
+  // =========================================================================
+  // FINAL SYNTHESIS (PHASE 16 & 17)
+  // =========================================================================
+  const isHighComplexity =
+    intentInfo.intent === RESEARCH_INTENTS.DEEP_RESEARCH ||
+    intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH;
   const synthesisTier = isHighComplexity ? "REASONING" : "FAST";
   const synthesisModelName = isHighComplexity ? COGNITIVE_MODELS.REASONING_MODEL : COGNITIVE_MODELS.FAST_MODEL;
 
   recordStep({
     phase: "SYNTHESIS",
-    title: "Generating Spoken Answer",
+    title: "Generating Verified Spoken Answer",
     thought: `Synthesizing direct spoken conclusion via ${synthesisModelName}.`,
     status: "in_progress",
   });
 
-  const baseInstruction = typeof aiService.getSystemInstruction === "function"
-    ? aiService.getSystemInstruction(persona, voiceModel, {
-        intensityLevel: 0,
-        intensityLabel: "CASUAL_FRIEND",
-        intent: "FACTUAL_INQUIRY",
-        isFactual: true,
-      })
-    : "Answer directly, politely, and factually.";
+  let spokenReply = "";
+  const validObservations = observations.filter((o) => o.success && !o.summary.includes("[SEARCH_EMPTY]"));
 
-  // Strip tool invocation rules from synthesis context so the model doesn't hallucinate calling tools again
-  const cleanBaseInstruction = baseInstruction
-    .replace(/\[MANDATORY TOOL RULES\]:[\s\S]*?(?=\[(?:STRICT|EVIDENCE|FACTUAL|PERSONA))/i, "")
-    .replace(/If the user asks.*?invoke the.*?tool\./gi, "");
+  if (validObservations.length === 0 && allCitations.length === 0) {
+    spokenReply = `I was unable to verify current records for "${query}" across the search feeds right now.`;
+  } else {
+    const baseInstruction = typeof aiService.getSystemInstruction === "function"
+      ? aiService.getSystemInstruction(persona, voiceModel, {
+          intensityLevel: 0,
+          intensityLabel: "CASUAL_FRIEND",
+          intent: "FACTUAL_INQUIRY",
+          isFactual: true,
+        })
+      : "Answer directly, politely, and factually.";
 
-  const synthesisPrompt = `${cleanBaseInstruction}
+    const cleanBaseInstruction = baseInstruction
+      .replace(/\[MANDATORY TOOL RULES\]:[\s\S]*?(?=\[(?:STRICT|EVIDENCE|FACTUAL|PERSONA))/i, "")
+      .replace(/If the user asks.*?invoke the.*?tool\./gi, "");
 
-[CRITICAL SYNTHESIS DIRECTIVE - READ CAREFULLY]:
-1. ALL RESEARCH, TOOL EXECUTION, AND WEB SEARCHES ARE ALREADY 100% COMPLETE.
-2. The empirical evidence is provided below in [VERIFIED EVIDENCE PACK].
+    const isComparisonOrTechnical =
+      intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
+      intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH ||
+      /\b(best|compare|versus|vs|which should i use|alternatives|difference between)\b/i.test(query);
+
+    const comparisonBlock = structuredComparison?.comparisonEntities?.length
+      ? `\n[STRUCTURED COMPARISON DATASET (DO NOT DECLARE AN OVERALL WINNER - EXPLAIN TRADEOFFS)]:\n${JSON.stringify(structuredComparison.comparisonEntities, null, 2)}\nKey Tradeoff Analysis: ${structuredComparison.decisionTradeoffs || "Criteria dependent"}\n`
+      : "";
+
+    const evidencePack = researchData?.evidencePack || [];
+    const evidenceText = evidencePack.length > 0
+      ? evidencePack.map((e, idx) => `[Evidence ${idx + 1} (${e.sourceRole} - ${e.source} | ${e.sourceTier})]: ${e.passage}`).join("\n\n")
+      : validObservations.map((o, idx) => `[Evidence ${idx + 1} (${o.tool})]: ${o.summary}`).join("\n\n");
+
+    const synthesisPrompt = `${cleanBaseInstruction}
+
+[TEMPORAL ANCHOR]:
+Current real-world date is ${currentDate.formatted} (Year ${currentDate.year}).
+
+[CRITICAL SYNTHESIS DIRECTIVES - READ CAREFULLY]:
+1. ALL RESEARCH, TOOL EXECUTION, AND SEARCHES ARE ALREADY 100% COMPLETE.
+2. The empirical evidence is provided below in [VERIFIED EVIDENCE PACK] and [STRUCTURED COMPARISON DATASET].
 3. DO NOT attempt to call tools. DO NOT write Python, code blocks, "toolcode", "print(...)", or tool function calls.
 4. DO NOT promise to search or use conversational fillers (NEVER say "Ek minute", "Main check karke batata hoon", "Wait a second", or "I will use the websearch tool").
-5. State the direct answer immediately and clearly in 1 to 2 natural spoken sentences for text-to-speech.
-6. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
+5. State the direct answer immediately and clearly in 2 to 3 natural spoken sentences for text-to-speech. Do NOT speak URLs or raw citation brackets.
+${isComparisonOrTechnical ? "6. FOR COMPARISON QUESTIONS: DO NOT arbitrarily pick a single winner. Objectively explain the key criteria and trade-offs (e.g. latency, frontier reasoning, context window, pricing) so the user can choose the best option." : ""}
+7. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
 
+${comparisonBlock}
 [VERIFIED EVIDENCE PACK]:
-${observations.map((o, idx) => `[Evidence ${idx + 1} (${o.tool})]: ${o.summary}`).join("\n\n")}
+${evidenceText}
 
 User Query: "${query}"`;
 
-  let spokenReply = "";
-  try {
-    const synthAi = await callCognitiveModel({
-      systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions directly to human ears. Never output toolcode, python, or promises to search.",
-      messages: [{ role: "user", content: synthesisPrompt }],
-      tier: synthesisTier,
-      forceGroq,
-      temperature: 0.2,
-    });
-    spokenReply = synthAi.reply
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/toolcode[\s\S]*/gi, "")
-      .replace(/print\([a-zA-Z0-9_]+\([^)]*\)\)/gi, "")
-      .replace(/^.*?(?:ek minute|ek second|hold on|let me check|main abhi check|main search karke|abhi dekh kar).*?(?:batata hoon|bata raha hoon|bata rahi hoon|dekh raha hoon)[.!?,;\s]*/i, "")
-      .replace(/^.*?(?:I will use the|I am using the).*?(?:tool).*?[.!?,;\s]*/i, "")
-      .replace(/[*#`_~[\]]/g, "")
-      .trim();
-  } catch (err) {
-    spokenReply = observations[0]?.summary || "Based on the verified records, the information has been confirmed.";
+    try {
+      const synthAi = await callCognitiveModel({
+        systemPrompt: "You are Chatly, an intelligent conversational AI delivering accurate, verified spoken conclusions directly to human ears. Never output toolcode, python, or promises to search.",
+        messages: [{ role: "user", content: synthesisPrompt }],
+        tier: synthesisTier,
+        forceGroq,
+        temperature: 0.2,
+      });
+      spokenReply = sanitizeSpokenReply(synthAi.reply);
+    } catch (err) {
+      spokenReply = validObservations[0]?.summary || "Based on verified records, the information has been retrieved.";
+    }
   }
 
   const totalDurationMs = Math.round(performance.now() - t0);
@@ -650,25 +738,22 @@ User Query: "${query}"`;
 
   console.log(`✅ [THINKING ENGINE] Completed ${thinkingSteps.length} steps in ${totalDurationMs}ms. Spoken: "${spokenReply.slice(0, 60)}..."`);
 
-  // Clean Provenance Return: Answer + Sources + Tool Trace + Verification
   return {
     answer: spokenReply,
     sources: allCitations,
-    toolTrace: observations.map((o) => ({
-      tool: o.tool,
-      args: o.args,
-      success: o.success,
-    })),
+    toolTrace,
     verification: {
-      checked: isCritiqueRun,
-      issues: critiqueData.issues || [],
-      verdict: critiqueData.verdict || "VERIFIED",
+      checked: true,
+      issues: qwenGapData?.conflicts || [],
+      verdict: detEvidence?.passed ? "VERIFIED" : "UNVERIFIED",
+      sufficiency: qwenGapData,
+      deterministic: detEvidence,
     },
-    // Backwards compatibility for voice pipeline SSE/WS
     reply: spokenReply,
     citations: allCitations,
     thinkingSteps,
     totalDurationMs,
+    researchMeta,
   };
 }
 

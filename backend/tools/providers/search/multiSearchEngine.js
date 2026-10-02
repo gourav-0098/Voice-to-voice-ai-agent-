@@ -43,35 +43,63 @@ export function classifySourceType(url, publisher = "") {
       return "ACADEMIC";
     }
 
-    // 3. Established Journalism & Wire Services
+    // 3. Technical Documentation & Developer Portals
+    if (
+      host.includes("docs.") ||
+      host.includes("platform.openai.com") ||
+      host.includes("ai.google.dev") ||
+      host.includes("console.groq.com") ||
+      host.includes("developer.") ||
+      host.includes("learn.microsoft.com") ||
+      host.includes("huggingface.co/docs") ||
+      host.includes("readthedocs.io")
+    ) {
+      return "TECHNICAL_DOCUMENTATION";
+    }
+
+    // 4. Primary Source AI & Technology Organizations
+    if (
+      host.includes("openai.com") ||
+      host.includes("anthropic.com") ||
+      host.includes("deepmind.google") ||
+      host.includes("google.com") ||
+      host.includes("groq.com") ||
+      host.includes("microsoft.com") ||
+      host.includes("github.com") ||
+      host.includes("meta.com") ||
+      host.includes("mistral.ai") ||
+      host.includes("deepseek.com") ||
+      host.includes("cohere.com") ||
+      host.includes("together.ai")
+    ) {
+      return "PRIMARY_SOURCE";
+    }
+
+    // 5. Established Journalism, Wire Services & Tech Reporting
     if (
       host.includes("reuters.com") ||
       host.includes("apnews.com") ||
       host.includes("bbc.com") ||
+      host.includes("bloomberg.com") ||
+      host.includes("techcrunch.com") ||
+      host.includes("theverge.com") ||
+      host.includes("wired.com") ||
+      host.includes("arstechnica.com") ||
+      host.includes("venturebeat.com") ||
+      host.includes("technologyreview.com") ||
       host.includes("thehindu.com") ||
       host.includes("indianexpress.com") ||
       host.includes("timesofindia") ||
       host.includes("hindustantimes.com") ||
       host.includes("livemint.com") ||
       host.includes("economictimes") ||
-      host.includes("bloomberg.com") ||
       host.includes("aljazeera.com") ||
       host.includes("ndtv.com")
     ) {
       return "ESTABLISHED_REPORTING";
     }
 
-    // 4. Primary Source Organizations
-    if (
-      host.includes("openai.com") ||
-      host.includes("google.com") ||
-      host.includes("microsoft.com") ||
-      host.includes("github.com")
-    ) {
-      return "PRIMARY_SOURCE";
-    }
-
-    // 5. Commentary / Opinion / Forums
+    // 6. Commentary / Opinion / Forums
     if (
       host.includes("medium.com") ||
       host.includes("substack.com") ||
@@ -129,6 +157,7 @@ export class MultiSearchEngine {
    */
   expandQuery(query) {
     const q = query.trim();
+    const currentYear = new Date().getFullYear();
     const expansions = [q];
 
     // Strip common conversational prefixes to create a laser-focused search query
@@ -137,11 +166,13 @@ export class MultiSearchEngine {
       expansions.push(conversationalStripped);
     }
 
-    // If query has recency intent ("latest", "today", "news"), create a clean entity query
-    if (/\b(today|latest|breaking|recent|news|update)\b/i.test(q)) {
-      const stripped = q.replace(/\b(today|latest|breaking|recent|news|update|tell me about|what is the)\b/gi, "").trim();
-      if (stripped.length > 3 && !expansions.includes(stripped)) {
-        expansions.push(stripped);
+    // Temporal recency alignment: if query asks for current/best/latest and lacks explicit past year,
+    // add an explicit current-year query expansion to ensure current sources
+    const hasExplicitPastYear = /\b(19\d\d|20[01]\d|202[0-5])\b/.test(q);
+    if (!hasExplicitPastYear && /\b(best|latest|current|today|top|news|compare|models|providers|api)\b/i.test(q)) {
+      const yearQuery = `${conversationalStripped || q} ${currentYear}`;
+      if (!expansions.includes(yearQuery)) {
+        expansions.push(yearQuery);
       }
     }
 
@@ -164,6 +195,8 @@ export class MultiSearchEngine {
     const cleanQuery = String(query || "").trim();
     if (!cleanQuery) return [];
 
+    const hasExplicitPastYear = /\b(19\d\d|20[01]\d|202[0-5])\b/.test(cleanQuery);
+    const currentYearStr = String(new Date().getFullYear());
     const queries = this.expandQuery(cleanQuery);
     const searchTasks = [];
 
@@ -204,7 +237,7 @@ export class MultiSearchEngine {
       const sourceType = item.sourceType || classifySourceType(canonical, item.publisher);
 
       validatedResults.push({
-        title: item.title || cleanQuery,
+        title: item.title && item.title !== cleanQuery ? item.title : (item.publisher || "Web Reference"),
         url: canonical,
         snippet: item.snippet || "",
         publisher: item.publisher || "Web",
@@ -226,18 +259,34 @@ export class MultiSearchEngine {
       }
 
       // Source tier weighting
-      if (item.sourceType === "OFFICIAL") score += 2.0;
-      else if (item.sourceType === "PRIMARY_SOURCE") score += 1.8;
+      if (item.sourceType === "OFFICIAL") score += 2.2;
+      else if (item.sourceType === "PRIMARY_SOURCE") score += 2.0;
+      else if (item.sourceType === "TECHNICAL_DOCUMENTATION") score += 1.8;
       else if (item.sourceType === "ESTABLISHED_REPORTING") score += 1.5;
       else if (item.sourceType === "ACADEMIC") score += 1.3;
+      else if (item.sourceType === "COMMENTARY") score -= 0.5;
 
-      if (item.publishedAt) score += 0.5; // Recency bonus
+      // Temporal freshness bonus/penalty
+      if (item.publishedAt && item.publishedAt.includes(currentYearStr)) score += 1.2;
+      if (textToSearch.includes(currentYearStr)) score += 1.0;
+      if (!hasExplicitPastYear && (textToSearch.includes("2024") || textToSearch.includes("2023")) && !textToSearch.includes(currentYearStr)) {
+        score -= 0.8;
+      }
 
       return { ...item, score: Number(score.toFixed(2)) };
     });
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, maxResults);
+    // Enforce Relevance Gate: If query tokens exist, candidate must match at least one query token
+    const relevant = scored.filter((item) => {
+      if (queryTokens.length > 0) {
+        const text = `${item.title} ${item.snippet} ${item.url}`.toLowerCase();
+        return queryTokens.some((tok) => text.includes(tok));
+      }
+      return true;
+    });
+
+    relevant.sort((a, b) => b.score - a.score);
+    return relevant.slice(0, maxResults);
   }
 }
 
