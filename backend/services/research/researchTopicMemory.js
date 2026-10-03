@@ -126,6 +126,31 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
     };
   }
 
+  // 2a. NEGATIVE CLARIFICATION HEURISTICS (Pattern from Anthropic ask_user_input_v0 & Perplexity Deep Research)
+  // NEVER trigger clarification for:
+  // - Single factual inquiries ("What is the capital of France?")
+  // - Math/Calculations ("What is 17 percent of 850?")
+  // - Weather inquiries ("What is today's weather in Jaipur?")
+  // - "A or B" recommendation/comparison inquiries ("Should I learn Python or JavaScript?")
+  const isDirectFactualOrMath =
+    /\b(capital of|population of|speed of|height of|distance between|founder of|formula for)\b/i.test(lowerQ) ||
+    /\b(calculate|\b\d+\s*[\+\-\*\/%]\s*\d+|\b\d+\s*percent of\b)\b/i.test(lowerQ) ||
+    /\b(weather|temperature|forecast|mausam)\b/i.test(lowerQ);
+
+  const isComparisonOrRecommendation =
+    /\b(should i use|which should i|which is better|recommend|difference between|compare)\b/i.test(lowerQ) &&
+    /\b(or|versus|vs)\b/i.test(lowerQ);
+
+  if (isDirectFactualOrMath || isComparisonOrRecommendation) {
+    return {
+      resolvedQuery: cleanQ,
+      activeTopic: null,
+      isFollowUp: false,
+      requiresClarification: false,
+      clarificationPrompt: null,
+    };
+  }
+
   // 3. Check if query is a follow-up
   const isFollowUp = isFollowUpQuery(cleanQ);
 

@@ -248,6 +248,15 @@ export function evaluateEvidenceDeterministic({
     }
   }
 
+  // Subject Entity Overlap & Negative Topic Rejection (Generalized from Perplexity & Comet patterns)
+  // Ensures evidence matches the primary subject entities (e.g. pilot, flight) and rejects completely mismatched viral stories
+  const subjectEntities = queryTokens.filter((t) => t.length > 3 && !["latest", "recent", "about", "story", "full", "tell"].includes(t));
+  const hasSubjectMatch = subjectEntities.length === 0 || subjectEntities.some((entity) => combinedText.includes(entity));
+
+  if (!hasSubjectMatch) {
+    missingSubtopicReason = `Retrieved evidence does not contain references to the subject entity: [${subjectEntities.join(", ")}].`;
+  }
+
   // Viral pilot inquiry check (Golden Example 7 & 19): verify evidence actually mentions pilot/aviation incident
   // Must reject irrelevant search results (e.g. Texas man Hanuman Chalisa)
   if (lowerQ.includes("pilot") && (lowerQ.includes("viral") || lowerQ.includes("trending") || intent === "TRENDING_EVENT")) {
