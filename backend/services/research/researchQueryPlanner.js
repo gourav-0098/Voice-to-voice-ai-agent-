@@ -136,6 +136,8 @@ PLANNING RULES:
    - Target official protocols, architectural tradeoffs, latency, packet loss, and browser/server support.
 5. For CURRENT_EVENT (e.g. "recent changes in September 2026"):
    - Target specific release notes, changelogs, and official announcements for the requested timeframe.
+6. For TRENDING_EVENT (e.g. "Why is this Indian pilot going viral lately?"):
+   - Formulate 3 to 4 distinct, focused search queries covering: (a) viral incident/event, (b) trending news coverage with current year ${dateCtx.year}, (c) controversy or background, and (d) verified factual reporting. Do NOT repeat the exact user question.
 
 Respond strictly in valid JSON format:
 {
@@ -235,6 +237,38 @@ Respond strictly in valid JSON format:
       query: `AI developer announcements release notes ${dateCtx.monthYear}`,
       freshness: "current",
       sourcePreference: "reporting",
+    });
+  } else if (intent === RESEARCH_INTENTS.TRENDING_EVENT) {
+    // 3 to 4 focused search tasks covering entity, incident, viral reporting, and live date
+    const cleanEntity = query
+      .replace(/[?"'.,!]/g, "")
+      .replace(/\b(why is|going viral|lately|trending|went viral|news)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    fallbackTasks.push({
+      topic: `${cleanEntity || "Subject"} viral incident`,
+      query: `${cleanEntity || "Subject"} viral incident news ${dateCtx.year}`.trim(),
+      freshness: "current",
+      sourcePreference: "reporting",
+    });
+    fallbackTasks.push({
+      topic: `${cleanEntity || "Subject"} trending news`,
+      query: `${cleanEntity || "Subject"} trending news ${dateCtx.monthYear}`.trim(),
+      freshness: "current",
+      sourcePreference: "reporting",
+    });
+    fallbackTasks.push({
+      topic: `${cleanEntity || "Subject"} controversy or latest event`,
+      query: `${cleanEntity || "Subject"} controversy what happened latest update`.trim(),
+      freshness: "current",
+      sourcePreference: "reporting",
+    });
+    fallbackTasks.push({
+      topic: `${cleanEntity || "Subject"} verified reporting`,
+      query: `${cleanEntity || "Subject"} viral video incident explanation`.trim(),
+      freshness: "current",
+      sourcePreference: "official",
     });
   } else if (intent === RESEARCH_INTENTS.COMPARISON) {
     const isAi = /\b(ai|llm|model|api|openai|google|anthropic|groq)\b/i.test(query);

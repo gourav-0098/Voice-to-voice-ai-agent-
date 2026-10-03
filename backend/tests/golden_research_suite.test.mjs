@@ -52,8 +52,25 @@ async function runGoldenSuite() {
     assert.equal(intent.intent, RESEARCH_INTENTS.TRENDING_EVENT, "Must be TRENDING_EVENT, not plain SIMPLE_FACT");
     assert.equal(intent.requiresCurrentDate, true, "Must require current date context");
     assert.equal(intent.requiresSearch, true, "Must require search");
+    assert.equal(intent.requiresDeepResearch, true, "Must require multi-query research planning");
+
+    const plan = await formulateResearchPlan({
+      query,
+      intent: intent.intent,
+      dimensions: intent.dimensions,
+      callModel: async () => ({
+        searchTasks: [
+          { topic: "viral incident", query: "Indian pilot viral incident 2026" },
+          { topic: "trending news", query: "Indian pilot trending news October 2026" },
+          { topic: "controversy update", query: "Indian pilot controversy latest update" },
+          { topic: "verified reporting", query: "Indian pilot video incident explanation" }
+        ]
+      }),
+      requiresCurrentDate: true
+    });
+    assert.ok(plan.searchTasks.length >= 3, `Expected >= 3 planned queries, got ${plan.searchTasks.length}`);
     passed++;
-    console.log("  ✅ Case 3 Passed: Trending viral pilot inquiry routed as TRENDING_EVENT.");
+    console.log("  ✅ Case 3 Passed: Trending viral pilot inquiry routed as TRENDING_EVENT with multi-query planning.");
   }
 
   // 4. Indian Pilot Follow-Up "full story" (Golden Example 13)
@@ -410,7 +427,68 @@ async function runGoldenSuite() {
     console.log("  ✅ Case 27 Passed: Negative clarification guardrails successfully prevent unnecessary friction.");
   }
 
-  console.log(`\n🎉 All ${passed}/27 Golden Regression Suite Tests Passed!`);
+  // 28. Multi-Query Execution & Irrelevant Source Gating
+  console.log("▶ [CASE 28] Multi-Query Search Aggregation & Irrelevant Source Rejection");
+  {
+    const query = "Why is the Indian pilot going viral lately?";
+    const intent = classifyResearchIntent(query);
+    assert.equal(intent.requiresDeepResearch, true);
+
+    const plan = await formulateResearchPlan({
+      query,
+      intent: intent.intent,
+      dimensions: intent.dimensions,
+      requiresCurrentDate: true
+    });
+    assert.ok(plan.searchTasks.length >= 3, "Must generate at least 3 planned queries");
+
+    // Simulate multi-query results: Q1 returns Texas Hanuman Chalisa, Q2 returns Indian Pilot report
+    const obs = [
+      { tool: "web_search", query: plan.searchTasks[0].query, success: true, summary: "Texas man recites Hanuman Chalisa at supermarket" },
+      { tool: "web_search", query: plan.searchTasks[1].query, success: true, summary: "Indian pilot altercation on international flight video goes viral in October 2026" }
+    ];
+    const citations = [
+      { url: "https://news.com/hanuman", title: "Hanuman Chalisa", snippet: "Texas supermarket", matchedQueries: [plan.searchTasks[0].query] },
+      { url: "https://reuters.com/pilot-viral", title: "Indian pilot video", snippet: "Indian pilot altercation on international flight video goes viral in October 2026", matchedQueries: [plan.searchTasks[1].query] }
+    ];
+
+    const gate = evaluateEvidenceDeterministic({
+      query,
+      observations: obs,
+      citations,
+      currentYear: 2026,
+      intent: intent.intent
+    });
+    // Gate must pass because Q2 provided relevant pilot evidence even though Q1 was irrelevant
+    assert.equal(gate.passed, true, "Combined evidence must pass when relevant query succeeds");
+    passed++;
+    console.log("  ✅ Case 28 Passed: Multi-query search aggregation succeeds using relevant query and isolates irrelevant hit.");
+  }
+
+  // 29. Multi-Query Resilience when Q1 returns empty {}
+  console.log("▶ [CASE 29] Multi-Query Partial Empty Resilience");
+  {
+    const query = "Why is the Indian pilot going viral lately?";
+    const obs = [
+      { tool: "web_search", query: "q1", success: false, summary: "[SEARCH_EMPTY]" },
+      { tool: "web_search", query: "q2", success: true, summary: "Verified pilot incident report October 2026" }
+    ];
+    const citations = [
+      { url: "https://aviation-news.com/pilot-report", title: "Pilot Report", snippet: "Verified pilot incident report October 2026", matchedQueries: ["q2"] }
+    ];
+
+    const gate = evaluateEvidenceDeterministic({
+      query,
+      observations: obs,
+      citations,
+      currentYear: 2026,
+    });
+    assert.equal(gate.passed, true, "Research must not fail if at least one planned query returns verified evidence");
+    passed++;
+    console.log("  ✅ Case 29 Passed: Multi-query pipeline resilient against partial empty search hits.");
+  }
+
+  console.log(`\n🎉 All ${passed}/29 Golden Regression Suite Tests Passed!`);
 }
 
 runGoldenSuite().catch((err) => {

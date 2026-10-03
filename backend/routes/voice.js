@@ -255,12 +255,14 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     const route = routeQuery(userText, { persona: selectedPersona, historyLength: (req.body.history || []).length });
     console.log(`🧭 [SSE ROUTE] Intent: ${route.intent} | Mode: ${route.mode} | NeedsRAG: ${route.needsRag} | NeedsLiveSearch: ${route.needsLiveSearch} (${route.routerLatencyMs}ms)`);
 
-    const isThinkingModeRequested = req.body?.thinkingMode === true || req.body?.mode === "thinking" || route.mode === "DEEP";
+    const explicitMode = req.body?.mode ? String(req.body.mode).toUpperCase() : (req.body?.thinkingMode !== undefined ? (req.body.thinkingMode ? "THINKING" : "FAST") : null);
+    const effort = req.body?.effort || "MEDIUM";
+    const selectedMode = explicitMode ? (explicitMode === "THINKING" ? "SEARCH" : explicitMode) : (route.mode === "DEEP" ? "SEARCH" : "FAST");
 
-    // Autonomous Thinking Mode: 4-5 cognitive iterations with live thought streaming
-    if (isThinkingModeRequested) {
-      console.log(`🧠 [SSE STREAM] Thinking Mode Activated for: "${userText.slice(0, 50)}"`);
-      sendEvent("mode", { mode: "THINKING", title: "Thinking Mode Activated" });
+    // Autonomous Search Mode (adaptive research + internal reasoning scaled by Effort)
+    if (selectedMode === "SEARCH") {
+      console.log(`🔍 [SSE STREAM] SEARCH Mode Activated (Effort: ${effort}) for: "${userText.slice(0, 50)}"`);
+      sendEvent("mode", { mode: "SEARCH", title: "Search Mode Activated" });
 
       const clientHist = Array.isArray(req.body.history) ? req.body.history.slice(-8) : [];
       const thinkingResult = await runThinkingLoop({
@@ -269,6 +271,9 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
         voiceModel: selectedVoiceModel,
         history: clientHist,
         forceGroq: isGuest,
+        mode: selectedMode,
+        effort,
+        thinkingLevel,
         onStep: (step) => {
           sendEvent("thinking_step", step);
         },

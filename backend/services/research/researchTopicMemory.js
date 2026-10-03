@@ -51,6 +51,60 @@ export function isFollowUpQuery(query = "") {
 }
 
 /**
+ * Detects if user is explicitly correcting or invalidating the assistant's previous claim or topic
+ * (Grok Pattern: Invalidation/Reconsideration on user correction)
+ *
+ * @param {string} query
+ * @param {string|null} currentTopic
+ * @returns {{ isCorrection: boolean, invalidatedTopic: string|null, correctedEntity: string|null, isDisputedClaim: boolean }}
+ */
+export function detectUserCorrection(query = "", currentTopic = null) {
+  const clean = String(query || "").trim();
+  const lower = clean.toLowerCase();
+
+  // 1. Entity correction: "No, not that pilot. The Air India pilot.", "No, I mean Pilot Y", "Actually I meant Python not Java"
+  const entityCorrectionRegexes = [
+    /^(?:no|nah|nahi|nope)[,.\s]+(?:not\s+(?:that|the)\s+([a-zA-Z0-9\s]+?)[,.\s]+)?(?:the\s+|i mean\s+|mera matlab\s+|it was\s+|actually\s+)([a-zA-Z0-9\s]+)/i,
+    /^(?:no|nah|nahi)[,.\s]+(?:i mean|mera matlab|i am talking about)\s+([a-zA-Z0-9\s]+)/i,
+    /^(?:actually|in fact)[,.\s]+(?:i (?:mean|meant)|it (?:was|is))\s+([a-zA-Z0-9\s]+)/i,
+    /^(?:not\s+(?:that|the)\s+([a-zA-Z0-9\s]+?)[,.\s]+(?:the|i mean|but)\s+([a-zA-Z0-9\s]+))/i,
+    /^(?:no,\s*not\s+([a-zA-Z0-9\s]+?)\.\s*(?:the\s+)?([a-zA-Z0-9\s]+))/i,
+  ];
+
+  for (const regex of entityCorrectionRegexes) {
+    const match = clean.match(regex);
+    if (match) {
+      const correctedEntity = (match[2] || match[1] || "").trim();
+      if (correctedEntity.length > 2) {
+        return {
+          isCorrection: true,
+          invalidatedTopic: currentTopic,
+          correctedEntity,
+          isDisputedClaim: false,
+        };
+      }
+    }
+  }
+
+  // 2. Fact/Claim dispute: "No, that's not what happened", "Aisa nahi hua tha", "That's incorrect"
+  if (/^(?:no|nah|nahi)[,.\s]+(?:that's not what happened|that is not what happened|aisa nahi hua tha|not true|that is wrong|galat hai|you are wrong)\b/i.test(lower)) {
+    return {
+      isCorrection: true,
+      invalidatedTopic: currentTopic,
+      correctedEntity: null,
+      isDisputedClaim: true,
+    };
+  }
+
+  return {
+    isCorrection: false,
+    invalidatedTopic: null,
+    correctedEntity: null,
+    isDisputedClaim: false,
+  };
+}
+
+/**
  * Resolves a potentially contextual follow-up query against the active topic state and dialogue history
  *
  * @param {string} query - Raw user query (may have typos or be "full story")
@@ -106,6 +160,40 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
           }
         }
       }
+    }
+  }
+
+  // 1b. Check for explicit User Corrections / Invalidations (Grok Pattern)
+  // If the user explicitly corrects an assistant assumption:
+  // - Invalidate affected prior topic & stale evidence
+  // - Adopt corrected entity as active topic
+  // - Reconsider disputed claims without hallucinating
+  const correction = detectUserCorrection(cleanQ, currentTopic);
+  if (correction.isCorrection) {
+    if (correction.correctedEntity) {
+      const newTopic = correction.correctedEntity;
+      return {
+        resolvedQuery: `${newTopic}: timeline, details and verified facts`,
+        activeTopic: newTopic,
+        canonicalTopic: newTopic,
+        isFollowUp: true,
+        isCorrection: true,
+        invalidatedTopic: correction.invalidatedTopic,
+        requiresClarification: false,
+        clarificationPrompt: null,
+      };
+    } else if (correction.isDisputedClaim) {
+      return {
+        resolvedQuery: currentTopic ? `${currentTopic} official record disputed claim what actually happened` : cleanQ,
+        activeTopic: currentTopic,
+        canonicalTopic,
+        isFollowUp: true,
+        isCorrection: true,
+        isDisputedClaim: true,
+        invalidatedTopic: null,
+        requiresClarification: false,
+        clarificationPrompt: null,
+      };
     }
   }
 
@@ -231,5 +319,6 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
 export default {
   createTopicState,
   isFollowUpQuery,
+  detectUserCorrection,
   resolveTopicContinuity,
 };

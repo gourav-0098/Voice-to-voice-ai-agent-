@@ -65,7 +65,9 @@ export class ToolExecutor {
       const errResponse = {
         ok: false,
         tool: toolName,
+        state: "INVALID_ARGUMENTS",
         error: { code: "INVALID_ARGUMENTS", message: validationError, retryable: false },
+        voiceSummary: `Invalid input for ${toolName}: ${validationError}`,
       };
       toolTelemetry.record({
         toolName,
@@ -97,10 +99,12 @@ export class ToolExecutor {
 
         const rawResult = await Promise.race([toolPromise, timeoutPromise]);
 
-        // Normalize success response contract
+        // Normalize success/failure response contract
         const normalized = {
           ok: rawResult.ok !== undefined ? rawResult.ok : true,
           tool: toolName,
+          state: rawResult.state || (rawResult.ok === false ? (rawResult.error?.code || "EXECUTION_ERROR") : "SUCCESS"),
+          error: rawResult.error || null,
           data: rawResult.data !== undefined ? rawResult.data : rawResult,
           sources: Array.isArray(rawResult.sources) ? rawResult.sources : [],
           metadata: {
@@ -143,6 +147,7 @@ export class ToolExecutor {
     const failureResponse = {
       ok: false,
       tool: toolName,
+      state: lastError?.message?.includes("Timeout") ? "TIMEOUT" : "EXECUTION_ERROR",
       error: {
         code: lastError?.message?.includes("Timeout") ? "TIMEOUT" : "EXECUTION_ERROR",
         message: lastError?.message || "Tool execution failed after maximum attempts.",

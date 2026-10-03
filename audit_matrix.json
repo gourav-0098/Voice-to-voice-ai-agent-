@@ -1,0 +1,247 @@
+[
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude Code 2.0.txt",
+    "size": 57324,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude Code\\Tools.json",
+    "size": 48962,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude Sonnet 5 Tools.txt",
+    "size": 33246,
+    "prompt": false,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude Sonnet 5.txt",
+    "size": 55746,
+    "prompt": false,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude for Chrome\\Prompt.txt",
+    "size": 43595,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Anthropic\\Claude for Chrome\\Tools.json",
+    "size": 24056,
+    "prompt": false,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Comet Assistant\\System Prompt.txt",
+    "size": 53840,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Comet Assistant\\tools.json",
+    "size": 7559,
+    "prompt": false,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Cursor Prompts\\Agent Prompt 2025-09-03.txt",
+    "size": 19028,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Cursor Prompts\\Agent Tools v1.0.json",
+    "size": 23545,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Devin AI\\DeepWiki Prompt.txt",
+    "size": 5505,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Devin AI\\Prompt.txt",
+    "size": 34714,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Google\\Antigravity\\Fast Prompt.txt",
+    "size": 40995,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Google\\Antigravity\\planning-mode.txt",
+    "size": 22325,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Kiro\\Mode_Clasifier_Prompt.txt",
+    "size": 2883,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Kiro\\Spec_Prompt.txt",
+    "size": 31947,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Manus Agent Tools & Prompt\\Agent loop.txt",
+    "size": 2147,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Manus Agent Tools & Prompt\\Modules.txt",
+    "size": 12224,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Manus Agent Tools & Prompt\\tools.json",
+    "size": 18501,
+    "prompt": false,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\NotionAi\\Prompt.txt",
+    "size": 32081,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\NotionAi\\tools.json",
+    "size": 34889,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Open Source prompts\\Gemini CLI\\google-gemini-cli-system-prompt.txt",
+    "size": 18976,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Orchids.app\\Decision-making prompt.txt",
+    "size": 6820,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Orchids.app\\System Prompt.txt",
+    "size": 58779,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Perplexity\\Prompt.txt",
+    "size": 9585,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Poke\\Poke agent.txt",
+    "size": 12159,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Poke\\Poke_p1.txt",
+    "size": 10153,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Poke\\Poke_p4.txt",
+    "size": 5890,
+    "prompt": false,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Poke\\Poke_p6.txt",
+    "size": 1783,
+    "prompt": false,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Qoder\\Quest Action.txt",
+    "size": 12357,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Qoder\\Quest Design.txt",
+    "size": 26165,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Traycer AI\\phase_mode_prompts.txt",
+    "size": 3842,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Traycer AI\\phase_mode_tools.json",
+    "size": 18618,
+    "prompt": true,
+    "tools": true,
+    "loop": true
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Traycer AI\\plan_mode_prompts",
+    "size": 6143,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  },
+  {
+    "rel": "system-prompts-and-models-of-ai-tools-main\\Traycer AI\\plan_mode_tools.json",
+    "size": 16752,
+    "prompt": true,
+    "tools": true,
+    "loop": false
+  }
+]

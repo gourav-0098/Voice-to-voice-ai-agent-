@@ -323,9 +323,14 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
 
   // 2. Ingest search citations
   for (const c of citations) {
-    if (!c || !c.url) continue;
-    const passage = c.snippet || c.title || "";
-    if (passage && !seenPassages.has(passage)) {
+    if (!c || !c.url || !c.url.trim()) continue;
+    const cleanSnippet = (c.snippet || "").trim();
+    const cleanTitle = (c.title || "").trim();
+    if (!cleanSnippet && (!cleanTitle || cleanTitle.toLowerCase().includes("empty") || cleanTitle.toLowerCase() === "external reference")) {
+      continue;
+    }
+    const passage = cleanSnippet || cleanTitle;
+    if (passage && passage.length > 5 && !seenPassages.has(passage)) {
       seenPassages.add(passage);
       pack.push({
         source: c.publisher || c.title || "Web",

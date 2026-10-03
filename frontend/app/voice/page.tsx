@@ -462,45 +462,65 @@ export default function VoicePage() {
   const [activeFactCheck, setActiveFactCheck] = useState<FactCheckData | null>(null);
   const [isFactCheckHudEnabled, setIsFactCheckHudEnabled] = useState<boolean>(true);
 
-  // Thinking Mode State (Autonomous Multi-Step Cognitive Loop)
-  const [isThinkingMode, setIsThinkingMode] = useState<boolean>(() => {
+  // Exactly 2 Explicit Operating Modes: FAST, SEARCH
+  const [operatingMode, setOperatingMode] = useState<"FAST" | "SEARCH">(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("chatly_thinking_mode") === "true";
+      const saved = localStorage.getItem("chatly_operating_mode");
+      if (saved === "FAST" || saved === "SEARCH") return saved as any;
+      if (saved === "THINKING") return "SEARCH";
+      const legacy = localStorage.getItem("chatly_thinking_mode");
+      if (legacy === "true") return "SEARCH";
     }
-    return false;
+    return "FAST";
   });
-  const isThinkingModeRef = useRef(isThinkingMode);
-  const [currentThinkingSteps, setCurrentThinkingSteps] = useState<ThinkingStep[]>([]);
+  const operatingModeRef = useRef<"FAST" | "SEARCH">(operatingMode);
 
-  // Thinking Level & Dynamic Iteration Depth: "quick" (1-2), "standard" (3-5), "deep" (6-8)
-  const [thinkingLevel, setThinkingLevel] = useState<"quick" | "standard" | "deep">(() => {
+  // Global Effort Control shared by both modes: LOW, MEDIUM, HIGH, MAX
+  const [effortLevel, setEffortLevel] = useState<"LOW" | "MEDIUM" | "HIGH" | "MAX">(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("chatly_thinking_level") as any) || "standard";
+      const saved = localStorage.getItem("chatly_effort_level");
+      if (saved === "LOW" || saved === "MEDIUM" || saved === "HIGH" || saved === "MAX") return saved as any;
     }
-    return "standard";
+    return "MEDIUM";
   });
-  const thinkingLevelRef = useRef(thinkingLevel);
+  const effortLevelRef = useRef<"LOW" | "MEDIUM" | "HIGH" | "MAX">(effortLevel);
+
+  const [currentThinkingSteps, setCurrentThinkingSteps] = useState<ThinkingStep[]>([]);
+  const [showEffortPopover, setShowEffortPopover] = useState<boolean>(false);
+
+  const isThinkingMode = operatingMode === "SEARCH";
+  const isThinkingModeRef = useRef<boolean>(isThinkingMode);
 
   useEffect(() => {
-    thinkingLevelRef.current = thinkingLevel;
-  }, [thinkingLevel]);
+    operatingModeRef.current = operatingMode;
+    isThinkingModeRef.current = operatingMode === "SEARCH";
+  }, [operatingMode]);
 
-  const handleSetThinkingLevel = useCallback((lvl: "quick" | "standard" | "deep") => {
-    setThinkingLevel(lvl);
+  useEffect(() => {
+    effortLevelRef.current = effortLevel;
+  }, [effortLevel]);
+
+  const handleSetOperatingMode = useCallback((m: "FAST" | "SEARCH") => {
+    setOperatingMode(m);
     try {
-      localStorage.setItem("chatly_thinking_level", lvl);
+      localStorage.setItem("chatly_operating_mode", m);
+      localStorage.setItem("chatly_thinking_mode", String(m === "SEARCH"));
     } catch (_) {}
   }, []);
 
-  useEffect(() => {
-    isThinkingModeRef.current = isThinkingMode;
-  }, [isThinkingMode]);
+  const handleSetEffortLevel = useCallback((e: "LOW" | "MEDIUM" | "HIGH" | "MAX") => {
+    setEffortLevel(e);
+    try {
+      localStorage.setItem("chatly_effort_level", e);
+    } catch (_) {}
+  }, []);
 
-  const toggleThinkingMode = useCallback(() => {
-    setIsThinkingMode((prev) => {
-      const next = !prev;
+  const cycleOperatingMode = useCallback(() => {
+    setOperatingMode((prev) => {
+      const next: "FAST" | "SEARCH" = prev === "FAST" ? "SEARCH" : "FAST";
       try {
-        localStorage.setItem("chatly_thinking_mode", String(next));
+        localStorage.setItem("chatly_operating_mode", next);
+        localStorage.setItem("chatly_thinking_mode", String(next === "SEARCH"));
       } catch (_) {}
       return next;
     });
@@ -1329,8 +1349,9 @@ export default function VoicePage() {
           voiceModel: activeVoice,
           history: historyPayload,
           token,
-          thinkingMode: isThinkingModeRef.current,
-          thinkingLevel: thinkingLevelRef.current,
+          mode: operatingModeRef.current,
+          effort: effortLevelRef.current,
+          thinkingMode: operatingModeRef.current === "SEARCH",
         }));
         return;
       } catch (wsErr) {
@@ -1351,8 +1372,9 @@ export default function VoicePage() {
           persona: activePersona,
           language: activeLanguage,
           history: historyPayload,
-          thinkingMode: isThinkingModeRef.current,
-          thinkingLevel: thinkingLevelRef.current,
+          mode: operatingModeRef.current,
+          effort: effortLevelRef.current,
+          thinkingMode: operatingModeRef.current === "SEARCH",
         }),
       });
 
@@ -2178,23 +2200,19 @@ export default function VoicePage() {
 
           {/* Center/Right: Pipeline Status + Debate Arena + Theme Toggle + Settings */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Thinking Mode Autonomous Cognitive Agent Toggle */}
+            {/* Mode Switcher Pill (Fast | Search) */}
             <button
               type="button"
-              onClick={toggleThinkingMode}
+              onClick={cycleOperatingMode}
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs ${
-                isThinkingMode
-                  ? "border-purple-500/50 bg-purple-500/15 text-purple-600 dark:text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.25)] ring-1 ring-purple-500/30"
+                operatingMode === "SEARCH"
+                  ? "border-blue-500/50 bg-blue-500/15 text-blue-600 dark:text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.25)] ring-1 ring-blue-500/30"
                   : "border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
               }`}
-              title={
-                isThinkingMode
-                  ? "🧠 Thinking Mode Active: Autonomous 5-step cognitive loop (Planning, Tools, Verification, Critique, Synthesis)"
-                  : "⚡ Fast Mode: Ultra-low latency voice streaming (<300ms) for casual banter. Click to switch to Thinking Mode for deep research."
-              }
+              title={`Active Mode: ${operatingMode} | Click to toggle (Fast ⇄ Search)`}
             >
-              <span>{isThinkingMode ? "🧠" : "⚡"}</span>
-              <span className="hidden sm:inline">{isThinkingMode ? "Thinking Mode" : "Fast Mode"}</span>
+              <span>{operatingMode === "SEARCH" ? "🔍" : "⚡"}</span>
+              <span className="hidden sm:inline capitalize">{operatingMode.toLowerCase()} Mode</span>
             </button>
 
             {/* AI vs AI Debate Arena Launcher */}
@@ -2806,62 +2824,77 @@ export default function VoicePage() {
               className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
             >
               {/* Mode Selection Button (Beside Text Input Field) */}
-              <div className="flex items-center gap-1.5 shrink-0 px-1">
-                <button
-                  type="button"
-                  onClick={toggleThinkingMode}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer select-none border active:scale-95 ${
-                    isThinkingMode
-                      ? "border-purple-500/50 bg-purple-500/15 text-purple-700 dark:text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
-                      : "border-slate-300 dark:border-white/10 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 text-slate-700 dark:text-zinc-300 dark:hover:bg-white/10"
-                  }`}
-                  title={isThinkingMode ? "Thinking Mode active (Click to switch to Fast Mode)" : "Fast Mode active (Click to switch to Thinking Mode)"}
-                >
-                  <span>{isThinkingMode ? "🧠" : "⚡"}</span>
-                  <span className="font-medium">{isThinkingMode ? "Thinking" : "Fast"}</span>
-                </button>
+              {/* Mode Selector & Controls Group (Beside Text Input Field) */}
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0 px-1">
+                {/* Exactly 2 Primary Modes Segmented Pill: FAST, SEARCH */}
+                <div className="inline-flex items-center rounded-xl p-0.5 border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 text-xs select-none">
+                  <button
+                    type="button"
+                    onClick={() => handleSetOperatingMode("FAST")}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      operatingMode === "FAST"
+                        ? "bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-xs font-bold"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="FAST MODE: Ultra-low latency conversation and deterministic tools"
+                  >
+                    <span>⚡</span>
+                    <span className="hidden sm:inline">Fast</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetOperatingMode("SEARCH")}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      operatingMode === "SEARCH"
+                        ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-bold"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="SEARCH MODE: Adaptive multi-query research with internal reasoning"
+                  >
+                    <span>🔍</span>
+                    <span className="hidden sm:inline">Search</span>
+                  </button>
+                </div>
 
-                {/* Dynamic Iteration Level Selector — ONLY displays when Thinking Mode is selected */}
-                {isThinkingMode && (
-                  <div className="inline-flex items-center rounded-xl p-0.5 border border-purple-500/30 bg-purple-500/10 text-xs animate-in fade-in zoom-in-95 duration-150">
-                    <button
-                      type="button"
-                      onClick={() => handleSetThinkingLevel("quick")}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                        thinkingLevel === "quick"
-                          ? "bg-purple-600 text-white shadow-xs"
-                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
-                      }`}
-                      title="Quick Thinking: 1-2 research iterations (~1.5s)"
-                    >
-                      Quick
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetThinkingLevel("standard")}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                        thinkingLevel === "standard"
-                          ? "bg-purple-600 text-white shadow-xs"
-                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
-                      }`}
-                      title="Standard Thinking: 3-4 deep research iterations (~3-5s)"
-                    >
-                      Standard
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetThinkingLevel("deep")}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                        thinkingLevel === "deep"
-                          ? "bg-purple-600 text-white shadow-xs"
-                          : "text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
-                      }`}
-                      title="Deep Thinking: 6-8 comprehensive iterations with gap audit & multi-critique"
-                    >
-                      Deep
-                    </button>
-                  </div>
-                )}
+                {/* Global Effort Control (Shared across Fast and Search modes) */}
+                <div className="relative inline-flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowEffortPopover((p) => !p)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-[11px] font-medium text-slate-700 dark:text-zinc-300 cursor-pointer transition select-none"
+                    title="Global Effort: Unified compute and resource budget across chosen mode"
+                  >
+                    <span className="text-slate-400 dark:text-zinc-500 font-normal">Effort:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 capitalize">{effortLevel.toLowerCase()}</span>
+                    <span className="text-[10px] text-slate-400">▾</span>
+                  </button>
+                  {showEffortPopover && (
+                    <div className="absolute bottom-full left-0 mb-1.5 w-36 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-zinc-900 shadow-lg p-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-2 py-1 font-semibold text-[10px] text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                        Global Effort
+                      </div>
+                      {(["LOW", "MEDIUM", "HIGH", "MAX"] as const).map((eff) => (
+                        <label
+                          key={eff}
+                          onClick={() => {
+                            handleSetEffortLevel(eff);
+                            setShowEffortPopover(false);
+                          }}
+                          className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer transition text-xs select-none ${
+                            effortLevel === eff
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold"
+                              : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                          }`}
+                        >
+                          <span className={`w-3 h-3 rounded-full border flex items-center justify-center ${effortLevel === eff ? "border-emerald-500 bg-emerald-500" : "border-slate-400"}`}>
+                            {effortLevel === eff && <span className="w-1 h-1 rounded-full bg-white" />}
+                          </span>
+                          <span className="capitalize">{eff.toLowerCase()}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Text Input Field */}
@@ -2870,9 +2903,9 @@ export default function VoicePage() {
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
                 placeholder={
-                  isThinkingMode
-                    ? `Ask anything (Thinking: ${thinkingLevel.toUpperCase()} iterations)...`
-                    : "Ask or chat with Chatly..."
+                  operatingMode === "SEARCH"
+                    ? `Search live facts & deep research (Effort: ${effortLevel.toLowerCase()})...`
+                    : `Chat with Chatly (Fast Mode | Effort: ${effortLevel.toLowerCase()})...`
                 }
                 className="flex-1 bg-transparent px-3 py-2 text-sm outline-none text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
               />

@@ -159,12 +159,15 @@ export function setupVoiceWebSocket(httpServer) {
           // Fast Deterministic Query Intelligence Router (< 2ms)
           const route = routeQuery(prompt, { persona, historyLength: (data.history || []).length });
 
-          const isThinkingModeRequested = data.thinkingMode === true || data.mode === "thinking" || route.mode === "DEEP";
+          const explicitMode = data.mode ? String(data.mode).toUpperCase() : (data.thinkingMode !== undefined ? (data.thinkingMode ? "THINKING" : "FAST") : null);
+          const effort = data.effort || "MEDIUM";
+          const thinkingLevel = data.thinkingLevel || "STANDARD";
+          const selectedMode = explicitMode ? (explicitMode === "THINKING" ? "SEARCH" : explicitMode) : (route.mode === "DEEP" ? "SEARCH" : "FAST");
 
-          if (isThinkingModeRequested) {
-            console.log(`🧠 [WS VOICE TURN] Thinking Mode Active for "${prompt.slice(0, 50)}"`);
+          if (selectedMode === "SEARCH") {
+            console.log(`🔍 [WS VOICE TURN] SEARCH Mode Active (Effort: ${effort}) for "${prompt.slice(0, 50)}"`);
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: "mode", mode: "THINKING" }));
+              ws.send(JSON.stringify({ type: "mode", mode: "SEARCH" }));
             }
 
             const thinkingResult = await runThinkingLoop({
@@ -173,6 +176,9 @@ export function setupVoiceWebSocket(httpServer) {
               voiceModel,
               history: Array.isArray(data.history) ? data.history.slice(-8) : [],
               forceGroq: isGuest,
+              mode: selectedMode,
+              effort,
+              thinkingLevel,
               onStep: (step) => {
                 if (ws.readyState === WebSocket.OPEN) {
                   ws.send(JSON.stringify({ type: "thinking_step", ...step }));

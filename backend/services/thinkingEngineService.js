@@ -24,6 +24,15 @@ import { classifyResearchIntent, RESEARCH_INTENTS } from "./research/researchInt
 import { executeAdaptiveResearch } from "./research/researchOrchestrator.js";
 import { queryNeedsRewrite, rewriteQueryForSearch, buildSearchRecoveryQuery } from "./research/researchQueryPlanner.js";
 import { resolveTopicContinuity } from "./research/researchTopicMemory.js";
+import {
+  MODES,
+  EFFORT_LEVELS,
+  REASONING_DEPTHS,
+  STOP_REASONS,
+  getExecutionBudget,
+  normalizeMode,
+  normalizeEffort,
+} from "./research/researchModesPolicy.js";
 
 const toolRouter = new ToolRouter();
 
@@ -397,10 +406,19 @@ export async function runThinkingLoop({
   voiceModel = "sarvam-aditya",
   history = [],
   forceGroq = false,
+  mode,
+  effort,
+  thinkingLevel,
+  thinkingMode,
+  signal = null,
   onStep = () => {},
 }) {
   const t0 = performance.now();
   const thinkingSteps = [];
+
+  const normMode = mode ? normalizeMode(mode) : (thinkingMode !== undefined ? (thinkingMode ? MODES.SEARCH : MODES.FAST) : MODES.SEARCH);
+  const normEffort = normalizeEffort(effort);
+  const budget = getExecutionBudget({ mode: normMode, effort: normEffort });
 
   const recordStep = (stepObj) => {
     const elapsedMs = Math.round(performance.now() - t0);
@@ -419,15 +437,24 @@ export async function runThinkingLoop({
     return enriched;
   };
 
-  console.log(`🧠 [THINKING ENGINE] Initiating tiered cognitive loop for: "${query.slice(0, 60)}..."`);
+  console.log(`🧠 [ENGINE] Mode: ${budget.mode} | Effort: ${budget.effort} | Internal Reasoning: ${budget.reasoningDepth} for: "${query.slice(0, 50)}..."`);
 
   // =========================================================================
   // TOPIC CONTINUITY & CONTEXT RESOLUTION (Part 6: Active Topic Memory)
   // Inherits active topic for follow-up turns ("tell me the full story")
-  // Clarifies ambiguous queries without hallucinating ("what happened with the pilot")
+  // Invalidates stale hypotheses when user explicitly corrects the assistant
   // =========================================================================
   const topicResolution = resolveTopicContinuity(query, null, history);
   const effectiveQuery = topicResolution.resolvedQuery || query;
+
+  if (topicResolution.isCorrection) {
+    recordStep({
+      phase: "PLANNING",
+      title: "User Correction Applied",
+      thought: `Invalidated previous hypothesis '${topicResolution.invalidatedTopic || "disputed claim"}'. Active topic updated to '${topicResolution.activeTopic}'.`,
+      status: "completed",
+    });
+  }
 
   if (topicResolution.requiresClarification && topicResolution.clarificationPrompt) {
     const totalDurationMs = Math.round(performance.now() - t0);
@@ -623,12 +650,135 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
   let toolTrace = [];
   let researchMeta = null;
 
-  if (intentInfo.requiresDeepResearch) {
-    // RUN ADAPTIVE RESEARCH ORCHESTRATOR (PHASES 1 - 14)
+  const requiresMultiQueryResearch =
+    intentInfo.requiresDeepResearch ||
+    intentInfo.intent === RESEARCH_INTENTS.TRENDING_EVENT ||
+    intentInfo.intent === RESEARCH_INTENTS.CURRENT_EVENT ||
+    intentInfo.intent === RESEARCH_INTENTS.COMPARISON ||
+    intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH ||
+    intentInfo.intent === RESEARCH_INTENTS.DEEP_RESEARCH ||
+    intentInfo.intent === RESEARCH_INTENTS.MULTI_SOURCE_ANALYSIS;
+
+  // =========================================================================
+  // FAST MODE: Latency-optimized, direct model knowledge or single search tool
+  // No multi-query planning, no deep reasoning, no adaptive loop
+  // =========================================================================
+  if (budget.mode === MODES.FAST) {
+    let fastReply = "";
+    const isCurrentFact = intentInfo.intent === RESEARCH_INTENTS.CURRENT_FACT || intentInfo.requiresCurrentDate;
+
+    if (!isCurrentFact) {
+      // Direct answer from model knowledge (< 300ms)
+      // Effort affects model tier (budget.modelTier) and token budget without running search loops
+      recordStep({
+        phase: "SYNTHESIS",
+        title: "Fast Knowledge Synthesis",
+        thought: `FAST Mode: Direct knowledge resolution via ${budget.modelTier === "REASONING" ? COGNITIVE_MODELS.REASONING_MODEL : COGNITIVE_MODELS.FAST_MODEL}. Effort: ${budget.effort}. Zero research loops.`,
+        status: "in_progress",
+      });
+
+      const fastPrompt = `You are Chatly, an ultra-fast conversational voice AI.
+Answer the user's question directly, accurately, and concisely in 1 to 2 short spoken sentences.
+Question: "${effectiveQuery}"`;
+
+      const fastSystemPrompt = budget.reasoningDepth === REASONING_DEPTHS.DEEP || budget.reasoningDepth === REASONING_DEPTHS.MAX
+        ? "You are Chatly, a voice assistant with rigorous internal reasoning. Think step-by-step internally, but provide only a direct, precise 1-2 sentence spoken answer without markdown or tool calls."
+        : "You are Chatly, an ultra-fast voice assistant. Give direct 1-2 sentence answers without markdown, bullets, or tool calls.";
+
+      try {
+        const fastAi = await callCognitiveModel({
+          systemPrompt: fastSystemPrompt,
+          messages: [{ role: "user", content: fastPrompt }],
+          tier: budget.modelTier,
+          forceGroq,
+          temperature: 0.3,
+          maxTokens: budget.responseBudgetTokens,
+        });
+        fastReply = sanitizeSpokenReply(fastAi.reply);
+      } catch (_) {
+        fastReply = "I have noted your question and can answer based on my foundational knowledge.";
+      }
+    } else {
+      // Single fast search for current data, no multi-query planning, no deep loops
+      recordStep({
+        phase: "TOOL_EXECUTION",
+        title: `Fast Search: ${effectiveQuery.slice(0, 30)}`,
+        tool: "web_search",
+        args: { query: effectiveQuery },
+        status: "in_progress",
+      });
+
+      let toolRes = null;
+      try {
+        toolRes = await toolExecutor.executeTool("web_search", { query: effectiveQuery }, { context: { thinkingMode: false } });
+      } catch (err) {
+        toolRes = { ok: false, voiceSummary: err.message };
+      }
+
+      const obsSummary = toolRes.voiceSummary || (toolRes.data ? JSON.stringify(toolRes.data).slice(0, 300) : "Search completed");
+      observations.push({ tool: "web_search", query: effectiveQuery, success: toolRes.ok !== false, summary: obsSummary });
+      toolTrace.push({ tool: "web_search", args: { query: effectiveQuery }, success: toolRes.ok !== false });
+      if (Array.isArray(toolRes.sources)) allCitations.push(...toolRes.sources);
+
+      recordStep({
+        phase: "SYNTHESIS",
+        title: "Fast Synthesis",
+        thought: `Generating direct voice conclusion via ${COGNITIVE_MODELS.FAST_MODEL}.`,
+        status: "in_progress",
+      });
+
+      const synthPrompt = `Question: "${effectiveQuery}"\nObservation: "${obsSummary}"\nAnswer the user directly in 1 short spoken sentence.`;
+      try {
+        const synthAi = await callCognitiveModel({
+          systemPrompt: "You are Chatly, an ultra-fast conversational voice AI. Give direct 1-sentence answers without toolcode or citations.",
+          messages: [{ role: "user", content: synthPrompt }],
+          tier: "FAST",
+          forceGroq,
+          temperature: 0.2,
+        });
+        fastReply = sanitizeSpokenReply(synthAi.reply);
+      } catch (_) {
+        fastReply = obsSummary;
+      }
+    }
+
+    const totalDurationMs = Math.round(performance.now() - t0);
+    recordStep({
+      phase: "SYNTHESIS",
+      title: "Complete",
+      thought: `FAST mode resolved in ${totalDurationMs}ms.`,
+      finalReply: fastReply,
+      status: "completed",
+    });
+
+    return {
+      answer: fastReply,
+      sources: allCitations,
+      toolTrace,
+      verification: { checked: false, verdict: "FAST_MODE_DIRECT" },
+      reply: fastReply,
+      citations: allCitations,
+      thinkingSteps,
+      totalDurationMs,
+      mode: MODES.FAST,
+      effort: budget.effort,
+      researchMeta: { mode: MODES.FAST, effort: budget.effort, durationMs: totalDurationMs },
+    };
+  }
+
+  // =========================================================================
+  // SEARCH MODE: Adaptive Research Pipeline
+  // SEARCH: Evidence-driven multi-query research with internal reasoning depth scaled by Effort
+  // =========================================================================
+  const shouldRunAdaptiveResearch =
+    budget.mode === MODES.SEARCH ||
+    requiresMultiQueryResearch;
+
+  if (shouldRunAdaptiveResearch) {
     recordStep({
       phase: "PLANNING",
-      title: `Activating Adaptive Research (${intentInfo.intent})`,
-      thought: `Inquiry requires multi-source evidence grounding across dimensions: ${intentInfo.dimensions.join(", ")}. Anchor: ${currentDate.formatted}.`,
+      title: `Activating Search Research (${intentInfo.intent})`,
+      thought: `Inquiry requires evidence grounding. Mode: ${budget.mode} | Effort: ${budget.effort} | Reasoning: ${budget.reasoningDepth}. Anchor: ${currentDate.formatted}.`,
       status: "in_progress",
     });
 
@@ -636,7 +786,13 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
       query: effectiveQuery,
       callModel: (params) => callCognitiveModel({ ...params, forceGroq }),
       recordStep,
-      options: { forceGroq },
+      options: {
+        forceGroq,
+        mode: budget.mode,
+        effort: budget.effort,
+        budget,
+        signal,
+      },
     });
 
     observations = researchData.observations || [];
@@ -647,223 +803,41 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
     toolTrace = researchData.toolTrace;
     researchMeta = researchData.researchMeta;
   } else {
-    // FAST PATH FOR SIMPLE FACTS / CURRENT FACTS / DIRECT DEFINITIONS (< 1.5s)
-    const isCurrentFact = intentInfo.intent === RESEARCH_INTENTS.CURRENT_FACT;
+    // Single search fallback if legacy call doesn't match above intents
     let sanitizedQuery = sanitizePlannerQuery(effectiveQuery, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
-    let rewrittenSubtopics = [];
-
-    // QUERY REWRITE: Translate Hinglish, fix typos, decompose multi-topic queries
-    // Only triggers for queries that contain Hinglish words, common typos, or are very long multi-topic
-    const needsRewrite = queryNeedsRewrite(effectiveQuery);
-    if (needsRewrite) {
-      recordStep({
-        phase: "PLANNING",
-        title: "Query Rewrite",
-        thought: `Detected Hinglish/typo/multi-topic input. Rewriting to clean English search keywords before search.`,
-        status: "in_progress",
-      });
-
-      try {
-        // Use Groq's FAST_REASONER (Qwen 3.8 27B) for sub-100ms ultra-low latency query rewriting
-        const callModelForRewrite = (params) =>
-          callCognitiveModel({
-            ...params,
-            tier: "FAST_REASONER",
-            forceGroq: true,
-            maxTokens: 100,
-          });
-        const rewritten = await rewriteQueryForSearch(effectiveQuery, callModelForRewrite);
-        if (rewritten.primary && rewritten.primary.length > 3) {
-          sanitizedQuery = sanitizePlannerQuery(rewritten.primary, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
-          rewrittenSubtopics = (rewritten.subtopics || []).filter(s => s && s.length > 3);
-        }
-      } catch (rewriteErr) {
-        console.warn("[FastPath] Query rewrite failed, using raw query:", rewriteErr.message);
-      }
-    }
-
-    recordStep({
-      phase: "PLANNING",
-      title: "Planning research",
-      thought: `Query classified as ${intentInfo.intent}. Dynamic anchor: ${currentDate.formatted}.${needsRewrite ? ` Cleaned search query: "${sanitizedQuery}"` : ""}`,
-      status: "in_progress",
+    const searchRes = await toolExecutor.executeTool("web_search", { query: sanitizedQuery }, { context: { thinkingMode: true } });
+    if (Array.isArray(searchRes.sources)) allCitations.push(...searchRes.sources);
+    observations.push({
+      tool: "web_search",
+      query: sanitizedQuery,
+      success: searchRes.ok !== false,
+      summary: searchRes.voiceSummary || "Search completed",
     });
-
-    // Helper: execute a single search and collect results
-    const executeAndCollect = async (searchQuery, label = "web_search") => {
-      let toolRes = null;
-      try {
-        recordStep({
-          phase: "TOOL_EXECUTION",
-          title: `Searching: ${searchQuery.slice(0, 40)}`,
-          tool: "web_search",
-          args: { query: searchQuery },
-          status: "in_progress",
-        });
-
-        toolRes = await toolExecutor.executeTool("web_search", { query: searchQuery }, { context: { thinkingMode: true } });
-      } catch (err) {
-        toolRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
-      }
-
-      const isSearchEmpty = !toolRes.ok || toolRes.state === "SEARCH_EMPTY" || !Array.isArray(toolRes.sources) || toolRes.sources.length === 0;
-      const success = toolRes.ok !== false && !isSearchEmpty;
-      const summary = toolRes.voiceSummary || (toolRes.data ? JSON.stringify(toolRes.data).slice(0, 400) : "Search completed");
-
-      if (Array.isArray(toolRes.sources)) {
-        toolRes.sources.forEach((src) => {
-          allCitations.push({
-            title: src.title || "External Source",
-            publisher: src.publisher || "Web",
-            url: src.url || null,
-            snippet: src.snippet || "",
-            sourceType: src.sourceType || "GENERAL_WEB",
-            publishedAt: src.publishedAt || null,
-            retrievedAt: new Date().toISOString(),
-          });
-        });
-      }
-
-      observations.push({
-        tool: "web_search",
-        args: { query: searchQuery },
-        success,
-        state: toolRes.state || (success ? "SEARCH_SUCCESS" : "SEARCH_EMPTY"),
-        summary,
-      });
-
-      toolTrace.push({
-        tool: "web_search",
-        args: { query: searchQuery },
-        success,
-      });
-
-      recordStep({
-        phase: "TOOL_OBSERVATION",
-        title: success ? `${allCitations.length} sources found` : "No results found",
-        tool: "web_search",
-        observation: summary.slice(0, 300),
-        status: success ? "completed" : "failed",
-      });
-
-      return { success, summary, toolRes };
-    };
-
-    // Primary search
-    await executeAndCollect(sanitizedQuery, "web_search");
-
-    // Multi-topic subtopic searches (run in parallel, max 2 extra)
-    if (rewrittenSubtopics.length > 0) {
-      const subtopicSearches = rewrittenSubtopics.slice(0, 2).map((sub) => {
-        const subQuery = sanitizePlannerQuery(sub, effectiveQuery, currentDate.year, intentInfo.requiresCurrentDate);
-        return executeAndCollect(subQuery, `web_search (subtopic)`);
-      });
-      await Promise.allSettled(subtopicSearches);
-    }
-
-    recordStep({
-      phase: "EVALUATION",
-      title: "Checking evidence",
-      thought: `Evaluating source credibility, subtopic coverage, and temporal freshness.`,
-      status: "in_progress",
-    });
-
-    // Deterministic gate on initial search
+    toolTrace.push({ tool: "web_search", args: { query: sanitizedQuery }, success: searchRes.ok !== false });
     detEvidence = evaluateEvidenceDeterministic({
       query: effectiveQuery,
       observations,
       citations: allCitations,
       currentYear: currentDate.year,
     });
-
-    // Recovery search: reformulate using strategy-shifting recovery builder (never repeat bad query)
-    if (!detEvidence.passed || !detEvidence.sufficient) {
-      const recoveryQuery = buildSearchRecoveryQuery({
-        originalQuery: effectiveQuery,
-        failedQuery: sanitizedQuery,
-        intent: intentInfo.intent,
-        currentYear: currentDate.year,
-        requiresCurrentDate: intentInfo.requiresCurrentDate,
-      });
-
-      if (recoveryQuery && recoveryQuery !== sanitizedQuery) {
-        recordStep({
-          phase: "TOOL_EXECUTION",
-          title: `Cross-checking sources: ${recoveryQuery.slice(0, 40)}`,
-          tool: "web_search",
-          args: { query: recoveryQuery },
-          thought: `Initial search insufficient (${detEvidence.reason}). Executing strategy-shifting recovery query.`,
-          status: "in_progress",
-        });
-
-        try {
-          const recRes = await toolExecutor.executeTool("web_search", { query: recoveryQuery }, { context: { thinkingMode: true } });
-          const recIsEmpty = !recRes.ok || recRes.state === "SEARCH_EMPTY" || !Array.isArray(recRes.sources) || recRes.sources.length === 0;
-          if (recRes.ok !== false && !recIsEmpty) {
-            recRes.sources.forEach((src) => {
-              allCitations.push({
-                title: src.title || "External Source",
-                publisher: src.publisher || "Web",
-                url: src.url || null,
-                snippet: src.snippet || "",
-                sourceType: src.sourceType || "GENERAL_WEB",
-                publishedAt: src.publishedAt || null,
-                retrievedAt: new Date().toISOString(),
-              });
-            });
-
-            observations.push({
-              tool: "web_search",
-              args: { query: recoveryQuery },
-              success: true,
-              state: recRes.state || "SEARCH_SUCCESS",
-              summary: recRes.voiceSummary || JSON.stringify(recRes.data).slice(0, 400),
-            });
-
-            toolTrace.push({
-              tool: "web_search",
-              args: { query: recoveryQuery },
-              success: true,
-            });
-
-            // Re-evaluate deterministic gate with recovered evidence
-            detEvidence = evaluateEvidenceDeterministic({
-              query,
-              observations,
-              citations: allCitations,
-              currentYear: currentDate.year,
-            });
-          }
-        } catch (_) {}
-      }
-    }
-
-    qwenGapData = {
-      sufficient: detEvidence.passed && detEvidence.freshnessOk,
-      missingInformation: detEvidence.missingInformation,
-      conflicts: [],
-      freshnessOk: detEvidence.freshnessOk,
-      sourceCount: allCitations.length,
-    };
-
+    qwenGapData = { sufficient: detEvidence.passed, conflicts: [] };
     researchMeta = {
       intent: intentInfo.intent,
-      temporalAnchor: currentDate.formatted,
-      queriesUsed: toolTrace.length,
+      mode: budget.mode,
+      effort: budget.effort,
+      queriesUsed: 1,
       sourcesUsed: allCitations.length,
-      deepPagesRead: 0,
-      followups: toolTrace.length > 1 ? 1 : 0,
-      freshnessChecked: detEvidence.freshnessOk,
-      deterministicPassed: detEvidence.passed,
-      semanticSufficient: qwenGapData.sufficient,
       researchDurationMs: Math.round(performance.now() - t0),
     };
   }
 
   // =========================================================================
-  // FINAL SYNTHESIS (PHASE 16 & 17)
+  // FINAL SYNTHESIS
   // =========================================================================
   const isHighComplexity =
+    budget.synthesizerModelTier === "REASONING" ||
+    budget.effort === EFFORT_LEVELS.HIGH ||
+    budget.effort === EFFORT_LEVELS.MAX ||
     intentInfo.intent === RESEARCH_INTENTS.DEEP_RESEARCH ||
     intentInfo.intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH;
   const synthesisTier = isHighComplexity ? "REASONING" : "FAST";
@@ -925,6 +899,8 @@ Do NOT output tool calls, search promises, brackets, or emojis.`;
 
     if (isPilotUnverified) {
       spokenReply = "Mujhe abhi reliable sources se verify nahi ho pa raha ki tum kis pilot ki baat kar rahe ho. Ek detail bata do, jaise airline ya incident.";
+    } else if (detEvidence && !detEvidence.passed && validObservations.length === 0) {
+      spokenReply = `I was unable to verify reliable records for "${effectiveQuery}" across news and web feeds right now.`;
     } else {
       const synthesisPrompt = `${cleanBaseInstruction}
 
@@ -991,6 +967,11 @@ User Query: "${effectiveQuery}"`;
     thinkingSteps,
     totalDurationMs,
     researchMeta,
+    researchState: researchData?.researchState || null,
+    telemetry: researchData?.telemetry || null,
+    mode: budget.mode,
+    effort: budget.effort,
+    reasoningDepth: budget.reasoningDepth,
   };
 }
 

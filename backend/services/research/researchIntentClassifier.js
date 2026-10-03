@@ -138,7 +138,7 @@ export function classifyResearchIntent(query = "") {
     return {
       intent: RESEARCH_INTENTS.TRENDING_EVENT,
       confidence: 0.96,
-      requiresDeepResearch: false,
+      requiresDeepResearch: true,
       requiresSearch: true,
       requiresCurrentDate: true,
       dimensions: ["entity_identification", "incident_cause", "verification_sources"],
