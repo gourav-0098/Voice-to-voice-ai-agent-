@@ -197,8 +197,9 @@ export function setupVoiceWebSocket(httpServer) {
             } catch (_) {}
 
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({
-                type: "done",
+              const donePayload = {
+                type: "turn_complete",
+                fullText: thinkingResult.reply,
                 reply: thinkingResult.reply,
                 thinkingSteps: thinkingResult.thinkingSteps,
                 audio: audioPayload?.audioBase64 || null,
@@ -206,7 +207,9 @@ export function setupVoiceWebSocket(httpServer) {
                 citations: thinkingResult.citations,
                 firstAudioTimeMs: thinkingResult.totalDurationMs,
                 totalLatencyMs: thinkingResult.totalDurationMs,
-              }));
+              };
+              ws.send(JSON.stringify(donePayload));
+              ws.send(JSON.stringify({ ...donePayload, type: "done" }));
             }
             return;
           }

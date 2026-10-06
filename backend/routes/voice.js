@@ -257,6 +257,7 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
 
     const explicitMode = req.body?.mode ? String(req.body.mode).toUpperCase() : (req.body?.thinkingMode !== undefined ? (req.body.thinkingMode ? "THINKING" : "FAST") : null);
     const effort = req.body?.effort || "MEDIUM";
+    const thinkingLevel = req.body?.thinkingLevel || "STANDARD";
     const selectedMode = explicitMode ? (explicitMode === "THINKING" ? "SEARCH" : explicitMode) : (route.mode === "DEEP" ? "SEARCH" : "FAST");
 
     // Autonomous Search Mode (adaptive research + internal reasoning scaled by Effort)

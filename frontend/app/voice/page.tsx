@@ -1466,10 +1466,14 @@ export default function VoicePage() {
               if (data.firstAudioTimeMs) setLastTtfa(data.firstAudioTimeMs);
               if (data.quota) setQuota(data.quota);
               setIsAiLoading(false);
+            } else if (eventType === "error") {
+              setError(data.message || data.error || "An error occurred.");
+              setIsAiLoading(false);
             }
           } catch (_) {}
         }
       }
+      setIsAiLoading(false);
     } catch (streamErr: any) {
       if (streamErr?.name === "AbortError") {
         console.log("⏹️ [STREAMING] Voice stream aborted by user interruption");
@@ -1880,7 +1884,7 @@ export default function VoicePage() {
               setLastTtfa(msg.totalElapsedMs);
             }
             audioQueueRef.current.enqueue(msg.audio, msg.format || "audio/wav", msg.text, msg.index);
-          } else if (msg.type === "turn_complete") {
+          } else if (msg.type === "turn_complete" || msg.type === "done") {
             setIsAiLoading(false);
             if (msg.firstAudioTimeMs) {
               setLastTtfa(msg.firstAudioTimeMs);
@@ -1891,6 +1895,10 @@ export default function VoicePage() {
             if (msg.thinkingSteps) {
               setCurrentThinkingSteps(msg.thinkingSteps);
             }
+            const completeText = msg.reply || msg.fullText;
+            if (completeText) {
+              setAiResponse(completeText);
+            }
             setMessages((prev) => {
               const activeId = activeAiMsgIdRef.current;
               if (!activeId) return prev;
@@ -1898,18 +1906,27 @@ export default function VoicePage() {
                 m.id === activeId
                   ? {
                       ...m,
+                      text: completeText || m.text,
                       factCheck: msg.factCheck || m.factCheck,
                       thinkingSteps: msg.thinkingSteps || m.thinkingSteps,
                     }
                   : m
               );
             });
+          } else if (msg.type === "error") {
+            setIsAiLoading(false);
+            setError(msg.message || msg.error || "An error occurred.");
           }
         } catch (_) {}
       };
 
       ws.onerror = (err) => {
+        setIsAiLoading(false);
         console.warn("WebSocket stream fallback to SSE active:", err);
+      };
+
+      ws.onclose = () => {
+        setIsAiLoading(false);
       };
     } catch (err) {
       console.warn("Voice WebSocket init warning:", err);
