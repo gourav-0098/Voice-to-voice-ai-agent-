@@ -50,10 +50,11 @@ export class NewsProvider extends BaseSearchProvider {
           }
 
           if (link && link.startsWith("http")) {
+            const cleanHeadline = title || cleanQuery;
             results.push({
               title,
               url: link,
-              snippet: `Recent reporting on ${cleanQuery} by ${publisher} (${pubDate}).`,
+              snippet: `${cleanHeadline}. Reported by ${publisher} on ${pubDate}.`,
               publisher,
               publishedAt: pubDate,
               sourceType: "ESTABLISHED_REPORTING",

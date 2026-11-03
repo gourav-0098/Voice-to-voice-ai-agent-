@@ -16,6 +16,8 @@ import guestQuotaService from "./guestQuotaService.js";
 import { runThinkingLoop } from "./thinkingEngineService.js";
 import sarvamTtsService from "./sarvamTtsService.js";
 import deepgramTts from "./deepgramTtsService.js";
+import { classifyResearchIntent, RESEARCH_INTENTS } from "./research/researchIntentClassifier.js";
+import { toolRouter } from "../tools/toolRouter.js";
 
 // Helper to validate WebSocket Origin header
 function isAllowedWsOrigin(origin) {
@@ -151,7 +153,8 @@ export function setupVoiceWebSocket(httpServer) {
           }
 
           const persona = typeof data.persona === "string" ? data.persona.slice(0, 30) : "conversational";
-          const voiceModel = typeof data.voiceModel === "string" ? data.voiceModel.slice(0, 40) : "aura-asteria-en";
+          const rawVoiceModel = typeof data.voiceModel === "string" ? data.voiceModel.slice(0, 40) : "aura-asteria-en";
+          const voiceModel = ws._preferredVoiceModel || rawVoiceModel;
           const isGuest = !authenticatedUser;
 
           console.log(`🗣️ [WS VOICE TURN] "${prompt.slice(0, 60)}" (Persona: ${persona}, Voice: ${voiceModel}, isGuest: ${isGuest})`);
@@ -164,10 +167,26 @@ export function setupVoiceWebSocket(httpServer) {
           const thinkingLevel = data.thinkingLevel || "STANDARD";
           const selectedMode = explicitMode ? (explicitMode === "THINKING" ? "SEARCH" : explicitMode) : (route.mode === "DEEP" ? "SEARCH" : "FAST");
 
-          if (selectedMode === "SEARCH") {
-            console.log(`🔍 [WS VOICE TURN] SEARCH Mode Active (Effort: ${effort}) for "${prompt.slice(0, 50)}"`);
+          const intentInfo = classifyResearchIntent(prompt);
+          const deterministicRoute = toolRouter.route(prompt);
+          const isControlOrCapability =
+            intentInfo.intent === RESEARCH_INTENTS.CONVERSATIONAL_CONTROL ||
+            intentInfo.intent === RESEARCH_INTENTS.CAPABILITY_INQUIRY;
+
+          const isHighEffort = effort === "HIGH" || effort === "MAX";
+          const isDeepQuery = prompt.length > 150 || /design|architect|implement|analyze|synthesize|compare|evaluate|debug|refactor|blueprint|roadmap/i.test(prompt);
+
+          const shouldUseThinkingLoop =
+            selectedMode === "SEARCH" ||
+            isHighEffort ||
+            (selectedMode !== "FAST" && isDeepQuery) ||
+            deterministicRoute.shouldRoute ||
+            isControlOrCapability;
+
+          if (shouldUseThinkingLoop) {
+            console.log(`🔍 [WS VOICE TURN] Thinking Loop Active (Mode: ${selectedMode}, Effort: ${effort}) for "${prompt.slice(0, 50)}"`);
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: "mode", mode: "SEARCH" }));
+              ws.send(JSON.stringify({ type: "mode", mode: selectedMode === "SEARCH" ? "SEARCH" : "FAST" }));
             }
 
             const thinkingResult = await runThinkingLoop({
@@ -188,12 +207,23 @@ export function setupVoiceWebSocket(httpServer) {
 
             // Synthesize audio
             let audioPayload = null;
+            let activeVoiceModel = voiceModel;
+            if (thinkingResult.control?.action === "CHANGE_LANGUAGE") {
+              const newLang = thinkingResult.control.language;
+              activeVoiceModel = newLang === "hindi" ? "sarvam-aditya" : "aura-asteria-en";
+              ws._preferredVoiceModel = activeVoiceModel;
+              ws.send(JSON.stringify({ type: "language_changed", language: newLang, voiceModel: activeVoiceModel }));
+            } else if (ws._preferredVoiceModel) {
+              activeVoiceModel = ws._preferredVoiceModel;
+            }
+
             try {
-              if (voiceModel.startsWith("sarvam-")) {
-                audioPayload = await sarvamTtsService.generateSarvamSpeech(thinkingResult.reply, voiceModel.replace("sarvam-", ""));
-              } else {
-                audioPayload = await deepgramTts.generateSpeech(thinkingResult.reply, voiceModel);
-              }
+              const ttsPromise = activeVoiceModel.startsWith("sarvam-")
+                ? sarvamTtsService.generateSarvamSpeech(thinkingResult.reply, activeVoiceModel.replace("sarvam-", ""))
+                : deepgramTts.generateSpeech(thinkingResult.reply.slice(0, 1000), activeVoiceModel);
+
+              const ttsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("TTS timeout")), 7000));
+              audioPayload = await Promise.race([ttsPromise, ttsTimeout]);
             } catch (_) {}
 
             if (ws.readyState === WebSocket.OPEN) {
@@ -378,9 +408,10 @@ export function setupVoiceWebSocket(httpServer) {
 
           // Send Turn Completion with Full Latency Telemetry
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
+            const turnCompletePayload = {
               type: "turn_complete",
               fullText: streamResult.fullText,
+              reply: streamResult.fullText,
               firstAudioTimeMs: streamResult.firstAudioTimeMs,
               totalLatencyMs: streamResult.totalLatencyMs,
               sentenceCount: streamResult.sentenceCount,
@@ -395,7 +426,9 @@ export function setupVoiceWebSocket(httpServer) {
                 totalMs: streamResult.totalLatencyMs,
                 confidence: evidencePack?.confidenceLevel || "HIGH",
               },
-            }));
+            };
+            ws.send(JSON.stringify(turnCompletePayload));
+            ws.send(JSON.stringify({ ...turnCompletePayload, type: "done" }));
           }
 
           // Persist conversation in MongoDB asynchronously only for authenticated users

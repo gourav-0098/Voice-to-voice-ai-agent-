@@ -94,75 +94,95 @@ export function normalizeEffort(effort) {
 export function getExecutionBudget({
   mode = MODES.FAST,
   effort = EFFORT_LEVELS.MEDIUM,
+  query = "",
 } = {}) {
   const normMode = normalizeMode(mode);
   const normEffort = normalizeEffort(effort);
 
+  // Dynamic token scaling based on explicit user length or complexity requests
+  let dynamicMinTokens = 0;
+  let dynamicMinWallClockMs = 0;
+  if (typeof query === "string" && query.length > 0) {
+    if (/\b(?:2000|2,?000)\s*(?:word|words)\b/i.test(query)) {
+      dynamicMinTokens = 4500;
+      dynamicMinWallClockMs = 60000;
+    } else if (/\b(?:1000|1,?000|1500|1,?500)\s*(?:word|words)\b/i.test(query)) {
+      dynamicMinTokens = 3000;
+      dynamicMinWallClockMs = 45000;
+    } else if (/\b(?:multi-?file|complete code|full implementation|exhaustive|treatise|architecture design)\b/i.test(query)) {
+      dynamicMinTokens = 7500;
+      dynamicMinWallClockMs = 60000;
+    }
+  }
+
   // =========================================================================
-  // 1. FAST MODE (Lowest-Latency Conversational)
+  // 1. FAST MODE (Lowest-Latency Conversational & Fast Engineering)
   // Direct answer / deterministic tools. Internal reasoning increases with Effort.
   // Avoids adaptive web-research loops.
   // =========================================================================
   if (normMode === MODES.FAST) {
     const fastBudgets = {
       [EFFORT_LEVELS.LOW]: {
-        maxWallClockMs: 4000,
+        maxWallClockMs: 8000,
         maxTotalToolCalls: 1,
         maxIterationsCeiling: 1,
         maxPlannedQueriesPerIter: 0,
         maxConcurrentSearches: 1,
         maxUrlsToOpen: 0,
-        maxTokens: 400,
+        maxTokens: 600,
         reasoningDepth: REASONING_DEPTHS.SHALLOW,
       },
       [EFFORT_LEVELS.MEDIUM]: {
-        maxWallClockMs: 6000,
+        maxWallClockMs: 15000,
         maxTotalToolCalls: 2,
         maxIterationsCeiling: 1,
         maxPlannedQueriesPerIter: 1,
         maxConcurrentSearches: 1,
         maxUrlsToOpen: 0,
-        maxTokens: 600,
+        maxTokens: 1500,
         reasoningDepth: REASONING_DEPTHS.STANDARD,
       },
       [EFFORT_LEVELS.HIGH]: {
-        maxWallClockMs: 8000,
+        maxWallClockMs: 30000,
         maxTotalToolCalls: 2,
         maxIterationsCeiling: 1,
         maxPlannedQueriesPerIter: 1,
         maxUrlsToOpen: 1,
-        maxTokens: 900,
+        maxTokens: 3500,
         reasoningDepth: REASONING_DEPTHS.DEEP,
       },
       [EFFORT_LEVELS.MAX]: {
-        maxWallClockMs: 10000,
+        maxWallClockMs: 60000,
         maxTotalToolCalls: 3,
         maxIterationsCeiling: 1,
         maxPlannedQueriesPerIter: 1,
         maxUrlsToOpen: 1,
-        maxTokens: 1400,
+        maxTokens: 7500,
         reasoningDepth: REASONING_DEPTHS.MAX,
       },
     };
 
     const b = fastBudgets[normEffort];
+    const finalTokens = Math.max(b.maxTokens, dynamicMinTokens);
+    const finalWallClock = Math.max(b.maxWallClockMs, dynamicMinWallClockMs);
+
     return {
       mode: MODES.FAST,
       effort: normEffort,
       reasoningDepth: b.reasoningDepth,
-      modelTier: normEffort === EFFORT_LEVELS.MAX ? "REASONING" : "FAST",
-      responseBudgetTokens: b.maxTokens,
-      maxWallClockMs: b.maxWallClockMs,
+      modelTier: (normEffort === EFFORT_LEVELS.MAX || finalTokens > 2000) ? "REASONING" : "FAST",
+      responseBudgetTokens: finalTokens,
+      maxWallClockMs: finalWallClock,
       maxTotalToolCalls: b.maxTotalToolCalls,
       maxIterationsCeiling: b.maxIterationsCeiling,
       maxPlannedQueriesPerIter: b.maxPlannedQueriesPerIter,
       maxConcurrentSearches: b.maxConcurrentSearches,
       maxUrlsToOpen: b.maxUrlsToOpen,
       maxPassagesPerSource: 2,
-      maxTokens: b.maxTokens,
+      maxTokens: finalTokens,
       plannerModelTier: "FAST",
       specialistModelTier: "FAST_REASONER",
-      synthesizerModelTier: normEffort === EFFORT_LEVELS.MAX ? "REASONING" : "FAST",
+      synthesizerModelTier: (normEffort === EFFORT_LEVELS.MAX || finalTokens > 2000) ? "REASONING" : "FAST",
       allowMultiQuerySearch: false,
       allowAdaptiveLoop: false,
       allowDeepReasoning: false,
@@ -182,14 +202,14 @@ export function getExecutionBudget({
   // =========================================================================
   const searchBudgets = {
     [EFFORT_LEVELS.LOW]: {
-      maxWallClockMs: 10000,
+      maxWallClockMs: 15000,
       maxTotalToolCalls: 6,
       maxIterationsCeiling: 2,
       maxPlannedQueriesPerIter: 2,
       maxConcurrentSearches: 2,
       maxUrlsToOpen: 1,
       maxPassagesPerSource: 2,
-      maxTokens: 900,
+      maxTokens: 1200,
       reasoningDepth: REASONING_DEPTHS.SHALLOW,
       minVerifiedSourcesForSufficiency: 1,
       investigateContradictions: false,
@@ -197,14 +217,14 @@ export function getExecutionBudget({
       synthesizerModelTier: "FAST",
     },
     [EFFORT_LEVELS.MEDIUM]: {
-      maxWallClockMs: 18000,
+      maxWallClockMs: 30000,
       maxTotalToolCalls: 12,
       maxIterationsCeiling: 3,
       maxPlannedQueriesPerIter: 3,
       maxConcurrentSearches: 3,
       maxUrlsToOpen: 3,
       maxPassagesPerSource: 2,
-      maxTokens: 1600,
+      maxTokens: 2500,
       reasoningDepth: REASONING_DEPTHS.STANDARD,
       minVerifiedSourcesForSufficiency: 2,
       investigateContradictions: false,
@@ -212,14 +232,14 @@ export function getExecutionBudget({
       synthesizerModelTier: "FAST",
     },
     [EFFORT_LEVELS.HIGH]: {
-      maxWallClockMs: 30000,
+      maxWallClockMs: 50000,
       maxTotalToolCalls: 22,
       maxIterationsCeiling: 4,
       maxPlannedQueriesPerIter: 4,
       maxConcurrentSearches: 4,
       maxUrlsToOpen: 5,
       maxPassagesPerSource: 3,
-      maxTokens: 2600,
+      maxTokens: 4000,
       reasoningDepth: REASONING_DEPTHS.DEEP,
       minVerifiedSourcesForSufficiency: 3,
       investigateContradictions: true,
@@ -227,14 +247,14 @@ export function getExecutionBudget({
       synthesizerModelTier: "FAST",
     },
     [EFFORT_LEVELS.MAX]: {
-      maxWallClockMs: 50000,
+      maxWallClockMs: 90000,
       maxTotalToolCalls: 36,
       maxIterationsCeiling: 6,
       maxPlannedQueriesPerIter: 5,
       maxConcurrentSearches: 5,
       maxUrlsToOpen: 8,
       maxPassagesPerSource: 3,
-      maxTokens: 4000,
+      maxTokens: 7500,
       reasoningDepth: REASONING_DEPTHS.MAX,
       minVerifiedSourcesForSufficiency: 3,
       investigateContradictions: true,
@@ -244,6 +264,8 @@ export function getExecutionBudget({
   };
 
   const b = searchBudgets[normEffort];
+  const finalTokens = Math.max(b.maxTokens, dynamicMinTokens);
+  const finalWallClock = Math.max(b.maxWallClockMs, dynamicMinWallClockMs);
   return {
     mode: MODES.SEARCH,
     effort: normEffort,

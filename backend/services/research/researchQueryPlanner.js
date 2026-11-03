@@ -130,12 +130,12 @@ PLANNING RULES:
    - Formulate 2 targeted queries searching for major publications, books, and influential writings without current-year modifiers.
 2. For HISTORICAL_INFORMATION (e.g. "how many people died in ww2 and how many Chinese were killed by Japan in ww2", "Gandhi-Irwin Pact"):
    - If the inquiry asks multiple specific sub-questions (e.g. total casualties AND Chinese casualties), generate distinct focused queries for EACH sub-question to guarantee complete evidence coverage!
-3. For COMPARISON questions (e.g. "What are the best AI providers?", "OpenAI vs Google"):
-   - Formulate 2 to 4 distinct, focused search tasks targeting market landscape, contenders, and multidimensional tradeoffs.
-4. For TECHNICAL_RESEARCH (e.g. "WebRTC vs WebSocket"):
-   - Target official protocols, architectural tradeoffs, latency, packet loss, and browser/server support.
-5. For CURRENT_EVENT (e.g. "recent changes in September 2026"):
-   - Target specific release notes, changelogs, and official announcements for the requested timeframe.
+3. For COMPARISON questions (e.g. "What are the best AI providers?", "OpenAI vs Google", "Tusk vs Nawrocki"):
+   - Formulate 2 to 4 distinct, focused search tasks targeting the contenders, specific statements, and multidimensional tradeoffs.
+4. For TECHNICAL_RESEARCH (e.g. "CVE vulnerabilities", "WebRTC vs WebSocket", "SQLite WAL mode"):
+   - Target official CVE databases, RFCs, technical specifications, architecture tradeoffs, and benchmark evidence for the specific subject asked.
+5. For CURRENT_EVENT (e.g. world news, politics, policy updates, breaking developments, elections):
+   - Formulate 2 to 3 targeted queries focusing on verified news reporting, primary government/institutional announcements, and current timeline details. Do NOT assume it is a software changelog unless software was explicitly asked.
 6. For TRENDING_EVENT (e.g. "Why is this Indian pilot going viral lately?"):
    - Formulate 3 to 4 distinct, focused search queries covering: (a) viral incident/event, (b) trending news coverage with current year ${dateCtx.year}, (c) controversy or background, and (d) verified factual reporting. Do NOT repeat the exact user question.
 
@@ -213,30 +213,32 @@ Respond strictly in valid JSON format:
       });
     }
   } else if (intent === RESEARCH_INTENTS.TECHNICAL_RESEARCH) {
+    const cleanQ = query.replace(/[?"'.,!]/g, "").trim();
     fallbackTasks.push({
-      topic: "WebRTC vs WebSocket latency",
-      query: "WebRTC vs WebSocket real-time audio latency packet loss",
+      topic: "Technical documentation and architecture",
+      query: `${cleanQ} technical specification documentation architecture`,
       freshness: "technical",
       sourcePreference: "technical",
     });
     fallbackTasks.push({
-      topic: "Streaming speech-to-speech architecture",
-      query: "WebSocket vs HTTP streaming speech-to-speech barge-in time-to-first-audio",
+      topic: "Implementation details and comparative performance",
+      query: `${cleanQ} implementation tradeoffs benchmarks performance`,
       freshness: "technical",
       sourcePreference: "technical",
     });
   } else if (intent === RESEARCH_INTENTS.CURRENT_EVENT) {
+    const cleanQ = query.replace(/[?"'.,!]/g, "").trim();
     fallbackTasks.push({
-      topic: "Recent AI model & API changes",
-      query: `AI model API updates changelog ${dateCtx.monthYear} OpenAI Anthropic Google Groq`,
-      freshness: "current",
-      sourcePreference: "official",
+      topic: "Current event details and verified reporting",
+      query: sanitizePlannerQuery(cleanQ, query, dateCtx.year, requiresCurrentDate),
+      freshness: requiresCurrentDate ? "current" : "general",
+      sourcePreference: "reporting",
     });
     fallbackTasks.push({
-      topic: "Key developer announcements",
-      query: `AI developer announcements release notes ${dateCtx.monthYear}`,
-      freshness: "current",
-      sourcePreference: "reporting",
+      topic: "Official statements and latest developments",
+      query: `${cleanQ} latest developments updates ${requiresCurrentDate ? dateCtx.year : ""}`.trim(),
+      freshness: requiresCurrentDate ? "current" : "general",
+      sourcePreference: "official",
     });
   } else if (intent === RESEARCH_INTENTS.TRENDING_EVENT) {
     // 3 to 4 focused search tasks covering entity, incident, viral reporting, and live date
@@ -460,13 +462,18 @@ export function buildSearchRecoveryQuery({
     return `${cleanOrig} architecture documentation rfc tradeoffs`.trim();
   }
 
-  // 4. Current facts / news (reformulate around live reporting)
+  // 4. Current political officeholders / official appointments (target official portals and news record)
+  if (/\b(cm|chief minister|pm|prime minister|governor|president|minister)\b/i.test(lowerOrig)) {
+    return `${cleanOrig} official portal government update ${requiresCurrentDate ? currentYear : ""}`.trim();
+  }
+
+  // 5. Current facts / news (reformulate around live reporting)
   if (requiresCurrentDate) {
     return `${cleanOrig} latest official reporting update ${currentYear}`.trim();
   }
 
-  // 5. General fallback: append verified overview keywords
-  return `${cleanOrig} verified facts overview`.trim();
+  // 6. General fallback: return cleaned query without spam suffixes or internal labels
+  return cleanOrig.trim();
 }
 
 export default {

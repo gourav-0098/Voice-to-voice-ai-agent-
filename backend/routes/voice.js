@@ -18,6 +18,8 @@ import factCheckService from "../services/factCheckService.js";
 import sarvamTtsService from "../services/sarvamTtsService.js";
 import { generateEdgeSpeech } from "../services/edgeTtsService.js";
 import { runThinkingLoop } from "../services/thinkingEngineService.js";
+import { classifyResearchIntent, RESEARCH_INTENTS } from "../services/research/researchIntentClassifier.js";
+import { toolRouter } from "../tools/toolRouter.js";
 
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -168,15 +170,19 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
   const guestIdentifier = `guest_${getGuestIdentifier(req)}`;
   const userText = (req.body?.text || req.body?.message || "").trim();
 
-  if (!userText || userText.length > 2000) {
-    return res.status(400).json({ error: "Text (1 to 2000 characters) is required for streaming voice." });
+  if (!userText || userText.length > 10000) {
+    return res.status(400).json({ error: "Text (1 to 10000 characters) is required." });
   }
 
   // Quota & Rate Limit Check
+  // Automated Behavior Lab requests: bypass rate limiter
   // Free / Guest users: 10 calls/hour, 50 calls/day
   // Logged-in users: 30 calls/hour, unlimited daily
+  const isLab = req.headers["x-behavior-lab"] === "true" || req.headers["x-guest-id"]?.startsWith("lab_");
   let quota = null;
-  if (user) {
+  if (isLab) {
+    quota = { allowed: true, remainingHourly: 10000, remainingDaily: 10000 };
+  } else if (user) {
     try {
       quota = await user.checkAndRecordVoiceCall();
     } catch (err) {
@@ -260,10 +266,26 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     const thinkingLevel = req.body?.thinkingLevel || "STANDARD";
     const selectedMode = explicitMode ? (explicitMode === "THINKING" ? "SEARCH" : explicitMode) : (route.mode === "DEEP" ? "SEARCH" : "FAST");
 
-    // Autonomous Search Mode (adaptive research + internal reasoning scaled by Effort)
-    if (selectedMode === "SEARCH") {
-      console.log(`🔍 [SSE STREAM] SEARCH Mode Activated (Effort: ${effort}) for: "${userText.slice(0, 50)}"`);
-      sendEvent("mode", { mode: "SEARCH", title: "Search Mode Activated" });
+    const intentInfo = classifyResearchIntent(userText);
+    const deterministicRoute = toolRouter.route(userText);
+    const isControlOrCapability =
+      intentInfo.intent === RESEARCH_INTENTS.CONVERSATIONAL_CONTROL ||
+      intentInfo.intent === RESEARCH_INTENTS.CAPABILITY_INQUIRY;
+
+    const isHighEffort = effort === "HIGH" || effort === "MAX";
+    const isDeepQuery = userText.length > 150 || /design|architect|implement|analyze|synthesize|compare|evaluate|debug|refactor|blueprint|roadmap|report|code|words/i.test(userText);
+
+    const shouldUseThinkingLoop =
+      selectedMode === "SEARCH" ||
+      isHighEffort ||
+      (selectedMode !== "FAST" && isDeepQuery) ||
+      deterministicRoute.shouldRoute ||
+      isControlOrCapability;
+
+    // Autonomous Search Mode or Deterministic Fast-Path / High-Effort Reasoning
+    if (shouldUseThinkingLoop) {
+      console.log(`🔍 [SSE STREAM] Thinking Loop Activated (Mode: ${selectedMode}, Effort: ${effort}) for: "${userText.slice(0, 50)}"`);
+      sendEvent("mode", { mode: selectedMode === "SEARCH" ? "SEARCH" : "FAST", title: "Thinking Loop Activated" });
 
       const clientHist = Array.isArray(req.body.history) ? req.body.history.slice(-8) : [];
       const thinkingResult = await runThinkingLoop({
@@ -280,33 +302,39 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
         },
       });
 
+      if (thinkingResult.control?.action === "CHANGE_LANGUAGE") {
+        sendEvent("language_changed", { language: thinkingResult.control.language });
+      }
+
       const replyText = thinkingResult.reply;
 
-      // Stream tokens to UI
-      const words = replyText.split(" ");
-      for (const word of words) {
-        sendEvent("token", { token: word + " " });
+      // Stream tokens to UI preserving exact whitespace, newlines, and code fences
+      const tokens = replyText.match(/(\s+|\S+)/g) || [replyText];
+      for (const token of tokens) {
+        sendEvent("token", { token });
       }
 
-      // Synthesize audio
+      // Synthesize audio (skipped for text-only / automated behavior lab runs)
       let audioPayload = null;
-      try {
-        if (selectedVoiceModel.startsWith("sarvam-")) {
-          const speaker = selectedVoiceModel.replace("sarvam-", "");
-          audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, speaker);
-        } else {
-          audioPayload = await deepgramTts.generateSpeech(replyText, selectedVoiceModel);
+      if (!isLab && !req.body?.skipAudio && !req.body?.textOnly) {
+        try {
+          if (selectedVoiceModel.startsWith("sarvam-")) {
+            const speaker = selectedVoiceModel.replace("sarvam-", "");
+            audioPayload = await sarvamTtsService.generateSarvamSpeech(replyText, speaker);
+          } else {
+            audioPayload = await deepgramTts.generateSpeech(replyText, selectedVoiceModel);
+          }
+        } catch (ttsErr) {
+          console.warn("TTS generation warning in thinking mode:", ttsErr.message);
         }
-      } catch (ttsErr) {
-        console.warn("TTS generation warning in thinking mode:", ttsErr.message);
-      }
 
-      if (audioPayload) {
-        sendEvent("audio", {
-          audio: audioPayload.audioBase64,
-          format: audioPayload.format || "audio/mp3",
-          sampleRate: 24000,
-        });
+        if (audioPayload) {
+          sendEvent("audio", {
+            audio: audioPayload.audioBase64,
+            format: audioPayload.format || "audio/mp3",
+            sampleRate: 24000,
+          });
+        }
       }
 
       sendEvent("rag", {
@@ -467,6 +495,7 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
       systemInstruction: dynamicInstruction,
       voiceModel: selectedVoiceModel,
       forceGroq: isGuest,
+      skipAudio: isLab || req.body?.skipAudio || req.body?.textOnly,
       onTokenDelta: (token) => {
         sendEvent("token", { token });
       },
@@ -551,8 +580,11 @@ router.post("/", voiceLimiter, optionalVerifyToken, async (req, res) => {
   console.log("📍 [VOICE CHECKPOINT 1] Received voice request from:", isGuest ? `Guest (${guestIdentifier})` : user.email);
 
   try {
+    const isLab = req.headers["x-behavior-lab"] === "true" || req.headers["x-guest-id"]?.startsWith("lab_");
     let quota = null;
-    if (user) {
+    if (isLab) {
+      quota = { allowed: true, isAdmin: true, remainingHourly: "Unlimited", remainingDaily: "Unlimited", totalHourly: "∞", totalDaily: "∞" };
+    } else if (user) {
       const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase());
       const isAdmin = user.role === "admin" || (user.email && adminEmails.includes(user.email.toLowerCase()));
       console.log(`📍 [VOICE CHECKPOINT 2] Checking quota for user ${user.email} (isAdmin: ${isAdmin})...`);
@@ -578,10 +610,10 @@ router.post("/", voiceLimiter, optionalVerifyToken, async (req, res) => {
     }
 
     const userText = req.body?.text || req.body?.message || "";
-    if (!userText || typeof userText !== "string" || !userText.trim() || userText.length > 2000) {
+    if (!userText || typeof userText !== "string" || !userText.trim() || userText.length > 10000) {
       console.warn("⚠️ [VOICE CHECKPOINT] Invalid input text length/type");
       return res.status(400).json({
-        error: "Valid text (max 2000 characters) is required in request body.",
+        error: "Valid text (max 10000 characters) is required in request body.",
       });
     }
 
@@ -783,8 +815,11 @@ router.post("/debate/turn", voiceLimiter, optionalVerifyToken, async (req, res) 
   const guestIdentifier = `guest_${getGuestIdentifier(req)}`;
 
   try {
+    const isLab = req.headers["x-behavior-lab"] === "true" || req.headers["x-guest-id"]?.startsWith("lab_");
     let quota = null;
-    if (user) {
+    if (isLab) {
+      quota = { allowed: true, isAdmin: true, remainingHourly: "Unlimited", remainingDaily: "Unlimited", totalHourly: "∞", totalDaily: "∞" };
+    } else if (user) {
       const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase());
       const isAdmin = user.role === "admin" || (user.email && adminEmails.includes(user.email.toLowerCase()));
       quota = { allowed: true, isAdmin, remainingHourly: "Unlimited", remainingDaily: "Unlimited", totalHourly: "∞", totalDaily: "∞" };

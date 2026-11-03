@@ -1,0 +1,27 @@
+{
+  "runId": "RUN-2026-11-01T15-18-49-903Z",
+  "timestamp": "2026-11-01T15:22:13.280Z",
+  "configuration": {
+    "setName": "search",
+    "questionIds": [
+      "SM-L2-03",
+      "SM-L2-05",
+      "SM-L3-01",
+      "SM-L3-03",
+      "SM-L3-08",
+      "SM-L4-01",
+      "SM-L4-03",
+      "SM-L5-01",
+      "SM-L5-02",
+      "SM-L5-05"
+    ],
+    "timeoutMs": 90000
+  },
+  "stats": {
+    "totalExecuted": 10,
+    "successfulTurns": 10,
+    "timeouts": 0,
+    "errors": 0
+  },
+  "runJsonlFile": "C:\\Users\\gourav\\OneDrive\\Documents\\MAIN_IMP_SELF\\projects\\Speech_to_speech_ai\\backend\\behavior-lab\\runs\\RUN-2026-11-01T15-18-49-903Z.jsonl"
+}

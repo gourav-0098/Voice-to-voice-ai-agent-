@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
-import { DEFAULT_SYSTEM_INSTRUCTION } from "./aiService.js";
+import aiService, { DEFAULT_SYSTEM_INSTRUCTION } from "./aiService.js";
 import { geminiKeyManager } from "./geminiKeyManager.js";
 import { systemSettingsService } from "./systemSettingsService.js";
 
@@ -183,6 +183,8 @@ export async function streamVoiceResponse({
   systemInstruction = DEFAULT_SYSTEM_INSTRUCTION,
   voiceModel = "aura-asteria-en",
   forceGroq = false,
+  maxTokens = 2000,
+  skipAudio = false,
   onTokenDelta,
   onAudioChunk,
   onSentenceComplete,
@@ -215,6 +217,12 @@ export async function streamVoiceResponse({
   };
 
   const dispatchSentenceSynthesis = (sentenceText) => {
+    if (skipAudio) {
+      if (onSentenceComplete) {
+        onSentenceComplete({ index: sentenceIndex++, text: sentenceText });
+      }
+      return;
+    }
     const clean = cleanForVoice(sentenceText);
     if (!clean || clean.length < 2) return;
 
@@ -273,7 +281,7 @@ export async function streamVoiceResponse({
           model: "qwen/qwen3.8-27b",
           messages,
           stream: true,
-          max_tokens: 350,
+          max_tokens: maxTokens,
           temperature: 0.6,
         }),
       });
@@ -330,56 +338,44 @@ export async function streamVoiceResponse({
 
   const streamWithGemini = async () => {
     try {
-      await geminiKeyManager.executeWithFailover(async (client, activeKey) => {
-        const contents = [];
-        for (const turn of history.slice(-8)) {
-          const text = (turn.text || turn.content || (turn.parts && turn.parts[0]?.text) || "").trim();
-          if (!text) continue;
-          const role = (turn.sender === "user" || turn.role === "user") ? "user" : "model";
-          contents.push({
-            role,
-            parts: [{ text }],
-          });
-        }
-        contents.push({ role: "user", parts: [{ text: prompt }] });
+      const effectiveInstruction = typeof systemInstruction === "string" && systemInstruction.trim()
+        ? systemInstruction
+        : undefined;
 
-        const stream = await client.models.generateContentStream({
-          model: "gemini-flash-lite-latest",
-          contents,
-          config: { systemInstruction },
-        });
-
-        for await (const chunk of stream) {
-          const token = chunk.text || "";
-          if (token) {
-            if (!firstTokenTime) firstTokenTime = Date.now() - t0;
-            fullGeneratedText += token;
-            currentSentenceBuffer += token;
-
-            if (onTokenDelta) onTokenDelta(token);
-
-            const cutIdx = findSentenceBoundary(currentSentenceBuffer);
-            if (cutIdx > 0) {
-              const complete = currentSentenceBuffer.substring(0, cutIdx).trim();
-              currentSentenceBuffer = currentSentenceBuffer.substring(cutIdx).trim();
-              dispatchSentenceSynthesis(complete);
-            }
-          }
-        }
+      const aiRes = await aiService.generateAIResponse({
+        prompt,
+        history,
+        systemInstruction: effectiveInstruction,
+        voiceModel,
+        forceGroq: false,
       });
-      return true;
+
+      if (aiRes && aiRes.reply) {
+        fullGeneratedText = aiRes.reply;
+        if (onTokenDelta) onTokenDelta(aiRes.reply);
+        const sentences = aiRes.reply.match(/[^.!?]+[.!?]+|\s*[^.!?]+$/g) || [aiRes.reply];
+        for (const s of sentences) {
+          if (s.trim()) dispatchSentenceSynthesis(s.trim());
+        }
+        return true;
+      }
+      return false;
     } catch (geminiErr) {
-      console.warn("⚠️ [STREAMING] Gemini streaming error across keys:", geminiErr.message);
+      console.warn("⚠️ [STREAMING] Gemini fallback error:", geminiErr.message);
       return false;
     }
   };
 
   let streamSuccess = false;
 
-  // Strict Groq API enforcement for free / unauthenticated users
+  // Strict Groq API preference for free / unauthenticated users with Gemini fallback
   if (forceGroq) {
-    console.log("⚡ [STREAMING PIPELINE] Free tier: strictly using Groq API only (zero external LLM costs)");
+    console.log("⚡ [STREAMING PIPELINE] Free tier: attempting Groq API streaming...");
     streamSuccess = await streamWithGroq();
+    if (!streamSuccess) {
+      console.warn("🔄 [STREAMING] Groq unavailable, falling back to Gemini key pool...");
+      streamSuccess = await streamWithGemini();
+    }
   } else {
     // Determine Primary Engine from System Settings (Gemini vs Groq)
     const primaryEngine = typeof systemSettingsService?.getPrimaryModel === "function"

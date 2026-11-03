@@ -1,0 +1,476 @@
+{
+  "metadata": {
+    "version": "2.0.0",
+    "name": "Chatly Behavior Lab — Full-Scale Challenge Benchmark Suite",
+    "description": "35 rigorous, long-form, multi-constraint challenges spanning deep research, technical architecture, complex debugging, cross-source factual investigations, decision planning, and 8-15 turn multi-turn context retention.",
+    "targetAudience": "Frontier Autonomous Voice & Intelligence Evaluation",
+    "totalChallenges": 35
+  },
+  "challenges": [
+    {
+      "id": "CHAL-A-01",
+      "category": "deep_research_reports",
+      "subCategory": "macroeconomics",
+      "name": "India Macroeconomic Outlook 2026-2027 Comprehensive State-of-the-Nation Report",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1600,
+      "prompt": "Synthesize an exhaustive, multi-source research report on India's macroeconomic outlook for FY 2026-27. Your report must explicitly address all six core pillars: 1) Headline and Core CPI inflation dynamics and RBI projection vs current actuals; 2) GDP growth forecasts reconciling official Ministry of Finance, RBI MPC, IMF, and World Bank figures; 3) Monetary policy stance and repo rate trajectory; 4) Fiscal deficit consolidation path toward the 4.5% FRBM glide path; 5) Employment, formalization (EPFO/PLFS), and urban-rural wage trends; and 6) Critical external downside risks including crude oil volatility, global trade fragmentation, and geopolitical tensions. Cite verified primary sources and explicit reporting periods for every statistic.",
+      "rubric": {
+        "minWordCount": 800,
+        "requiredSubtopics": [
+          "CPI inflation",
+          "GDP growth",
+          "monetary policy",
+          "fiscal deficit",
+          "employment",
+          "downside risks"
+        ],
+        "requiredEntities": [
+          "RBI",
+          "Ministry of Finance",
+          "IMF",
+          "World Bank"
+        ],
+        "forbiddenClaims": [
+          "Shaktikanta Das is current Governor",
+          "fiscal deficit target is above 6% for FY27"
+        ]
+      }
+    },
+    {
+      "id": "CHAL-A-02",
+      "category": "deep_research_reports",
+      "subCategory": "national_technology_policy",
+      "name": "India National AI Ecosystem & Sovereign Compute Strategy Brief",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1500,
+      "prompt": "Deliver an in-depth strategic analysis of India's sovereign artificial intelligence ecosystem. Detail: 1) The operational status and allocations under the IndiaAI Mission including the subsidized 10,000+ GPU compute tender; 2) Domestic foundational model initiatives (comparing Krutrim, Sarvam AI, BharatGPT/CoRover, and academic labs); 3) Datacenter infrastructure investments across Tier-1 and Tier-2 hubs (Yotta, Reliance Jio, AdaniConneX); 4) Indigenous AI chip and packaging roadmaps under the India Semiconductor Mission; and 5) Global positioning, talent retention strategies, and regulatory approaches balancing innovation with safety.",
+      "rubric": {
+        "minWordCount": 750,
+        "requiredSubtopics": [
+          "IndiaAI Mission",
+          "GPU compute",
+          "Sarvam",
+          "datacenter",
+          "semiconductor"
+        ]
+      }
+    },
+    {
+      "id": "CHAL-A-03",
+      "category": "deep_research_reports",
+      "subCategory": "regional_development",
+      "name": "Rajasthan Strategic Infrastructure, Water Security, and Industrial Growth Blueprint",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Prepare an exhaustive development brief on Rajasthan's economic and industrial trajectory under Chief Minister Bhajan Lal Sharma's administration. Cover five critical domains: 1) Renewable energy dominance (solar parks in Bhadla, Jaisalmer, hybrid wind-solar corridors, and interstate green energy transmission); 2) Water security and the modified Eastern Rajasthan Canal Project (ERCP) / PK-ERCP joint agreement with Madhya Pradesh; 3) Industrial manufacturing along the Delhi-Mumbai Industrial Corridor (DMIC) nodes in Neemrana, Khushkhera, and Jodhpur-Pali-Marwar; 4) Tourism economy diversification and heritage preservation; and 5) Fiscal management, debt sustainability, and welfare delivery modernization.",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredEntities": ["Bhajan Lal Sharma", "ERCP"],
+        "forbiddenClaims": ["Ashok Gehlot is current Chief Minister"]
+      }
+    },
+    {
+      "id": "CHAL-A-04",
+      "category": "deep_research_reports",
+      "subCategory": "global_geopolitics_tech",
+      "name": "Global Semiconductor Foundry Supply Chain & Lithography Export Controls",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1600,
+      "prompt": "Produce a comprehensive geopolitical and technical investigation into the global semiconductor manufacturing ecosystem. Contrast TSMC's 2nm/3nm foundry roadmaps with Intel Foundry Services and Samsung Electronics. Analyze the coordinated trilateral export controls on advanced DUV immersion (Twinscan NXT) and High-NA EUV lithography systems between the United States, Netherlands (ASML), and Japan. Examine China's domestic substitution efforts (SMIC, SMEE, CXMT) and assess the competitive viability of emerging outsourced semiconductor assembly and test (OSAT) and fab facilities in India and Southeast Asia.",
+      "rubric": {
+        "minWordCount": 800,
+        "requiredSubtopics": ["TSMC", "ASML", "lithography", "DUV", "EUV", "export controls"]
+      }
+    },
+    {
+      "id": "CHAL-A-05",
+      "category": "deep_research_reports",
+      "subCategory": "ai_foundations",
+      "name": "Frontier AI Architecture Evolution: Dense Transformers vs Mixture-of-Experts vs Test-Time Scaling",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1600,
+      "prompt": "Synthesize a rigorous technical treatise on the state of frontier AI architecture design in late-2026. Compare: 1) Classical dense autoregressive transformers vs fine-grained sparse Mixture-of-Experts (MoE) architectures (e.g. DeepSeek-V3/R1 style shared and routed experts); 2) Attention innovations specifically Multi-Head Latent Attention (MLA) for KV-cache footprint reduction; 3) The mechanics of Test-Time Compute (TTC) scaling, Monte Carlo Tree Search, and reinforcement learning with verifiable rewards versus pre-training scaling; and 4) Production inference latency, memory bandwidth bottlenecks, and FP8/FP4 quantization tradeoffs.",
+      "rubric": {
+        "minWordCount": 800,
+        "requiredSubtopics": ["Mixture of Experts", "Multi-Head Latent Attention", "KV cache", "test-time compute", "quantization"]
+      }
+    },
+    {
+      "id": "CHAL-A-06",
+      "category": "deep_research_reports",
+      "subCategory": "clean_energy",
+      "name": "Global Clean Energy Grid Integration & Battery Storage Mandates",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Evaluate the global challenges of integrating intermittent renewable power into legacy transmission grids. Analyze: 1) Utility-scale Battery Energy Storage Systems (BESS) chemistry evolutions (LFP vs sodium-ion vs solid-state); 2) Grid inertia degradation and synchronous condenser deployments; 3) Green hydrogen production mandates and electrolyzer efficiency bottlenecks; and 4) National policy mechanisms in the US (FERC Order 1920), EU, and India (500 GW non-fossil capacity by 2030 target).",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredSubtopics": ["BESS", "grid inertia", "green hydrogen", "500 GW"]
+      }
+    },
+    {
+      "id": "CHAL-B-01",
+      "category": "technical_architecture",
+      "subCategory": "voice_ai_systems",
+      "name": "End-to-End Low-Latency Voice AI Pipeline Architecture Design",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1500,
+      "prompt": "You are a Principal Voice Systems Architect. Design a production-grade, full-duplex conversational voice AI system targeting sub-400ms end-to-end voice-to-voice latency. Specify: 1) Ingestion: WebRTC vs WebSocket audio framing (PCM 16kHz vs Opus), Voice Activity Detection (Silero VAD thresholds and chunk boundaries); 2) Streaming ASR: Deepgram Nova-3 / Whisper streaming with interim hypotheses; 3) Orchestration & Speculative Execution: Sentence boundary chunkers, speculative first-token generation, LLM streaming over SSE; 4) Text-to-Speech: Streaming TTS chunking (Cartesia / Deepgram Aura / ElevenLabs Flash); 5) Interruption / Barge-in: Echo cancellation (AEC), atomic socket cancellation tokens, audio buffer draining; and 6) Latency Budget Breakdown: Allocate exact millisecond budgets across all 6 pipeline stages.",
+      "rubric": {
+        "minWordCount": 800,
+        "requiredSubtopics": ["VAD", "streaming ASR", "speculative", "sentence boundary", "barge-in", "latency budget"]
+      }
+    },
+    {
+      "id": "CHAL-B-02",
+      "category": "technical_architecture",
+      "subCategory": "node_performance_debugging",
+      "name": "Node.js High-Throughput Voice Backend Failure Diagnosis & Hardening",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "A real-time voice AI backend built on Node.js and WebSockets experiences severe latency spikes from 350ms to 8,000ms under 2,000 concurrent active voice sessions. Profiling reveals: 1) Event loop lag spiking to 1,200ms; 2) V8 heap memory climbing monotonically by 400MB/hour; 3) WebSocket clients intermittently disconnecting with 1006 abnormal closures; and 4) Upstream LLM provider 429 rate limit thundering herds. Diagnose the root architectural causes for each of these 4 failure modes and prescribe production code patterns, worker threads separation, backpressure controls, and token-bucket rate limiter failovers to fix them.",
+      "rubric": {
+        "minWordCount": 750,
+        "requiredSubtopics": ["event loop lag", "heap memory leak", "backpressure", "rate limiter", "worker threads"]
+      }
+    },
+    {
+      "id": "CHAL-B-03",
+      "category": "technical_architecture",
+      "subCategory": "database_internals",
+      "name": "High-Scale Financial Ledger Database Architecture: PostgreSQL vs MongoDB Deep Dive",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1500,
+      "prompt": "Evaluate PostgreSQL and MongoDB for a mission-critical core banking double-entry ledger supporting 50,000 write transactions/second. Contrast them across: 1) ACID guarantees, transaction isolation levels (Serializable vs Snapshot Isolation), and write skew anomalies; 2) Write-Ahead Logging (WAL) and fsync durability mechanisms during abrupt host power loss; 3) Schema validation, foreign key relational integrity, and constraint enforcement; 4) Sharding architecture: MongoDB sharded clusters (mongos, config servers, chunk splits) vs PostgreSQL logical replication and Citus distributed tables; and 5) Audit logging, immutability, and compliance with financial regulatory standards.",
+      "rubric": {
+        "minWordCount": 750,
+        "requiredSubtopics": ["Serializable", "WAL", "fsync", "foreign key", "sharding", "auditability"]
+      }
+    },
+    {
+      "id": "CHAL-B-04",
+      "category": "technical_architecture",
+      "subCategory": "distributed_systems",
+      "name": "Distributed Consensus Under Asymmetric Network Partitions: Raft vs Multi-Paxos",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Provide a rigorous comparative review of the Raft consensus algorithm and Multi-Paxos. Detail: 1) Leader election mechanisms and randomized election timeouts in Raft versus phase 1 prepare/promise leader establishment in Paxos; 2) Log replication invariants: Raft's Log Matching Property and Leader Completeness Property; 3) Handling asymmetric network partitions where a node can receive heartbeats but cannot reply, or can communicate with a minority; 4) Joint consensus reconfiguration for dynamic cluster membership changes; and 5) Real-world operational differences between etcd/Raft and Google Spanner/Paxos.",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredSubtopics": ["leader election", "Log Matching", "asymmetric partition", "joint consensus", "etcd", "Spanner"]
+      }
+    },
+    {
+      "id": "CHAL-B-05",
+      "category": "technical_architecture",
+      "subCategory": "agent_orchestration",
+      "name": "Resilient Autonomous Tool-Calling & Multi-Source Research Engine Architecture",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1500,
+      "prompt": "Design an enterprise-grade autonomous research and tool execution engine for an AI agent. Detail the end-to-end architecture covering: 1) Deterministic Fast-Path Routing vs LLM Function Calling; 2) Parallel tool dispatch with bounded execution budgets and circuit breakers; 3) Content Isolation: Sandboxing untrusted web scrape data against prompt injection and jailbreaks; 4) Multi-source evidence validation: scoring relevance, authority, and temporal freshness; 5) Intelligent model fallbacks and multi-key quota management; and 6) Observability and distributed tracing with OpenTelemetry.",
+      "rubric": {
+        "minWordCount": 750,
+        "requiredSubtopics": ["routing", "circuit breaker", "prompt injection", "evidence validation", "fallback", "OpenTelemetry"]
+      }
+    },
+    {
+      "id": "CHAL-B-06",
+      "category": "technical_architecture",
+      "subCategory": "vector_search_rag",
+      "name": "Multi-Tenant Enterprise Vector Database & Hybrid RAG Architecture",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Design a multi-tenant enterprise Retrieval-Augmented Generation (RAG) platform indexing 100 million document chunks. Specify: 1) Vector index selection: Hierarchical Navigable Small World (HNSW) vs Inverted File with Product Quantization (IVF-PQ) and memory footprints; 2) Hybrid search integration combining sparse BM25 lexical retrieval with dense embedding similarity using Reciprocal Rank Fusion (RRF); 3) Tenant data isolation strategies (metadata filtering vs separate namespaces vs physical index partitioning); 4) Cross-encoder re-ranking pipelines and latency budgets; and 5) Semantic cache architectures for high-frequency queries.",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredSubtopics": ["HNSW", "BM25", "Reciprocal Rank Fusion", "tenant isolation", "re-ranking"]
+      }
+    },
+    {
+      "id": "CHAL-C-01",
+      "category": "complex_coding_debugging",
+      "subCategory": "concurrency_debugging",
+      "name": "Debugging Async Event Dispatcher Race Conditions & Memory Leaks in Node.js",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Analyze the following flawed Node.js async event dispatcher implementation:\n```javascript\nclass AsyncQueueDispatcher {\n  constructor() {\n    this.listeners = {};\n    this.queue = [];\n    this.processing = false;\n  }\n  on(event, handler) {\n    if (!this.listeners[event]) this.listeners[event] = [];\n    this.listeners[event].push(handler);\n  }\n  off(event, handler) {\n    this.listeners[event] = this.listeners[event].filter(h => h !== handler);\n  }\n  async emit(event, data) {\n    this.queue.push({ event, data });\n    if (this.processing) return;\n    this.processing = true;\n    while (this.queue.length > 0) {\n      const item = this.queue.shift();\n      const handlers = this.listeners[item.event] || [];\n      for (const h of handlers) {\n        h(item.data);\n      }\n    }\n    this.processing = false;\n  }\n}\n```\nIdentify four distinct bugs: 1) Unhandled asynchronous rejections when a handler returns a rejected Promise; 2) Race condition when emit() is called during an asynchronous handler execution; 3) Memory leak when `off()` is called on empty listener arrays; and 4) Event listener array mutation while iterating during handler unregistration. Provide the fully corrected, production-hardened implementation with concurrency safety.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["Promise.allSettled", "race condition", "mutation during iteration", "corrected code"]
+      }
+    },
+    {
+      "id": "CHAL-C-02",
+      "category": "complex_coding_debugging",
+      "subCategory": "distributed_rate_limiting",
+      "name": "Distributed Redis Token Bucket Rate Limiter with Clock Drift Hardening",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Review and harden a distributed token-bucket rate limiter implemented in Redis Lua and Node.js. Explain: 1) The precision and rounding errors caused by floating-point token arithmetic in Lua; 2) The race condition when client servers with unsynchronized NTP clocks submit timestamps; 3) Atomic execution guarantees of Redis EVAL scripts vs Redis Cluster multi-key hash-slot restrictions; and 4) Write a complete, hardened Redis Lua script and Node.js wrapper implementing a sliding-window token bucket with zero clock-drift dependency and millisecond precision.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["Redis Lua", "clock drift", "NTP", "atomic", "token bucket"]
+      }
+    },
+    {
+      "id": "CHAL-C-03",
+      "category": "complex_coding_debugging",
+      "subCategory": "tree_serialization",
+      "name": "Binary Tree Deserialization Edge Cases, Stack Overflow, and O(N) Reconstruction",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1000,
+      "prompt": "Examine the problem of serializing and deserializing arbitrary binary trees with negative values, duplicate keys, and extreme skew (e.g. 100,000 nodes forming a linked list). 1) Explain why recursive preorder/postorder deserialization causes a call stack overflow in V8/Python on skewed trees; 2) Design an iterative O(N) time and O(N) auxiliary space serialization and deserialization algorithm using string tokens and an explicit queue or stack; 3) Provide the complete implementation in TypeScript or Python; and 4) Write unit tests validating edge cases: empty tree, single node, highly skewed tree, and duplicate values.",
+      "rubric": {
+        "minWordCount": 500,
+        "requiredSubtopics": ["stack overflow", "iterative", "O(N)", "unit tests"]
+      }
+    },
+    {
+      "id": "CHAL-C-04",
+      "category": "complex_coding_debugging",
+      "subCategory": "sql_security_audit",
+      "name": "Security Audit: Identifying Second-Order SQL Injections in Dynamic Query Builders",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Conduct an in-depth security audit of dynamic SQL query construction in enterprise applications. 1) Explain why parameterized prepared statements protect against WHERE clause injection but completely fail to prevent SQL injection in dynamic ORDER BY clauses, table names, and column identifiers; 2) Explain second-order SQL injection scenarios involving stored user profile data later formatted into administrative batch queries; 3) Demonstrate safe identifier quoting and strict whitelist validation patterns; and 4) Provide production TypeScript/Node.js helper functions for safely building dynamic sorting, pagination, and JSONB attribute extraction queries.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["ORDER BY injection", "identifier quoting", "second-order", "whitelist", "sanitization"]
+      }
+    },
+    {
+      "id": "CHAL-C-05",
+      "category": "complex_coding_debugging",
+      "subCategory": "audio_buffer_engineering",
+      "name": "Lock-Free Circular Audio Ring Buffer for Real-Time Streaming Speech",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Design a lock-free Single Producer Single Consumer (SPSC) circular ring buffer for streaming 16-bit 16kHz PCM audio frames between a high-priority audio capture thread and a network WebSocket worker thread. 1) Explain atomic head and tail pointer management using atomic operations with acquire-release memory ordering; 2) Analyze cache-line false sharing between producer and consumer pointers and how to prevent it with cache-line padding; 3) Handle buffer underrun and overrun states gracefully without dropping audio mid-word; and 4) Provide the complete implementation with detailed inline comments.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["SPSC", "acquire-release", "cache-line padding", "false sharing", "underrun"]
+      }
+    },
+    {
+      "id": "CHAL-C-06",
+      "category": "complex_coding_debugging",
+      "subCategory": "cache_algorithm",
+      "name": "LRU Cache with Millisecond TTL Expiry and O(1) Amortized Operations",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1100,
+      "prompt": "Implement and verify an in-memory Least Recently Used (LRU) Cache supporting millisecond-granularity Time-To-Live (TTL) expiration. Requirements: 1) get(key) and set(key, value, ttlMs) must operate in strict O(1) time complexity; 2) Explain why passive expiration alone causes memory leaks under write-heavy loads and combine it with active eviction; 3) Provide the complete implementation using a hash map combined with a doubly-linked list in TypeScript/JavaScript; and 4) Provide automated test cases demonstrating LRU eviction order, TTL expiration, and cache key updates.",
+      "rubric": {
+        "minWordCount": 550,
+        "requiredSubtopics": ["doubly-linked list", "O(1)", "TTL expiration", "active eviction"]
+      }
+    },
+    {
+      "id": "CHAL-D-01",
+      "category": "multi_source_investigation",
+      "subCategory": "macro_forecast_reconciliation",
+      "name": "Cross-Institutional India GDP Growth Forecast Reconciliation (FY 2026-27)",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Reconcile the latest FY 2026-27 India GDP growth projections across the Reserve Bank of India (7.1%), Ministry of Finance Economic Review (7.3%), International Monetary Fund, and the World Bank. Explain the exact methodological differences and structural assumptions (gross fixed capital formation, private final consumption expenditure, monsoon predictability, and external trade deficit) that lead to these divergences. Disclose the observation date and reporting document for each forecast.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredEntities": ["RBI", "Ministry of Finance", "IMF", "World Bank"]
+      }
+    },
+    {
+      "id": "CHAL-D-02",
+      "category": "multi_source_investigation",
+      "subCategory": "policy_vs_reality",
+      "name": "India Semiconductor Mission: Approved Subsidies vs Ground Reality Check",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1300,
+      "prompt": "Investigate the actual operational and construction status of semiconductor fab and ATMP/OSAT projects approved under the India Semiconductor Mission (ISM). Compare the initial press announcements with verifiable ground progress for: 1) Tata Electronics and PSMC fab at Dholera; 2) Micron Technology ATMP facility in Sanand; 3) Tata Electronics OSAT in Jagiroad, Assam; and 4) Murugappa/Renesas and Kaynes semi facilities. Detail target commercial wafer output dates and critical supply chain dependencies (ultrapure water, continuous power, chemical purity).",
+      "rubric": {
+        "minWordCount": 650,
+        "requiredSubtopics": ["Tata", "Micron", "Dholera", "Sanand", "ATMP", "OSAT"]
+      }
+    },
+    {
+      "id": "CHAL-D-03",
+      "category": "multi_source_investigation",
+      "subCategory": "energy_forecasting_conflict",
+      "name": "OPEC vs IEA Global Oil Demand Divergence & Structural Drivers",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Analyze the sharp divergence between the International Energy Agency (IEA) World Energy Outlook and the Organization of the Petroleum Exporting Countries (OPEC) World Oil Outlook regarding medium and long-term oil demand. Detail: 1) IEA's projection of peak fossil demand before 2030 driven by EV adoption and renewable heat; 2) OPEC's contrasting assertion that oil demand will expand past 116 mb/d by 2045 driven by developing nations; and 3) The conflicting assumptions regarding capital expenditure, battery cost parity, and global carbon policy compliance.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["IEA", "OPEC", "peak oil", "electric vehicles", "capital expenditure"]
+      }
+    },
+    {
+      "id": "CHAL-D-04",
+      "category": "multi_source_investigation",
+      "subCategory": "regulatory_compliance_timeline",
+      "name": "EU AI Act Implementation Milestones & Global Regulatory Cross-Mapping",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1300,
+      "prompt": "Construct an authoritative timeline and cross-jurisdictional compliance guide for the European Union Artificial Intelligence Act (EU AI Act). Detail: 1) Exact phased enforcement dates: 6 months (prohibited AI practices), 12 months (General Purpose AI / foundation model transparency and systemic risk rules), 24-36 months (high-risk AI requirements); 2) Penalties and compliance thresholds; 3) Compare this binding regulatory framework with the US Executive Order / NIST guidelines and India's Ministry of Electronics and Information Technology (MeitY) advisory notices.",
+      "rubric": {
+        "minWordCount": 650,
+        "requiredSubtopics": ["prohibited practices", "GPAI", "high-risk", "penalties", "MeitY"]
+      }
+    },
+    {
+      "id": "CHAL-D-05",
+      "category": "multi_source_investigation",
+      "subCategory": "inflation_analytics",
+      "name": "India Retail Food vs Core Inflation Divergence & Monetary Policy Implications",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1200,
+      "prompt": "Examine the structural divergence between headline Consumer Price Index (CPI) inflation and core CPI inflation in India over recent quarterly reporting periods. Dissect: 1) Supply-side volatility in food and beverages (pulses, vegetables like tomatoes/onions, edible oils); 2) The sustained trajectory of core inflation (excluding food and fuel) hovering below 4%; and 3) The policy debate within the RBI Monetary Policy Committee regarding whether to look through transitory food price shocks or maintain tight interest rates to anchor second-round inflation expectations.",
+      "rubric": {
+        "minWordCount": 600,
+        "requiredSubtopics": ["headline CPI", "core inflation", "food inflation", "MPC", "transitory"]
+      }
+    },
+    {
+      "id": "CHAL-D-06",
+      "category": "multi_source_investigation",
+      "subCategory": "space_program",
+      "name": "ISRO Deep Space Roadmap: Gaganyaan-1, Chandrayaan-4, and Bharatiya Antariksh Station",
+      "mode": "SEARCH",
+      "effort": "MAX",
+      "targetWordCount": 1300,
+      "prompt": "Synthesize verified updates on the Indian Space Research Organisation's (ISRO) flagship missions: 1) Gaganyaan uncrewed test flights (G1 and G2) and humanoid robot Vyommitra integration leading to crewed orbital flight; 2) Chandrayaan-4 lunar sample-return mission architecture (docking modules and return vehicle); 3) The Bharatiya Antariksh Station (BAS-1) launch timeline and Next Generation Launch Vehicle (NGLV) development; and 4) Verify current ISRO leadership and organizational structure.",
+      "rubric": {
+        "minWordCount": 650,
+        "requiredSubtopics": ["Gaganyaan", "Vyommitra", "Chandrayaan-4", "Bharatiya Antariksh Station", "NGLV"]
+      }
+    },
+    {
+      "id": "CHAL-E-01",
+      "category": "complex_planning_decision",
+      "subCategory": "cloud_transformation",
+      "name": "Enterprise Monolith Cloud Migration Strategy & Zero-Downtime Execution Plan",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1500,
+      "prompt": "You are Enterprise Cloud Solutions Architect for a tier-1 retail enterprise. Develop a comprehensive 12-month migration and modernization roadmap to migrate a legacy monolithic Java/Oracle e-commerce engine to AWS/GCP with a $600,000 budget and a strict zero-downtime requirement. Outline: 1) Strangler Fig migration pattern for isolating checkout and catalog domains; 2) Dual-write and Change Data Capture (Debezium/Kafka) replication between on-premise Oracle and managed cloud PostgreSQL; 3) CI/CD canary deployment pipelines using ArgoCD and service mesh traffic splitting; 4) PCI-DSS Level 1 compliance and data encryption; and 5) Comprehensive risk mitigation matrix and rollback triggers.",
+      "rubric": {
+        "minWordCount": 750,
+        "requiredSubtopics": ["Strangler Fig", "Change Data Capture", "Debezium", "canary", "PCI-DSS", "risk matrix"]
+      }
+    },
+    {
+      "id": "CHAL-E-02",
+      "category": "complex_planning_decision",
+      "subCategory": "infrastructure_capacity",
+      "name": "Voice AI Platform Sizing, GPU Compute, and Provider Unit Economics (10,000 Concurrency)",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Formulate an infrastructure sizing and procurement plan for a commercial real-time voice AI platform supporting 10,000 concurrent interactive voice sessions. Formulate: 1) Compute capacity planning: GPU requirements for self-hosted streaming Whisper/vLLM vs hosted provider APIs (Deepgram, Groq, Cartesia, ElevenLabs); 2) Unit economics and gross margin breakdown per audio minute across STT, LLM tokens, and TTS; 3) WebSocket gateway infrastructure sizing across AWS ECS/EKS with network I/O optimization; and 4) Multi-vendor redundancy plan to guarantee 99.95% uptime against upstream provider outages.",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredSubtopics": ["concurrent sessions", "unit economics", "cost per minute", "gateway sizing", "redundancy"]
+      }
+    },
+    {
+      "id": "CHAL-E-03",
+      "category": "complex_planning_decision",
+      "subCategory": "disaster_recovery",
+      "name": "Multi-Region Active-Active Disaster Recovery Architecture (RPO < 1s, RTO < 30s)",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1400,
+      "prompt": "Design a mission-critical multi-region Active-Active disaster recovery architecture across two geographic cloud regions (e.g. AWS Mumbai ap-south-1 and Hyderabad ap-south-2). The system must guarantee RPO < 1 second and RTO < 30 seconds for stateful transactions. Specify: 1) Global traffic management and Anycast DNS failover (Route 53 / Cloudflare); 2) Multi-region data replication (CockroachDB vs Amazon Aurora Global Database with managed storage replication); 3) Distributed split-brain prevention and fencing tokens; and 4) Comprehensive disaster simulation runbook (Chaos Engineering with Chaos Mesh).",
+      "rubric": {
+        "minWordCount": 700,
+        "requiredSubtopics": ["RPO", "RTO", "Anycast", "Aurora Global", "split-brain", "runbook"]
+      }
+    },
+    {
+      "id": "CHAL-E-04",
+      "category": "complex_planning_decision",
+      "subCategory": "microservice_decomposition",
+      "name": "Decomposing Monolithic Billing: Saga Pattern & Distributed Transaction Governance",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1300,
+      "prompt": "A SaaS unicorn needs to extract its billing and invoicing subsystem from a 10-year-old Ruby on Rails monolith into independent microservices. Design the architectural blueprint: 1) Identify service boundaries using Domain-Driven Design (Bounded Contexts); 2) Replace two-phase commit (2PC) with Choreographed or Orchestrated Saga patterns using Temporal/Camunda; 3) Handle compensating transactions when payment succeeds but invoice generation fails; 4) Ensure transactional outbox pattern with Kafka for idempotent event publishing; and 5) Specify operational metrics and dead-letter queue (DLQ) automated replay tooling.",
+      "rubric": {
+        "minWordCount": 650,
+        "requiredSubtopics": ["Bounded Contexts", "Saga pattern", "compensating transactions", "transactional outbox", "DLQ"]
+      }
+    },
+    {
+      "id": "CHAL-E-05",
+      "category": "complex_planning_decision",
+      "subCategory": "edge_ai_deployment",
+      "name": "Edge AI Inference Deployment for Medical Imaging (Strict Latency & Offline Fallback)",
+      "mode": "FAST",
+      "effort": "MAX",
+      "targetWordCount": 1300,
+      "prompt": "Design a containerized Edge AI deployment plan for ultrasound and MRI anomaly detection in hospital operating rooms. Constraints: 1) Strict local inference latency < 40ms without cloud round-trips; 2) Thermal and hardware budget: NVIDIA Jetson Orin / IGX edge hardware; 3) Model optimization using TensorRT, FP16/INT8 calibration, and pipeline parallelism; 4) HIPAA and GDPR privacy compliance with zero patient data persisted in unencrypted edge storage; and 5) Over-the-Air (OTA) model update orchestration with A/B rollback safety.",
+      "rubric": {
+        "minWordCount": 650,
+        "requiredSubtopics": ["TensorRT", "Jetson", "latency < 40ms", "HIPAA", "OTA updates"]
+      }
+    }
+  ],
+  "multiTurnChallenges": [
+    {
+      "sequenceId": "CHAL-F-01",
+      "name": "10-Turn System Design Evolution Session: Real-Time Fleet Logistics",
+      "turns": [
+        {"turn": 1, "prompt": "I want to build a real-time fleet logistics platform tracking 100,000 delivery vehicles. Outline the high-level system requirements.", "expectedBehavior": "Outlines ingestion, tracking, storage, and dispatch requirements."},
+        {"turn": 2, "prompt": "Each vehicle sends a GPS telemetry packet every 1 second. What is the ingestion throughput and network bandwidth needed?", "expectedBehavior": "Calculates 100k pings/sec; calculates bandwidth in MB/s accurately."},
+        {"turn": 3, "prompt": "Should I use Redis, Cassandra, or TimescaleDB for the real-time location stream?", "expectedBehavior": "Compares time-series and key-value tradeoffs for hot location tracking."},
+        {"turn": 4, "prompt": "By the way, what is the best way to brew pour-over coffee at home?", "expectedBehavior": "Provides concise, warm pour-over coffee advice without confusing logistics."},
+        {"turn": 5, "prompt": "Back to our fleet platform: how should we implement geospatial proximity queries like finding all vehicles within a 2km radius?", "expectedBehavior": "Returns smoothly to logistics; explains H3, S2, or PostGIS geohashing."},
+        {"turn": 6, "prompt": "We now need to add a machine learning model that predicts ETA based on traffic. Where in the pipeline should it sit?", "expectedBehavior": "Positions ETA model downstream of ingestion, near stream processing / routing service."},
+        {"turn": 7, "prompt": "Our DevOps team refuses to manage Kafka clusters due to operational overhead. What managed cloud streaming alternatives should we use?", "expectedBehavior": "Recommends AWS Kinesis, GCP Pub/Sub, or Redpanda Cloud."},
+        {"turn": 8, "prompt": "What happens if a vehicle enters an underground tunnel with zero cellular connectivity for 15 minutes?", "expectedBehavior": "Details client-side SQLite/Flash buffering and timestamped replay reconciliation."},
+        {"turn": 9, "prompt": "The management just tightened our latency SLA from 2 seconds to 250 milliseconds end-to-end. What architectural bottlenecks must we refactor?", "expectedBehavior": "Identifies ingestion batching, serialization overhead, and database index locks as bottlenecks."},
+        {"turn": 10, "prompt": "Now synthesize a complete, cohesive architectural specification for our fleet platform that combines everything we agreed upon across all our turns, respecting our no-Kafka decision and the 250ms SLA.", "expectedBehavior": "Produces comprehensive architecture integrating all 10 turns without Kafka and with 250ms SLA."}
+      ]
+    },
+    {
+      "sequenceId": "CHAL-F-02",
+      "name": "10-Turn Financial Portfolio & Tax Strategy Evolution Session",
+      "turns": [
+        {"turn": 1, "prompt": "I am an Indian resident with a capital pool of ₹2 Crore to invest for long-term wealth creation. How should I approach my macro asset allocation?", "expectedBehavior": "Outlines balanced equity, debt, gold, and liquid allocation."},
+        {"turn": 2, "prompt": "Let's say I allocate 60% to domestic equity. What is the split between large-cap, mid-cap, and flexi-cap mutual funds?", "expectedBehavior": "Provides disciplined mutual fund categorization and risk balance."},
+        {"turn": 3, "prompt": "How did the recent Union Budget change long-term capital gains (LTCG) tax rates on equity mutual funds?", "expectedBehavior": "Accurately references 12.5% LTCG tax rate above ₹1.25 Lakh exemption."},
+        {"turn": 4, "prompt": "Actually, my personal risk tolerance has decreased significantly due to family commitments. Let's adjust to conservative. Revise our equity allocation.", "expectedBehavior": "Adjusts equity downward (e.g. 30-40%) and increases fixed income."},
+        {"turn": 5, "prompt": "Quick detour: did physical gold outperform the Nifty 50 over the last 12 months?", "expectedBehavior": "Provides balanced historical performance comparison neutrally."},
+        {"turn": 6, "prompt": "Given gold's performance, should I buy Sovereign Gold Bonds (SGB) or Gold ETFs now?", "expectedBehavior": "Analyzes secondary market SGB premiums vs gold ETF liquidity."},
+        {"turn": 7, "prompt": "I also have an urgent liquidity requirement: I will need ₹50 Lakh within the next 45 days for a property transaction. Update the plan.", "expectedBehavior": "Carves out ₹50 Lakh into ultra-short term debt / arbitrage funds with zero equity risk."},
+        {"turn": 8, "prompt": "How should I structure the remaining ₹1.5 Crore to maximize post-tax returns under the new tax regime?", "expectedBehavior": "Structures remaining ₹1.5 Cr across conservative hybrid, debt, and equity."},
+        {"turn": 9, "prompt": "Explain tax-loss harvesting and how it applies to our portfolio before March 31st.", "expectedBehavior": "Explains offsetting short/long term capital gains with harvested losses."},
+        {"turn": 10, "prompt": "Provide a complete final financial roadmap that reconciles all 10 turns: my conservative risk profile, the ₹50L short-term liquidity need, the ₹1.5 Cr allocation, and the updated LTCG tax rules.", "expectedBehavior": "Comprehensive final report integrating all constraints across all 10 turns."}
+      ]
+    }
+  ]
+}
+

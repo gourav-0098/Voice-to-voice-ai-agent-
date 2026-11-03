@@ -34,9 +34,9 @@ export class ToolRouter {
       };
     }
 
-    // 2. Current Time / Date: "what time is it", "current date", "time in London"
+    // 2. Current Time / Date: "what time is it", "current date", "what is today's date", "time in London"
     if (
-      /\b(what time is it|current time|current date|aaj kitni tarikh|aaj kya din|exact time|time now|kya time hua)\b/i.test(lower)
+      /\b(what time is it|current time|current date|today'?s date|todays date|what is today'?s date|what date is today|aaj kitni tarikh|aaj kya din|exact time|time now|kya time hua)\b/i.test(lower)
     ) {
       let locFormatted = "";
       const locMatch = lower.match(/\b(?:in|for|at)\s+([a-zA-Z\s]+)/i);
@@ -56,35 +56,57 @@ export class ToolRouter {
       };
     }
 
-    // 3. Currency Conversion: "100 usd to inr", "convert 50 dollars to rupees"
-    const currencyMatch = lower.match(/(?:convert\s+)?([\d.]+)\s*([a-zA-Z$€£¥]+)\s*(?:to|in|into)\s*([a-zA-Z$€£¥]+)/i);
+    // 3. Currency Conversion: "100 usd to inr", "convert 50 dollars to rupees", "100$ in inr", "convert $50 to euros"
+    const CURRENCY_SYMBOLS = ["$", "₹", "€", "£", "¥"];
+    const CURRENCY_CODES = new Set([
+      "usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf", "cny", "nzd", "sgd", "hkd", "krw", "aed", "sar", "sek", "nok", "brl", "zar", "mxn"
+    ]);
+    const CURRENCY_NAMES = new Set([
+      "dollar", "dollars", "cent", "cents", "rupee", "rupees", "rs", "paisa", "paise", "euro", "euros", "pound", "pounds", "yen", "dirham", "dirhams", "riyal", "riyals", "franc", "francs", "yuan", "peso", "pesos", ...CURRENCY_SYMBOLS
+    ]);
+
+    const isCurrencyUnit = (tok) => {
+      if (!tok) return false;
+      const t = tok.trim().toLowerCase();
+      return CURRENCY_CODES.has(t) || CURRENCY_NAMES.has(t) || CURRENCY_SYMBOLS.includes(t);
+    };
+
+    const currencyMatch = lower.match(/(?:(?:how\s+much\s+is\s+)?(?:convert\s+)?)(?:([$₹€£¥])\s*([\d.]+)|([\d.]+)\s*([a-zA-Z$₹€£¥]+))\s*(?:to|in|into)\s*(?:([$₹€£¥])\s*([a-zA-Z]+)|([a-zA-Z$₹€£¥]+))/i);
     if (currencyMatch) {
-      const amount = parseFloat(currencyMatch[1]);
-      const from = currencyMatch[2].trim().toUpperCase();
-      const to = currencyMatch[3].trim().toUpperCase();
-      if (!isNaN(amount)) {
+      const amountStr = currencyMatch[2] || currencyMatch[3];
+      const fromUnit = (currencyMatch[1] || currencyMatch[4] || "").trim();
+      const toUnit = (currencyMatch[5] || currencyMatch[6] || currencyMatch[7] || "").trim();
+      const amount = parseFloat(amountStr);
+
+      if (!isNaN(amount) && isCurrencyUnit(fromUnit) && isCurrencyUnit(toUnit)) {
         return {
           shouldRoute: true,
           directExecution: true,
           toolName: "currency_conversion",
-          args: { amount, from, to },
+          args: { amount, from: fromUnit.toUpperCase(), to: toUnit.toUpperCase() },
         };
       }
     }
 
-    // 4. Live Weather: "weather in Jaipur", "Jaipur ka weather kaisa hai", "delhi ka mausam", "temperature in London"
-    const weatherSuffixMatch = lower.match(/([a-zA-Z\s]+)\s+(?:ka mausam|ka weather|weather)/i);
-    const weatherPrefixMatch = lower.match(/(?:weather|temperature|forecast|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i);
-    const weatherMatch = weatherSuffixMatch || weatherPrefixMatch;
-    if (weatherMatch) {
-      let loc = weatherMatch[1].trim().replace(/\b(ka|ki|me|mein|today|aaj|kaisa|kaisi|hai|\?)\b/gi, "").trim();
-      if (loc.length > 2) {
-        return {
-          shouldRoute: true,
-          directExecution: true,
-          toolName: "get_weather",
-          args: { location: loc.charAt(0).toUpperCase() + loc.slice(1) },
-        };
+    // 4. Live Weather: "weather in Jaipur", "how is the weather in Paris today", "Jaipur ka weather kaisa hai", "delhi ka mausam", "temperature in London"
+    const isEconomicOrFinancial = /\b(gdp|inflation|cpi|wpi|growth|deficit|economic|economy|fiscal|repo|rbi|ministry|stock|share|market|valuation|revenue|sales|rate|forecast\s+has)\b/i.test(lower);
+    if (!isEconomicOrFinancial) {
+      let weatherMatch = null;
+      const prefixMatch = lower.match(/(?:weather(?:\s+forecast)?|temperature|mausam)\s+(?:in|of|at|for)\s+([a-zA-Z\s]+)/i);
+      const suffixMatch = lower.match(/([a-zA-Z\s]+)\s+(?:ka mausam|ka weather|weather)/i);
+      const genericPrefix = lower.match(/(?:weather(?:\s+forecast)?|temperature|mausam)\s+([a-zA-Z\s]+)/i);
+      weatherMatch = prefixMatch || suffixMatch || genericPrefix;
+      if (weatherMatch) {
+        let loc = weatherMatch[1].trim().replace(/\b(ka|ki|me|mein|today|aaj|kaisa|kaisi|hai|how is the|what is the|right now|now|currently|current|\?)\b/gi, "").trim();
+        if (loc.length > 2) {
+          const formattedLoc = loc.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+          return {
+            shouldRoute: true,
+            directExecution: true,
+            toolName: "get_weather",
+            args: { location: formattedLoc },
+          };
+        }
       }
     }
 
@@ -99,7 +121,7 @@ export class ToolRouter {
       };
     }
 
-    const companyMatch = lower.match(/\b(nvidia|nvda|meta|facebook|fb|apple|aapl|microsoft|msft|google|alphabet|googl|amazon|amzn|tesla|tsla|netflix|nflx|bitcoin|btc|ethereum|eth|reliance|tcs|hdfc|infosys|infy|tata motors|spy|qqq|voo)\b/i);
+    const companyMatch = lower.match(/\b(nvidia|nvda|meta|facebook|fb|apple|aapl|microsoft|msft|google|alphabet|googl|amazon|amzn|tesla|tsla|netflix|nflx|bitcoin|btc|ethereum|eth|solana|sol|doge|dogecoin|cardano|ada|xrp|ripple|reliance|tcs|hdfc|infosys|infy|tata motors|spy|qqq|voo)\b/i);
 
     // 6a. Market Capitalization / Company Valuation (Total Worth)
     // Matches: "NVIDIA market cap", "Apple company value", "facebook ki market value kya h aaj ki", "valuation of tesla"
@@ -114,8 +136,8 @@ export class ToolRouter {
     }
 
     // 6b. Live Per-Share Stock / Crypto Quote (Share Price)
-    // Matches: "NVIDIA stock price", "Bitcoin price", "tesla share price", "apple stock", "trading at"
-    const stockKeywords = /\b(stock price|share price|stock quote|stock|share|trading at|current price|price of|ka price|ke share ka price|ke stock ka price|ticker)\b/i;
+    // Matches: "NVIDIA stock price", "Bitcoin price", "tesla share price", "apple stock", "trading at", "24-hour change"
+    const stockKeywords = /\b(stock price|share price|stock quote|stock|share|trading at|current price|price of|ka price|ke share ka price|ke stock ka price|ticker|24-hour change|24h change|24 hour change)\b/i;
     const priceKeyword = /\bprice\b/i;
     if ((stockKeywords.test(lower) || priceKeyword.test(lower)) && companyMatch) {
       return {

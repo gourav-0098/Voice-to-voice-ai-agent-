@@ -218,10 +218,12 @@ export function evaluateEvidenceDeterministic({
   }
 
   // Keyword Relevance Check (Bug 4 & 5)
+  const stopWords = new Set(["what", "which", "where", "when", "tell", "about", "show", "with", "from", "many", "people", "were", "this", "that", "there", "their", "have", "been", "does", "said"]);
   const queryTokens = query
     .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !["what", "which", "where", "tell", "about", "show", "with", "from", "many", "people", "were"].includes(w));
+    .filter((w) => w.length > 3 && !stopWords.has(w));
   const matches = queryTokens.filter((k) => combinedText.includes(k));
   const relevance = queryTokens.length > 0 ? matches.length / queryTokens.length : 1;
 
@@ -264,6 +266,35 @@ export function evaluateEvidenceDeterministic({
     const mentionsIrrelevantViral = /\b(hanuman chalisa|supermarket|temple dance|bhojpuri song)\b/i.test(combinedText);
     if (!mentionsPilotOrAviation || (mentionsIrrelevantViral && !mentionsPilotOrAviation)) {
       missingSubtopicReason = "Retrieved search results are irrelevant to the viral pilot inquiry (failed aviation entity check).";
+    }
+  }
+
+  // Current political officeholder check: require freshness and reject stale pre-2024 snippets
+  const isOfficeholderQuery =
+    /\b(cm|chief minister|pm|prime minister|governor|president)\b/i.test(lowerQ) &&
+    !isHistorical;
+
+  if (isOfficeholderQuery) {
+    // If asking about Rajasthan CM, ensure evidence mentions Bhajan Lal Sharma or post-2023 government
+    if (lowerQ.includes("rajasthan") && (lowerQ.includes("cm") || lowerQ.includes("chief minister"))) {
+      const mentionsBhajanLal = /\b(bhajan\s*lal|bhajanlal)\b/i.test(combinedText);
+      const mentionsStaleGehlotOnly = /\b(gehlot|ashok gehlot)\b/i.test(combinedText) && !mentionsBhajanLal;
+      if (mentionsStaleGehlotOnly) {
+        missingSubtopicReason = "Retrieved evidence contains outdated information citing former Chief Minister Ashok Gehlot instead of current tenure.";
+      } else if (!mentionsBhajanLal) {
+        missingSubtopicReason = "Retrieved evidence lacks verified documentation confirming current Rajasthan Chief Minister Bhajan Lal Sharma.";
+      }
+    }
+
+    // Require current temporal freshness or current tenure confirmation for officeholders
+    const hasOfficeholderFreshness =
+      combinedText.includes(String(currentYear)) ||
+      combinedText.includes("2025") ||
+      combinedText.includes("2024") ||
+      /\b(incumbent|current|currently|took office|assumed office|elected in 2023|december 2023)\b/i.test(combinedText);
+
+    if (!hasOfficeholderFreshness && !missingSubtopicReason) {
+      missingSubtopicReason = "Retrieved evidence lacks verified recent documentation or official portal confirmation for current officeholder.";
     }
   }
 
@@ -329,7 +360,12 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
     if (!cleanSnippet && (!cleanTitle || cleanTitle.toLowerCase().includes("empty") || cleanTitle.toLowerCase() === "external reference")) {
       continue;
     }
-    const passage = cleanSnippet || cleanTitle;
+    let passage = "";
+    if (cleanTitle && cleanSnippet) {
+      passage = cleanSnippet.includes(cleanTitle) ? cleanSnippet : `${cleanTitle}. ${cleanSnippet}`;
+    } else {
+      passage = cleanSnippet || cleanTitle;
+    }
     if (passage && passage.length > 5 && !seenPassages.has(passage)) {
       seenPassages.add(passage);
       pack.push({

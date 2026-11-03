@@ -39,13 +39,18 @@ export function isFollowUpQuery(query = "") {
   if (!q) return false;
 
   const followUpTriggers = [
-    /^(?:tell me )?(?:the )?(?:full story|puri story|poori story|more details|aur batao|aur bataiye|detail me batao|aur kya hua|iske baad kya hua|what happened after that|what happened next|tell me more|what about that|explain that)\b/i,
-    /^(?:mujhe )?(?:puri|poori|full)\s+(?:story|stroy|kahani|details?)\s+(?:batao|bataiye|sunao)(?:\s+is\s+(?:topic|topc)\s+ki)?\b/i,
-    /^(?:mujhe )?(?:puri|poori|full)\s+(?:story|stroy|kahani|details?)\b/i,
-    /^(?:what happened|aur kya hua|fir kya hua|phir kya hua|uske baad kya hua)\b/i,
+    /^(?:tell me )?(?:the )?(?:full story|puri story|poori story|more details|aur batao|aur bataiye|detail me batao|aur kya hua|iske baad kya hua|what happened after that|what happened next|tell me more|what about that|explain that)$/i,
+    /^(?:mujhe )?(?:puri|poori|full)\s+(?:story|stroy|kahani|details?)\s+(?:batao|bataiye|sunao)(?:\s+is\s+(?:topic|topc)\s+ki)?$/i,
+    /^(?:mujhe )?(?:puri|poori|full)\s+(?:story|stroy|kahani|details?)$/i,
+    /^(?:what happened\??$|what happened (?:next|after that|then)\??$|aur kya hua\??$|fir kya hua\??$|phir kya hua\??$|uske baad kya hua\??$)/i,
     /^(?:what about|aur unka|unki|iska|uske)\s+[a-z0-9\s]+$/i,
-    /^(?:continue|carry on|aage bolo|aage batao)\b/i,
+    /^(?:continue|carry on|aage bolo|aage batao)$/i,
   ];
+
+  // If query is long and contains its own subject/date/entities, it is NOT an empty follow-up
+  if (q.split(/\s+/).length >= 4 && !/^(?:tell me |can you tell me )?(?:the )?(?:full|poori|puri) story\b/i.test(q)) {
+    return false;
+  }
 
   return followUpTriggers.some((re) => re.test(q));
 }
@@ -86,8 +91,12 @@ export function detectUserCorrection(query = "", currentTopic = null) {
     }
   }
 
-  // 2. Fact/Claim dispute: "No, that's not what happened", "Aisa nahi hua tha", "That's incorrect"
-  if (/^(?:no|nah|nahi)[,.\s]+(?:that's not what happened|that is not what happened|aisa nahi hua tha|not true|that is wrong|galat hai|you are wrong)\b/i.test(lower)) {
+  // 2. Fact/Claim dispute & Conversational Challenges: "No, that's not what happened", "WTF man who is the cm", "Are you sure?", "Wrong answer"
+  const isDirectDisputeOrChallenge =
+    /^(?:no|nah|nahi)[,.\s]+(?:that's not what happened|that is not what happened|aisa nahi hua tha|not true|that is wrong|galat hai|you are wrong)\b/i.test(lower) ||
+    /\b(?:wtf|what the heck|what the fuck|are you sure|are u sure|wrong answer|that answer is wrong|that is incorrect|galat bol rahe ho|galat hai|bilkul galat|ye galat hai|pakka pata hai|really\?)\b/i.test(lower);
+
+  if (isDirectDisputeOrChallenge) {
     return {
       isCorrection: true,
       invalidatedTopic: currentTopic,
@@ -123,9 +132,10 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
 
   if (!currentTopic && Array.isArray(history) && history.length > 0) {
     // Extract entity/topic from immediate prior user turn
-    const priorTurns = history.slice(-4).reverse();
+    const priorTurns = history.slice(-6).reverse();
     for (const turn of priorTurns) {
-      const priorText = turn.user || turn.query || turn.content || "";
+      if (turn.role && turn.role !== "user") continue;
+      const priorText = turn.text || turn.user || turn.query || turn.content || "";
       if (priorText && typeof priorText === "string") {
         const lowerPrior = priorText.toLowerCase();
         // Check for recognized major topics in prior turns
@@ -183,14 +193,25 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
         clarificationPrompt: null,
       };
     } else if (correction.isDisputedClaim) {
+      // Re-examine query directly from official records without reusing stale assistant answers
+      const cleanDispute = cleanQ
+        .replace(/\b(?:wtf|what the heck|what the fuck|are you sure|are u sure|wrong answer|that answer is wrong|man)\b/gi, "")
+        .replace(/[?.,!]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const resolved = cleanDispute && cleanDispute.length > 5
+        ? `${cleanDispute} verified official records`
+        : currentTopic ? `${currentTopic} official record verified facts` : cleanQ;
+
       return {
-        resolvedQuery: currentTopic ? `${currentTopic} official record disputed claim what actually happened` : cleanQ,
+        resolvedQuery: resolved,
         activeTopic: currentTopic,
         canonicalTopic,
         isFollowUp: true,
         isCorrection: true,
         isDisputedClaim: true,
-        invalidatedTopic: null,
+        invalidatedTopic: correction.invalidatedTopic,
         requiresClarification: false,
         clarificationPrompt: null,
       };
@@ -274,6 +295,7 @@ export function resolveTopicContinuity(query = "", topicState = null, history = 
       activeTopic: currentTopic,
       canonicalTopic,
       isFollowUp: true,
+      isCorrection: false,
       requiresClarification: false,
       clarificationPrompt: null,
     };

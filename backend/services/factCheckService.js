@@ -93,14 +93,35 @@ export function detectFallacies(text) {
  * @param {string} params.query - Spoken user or debate claim
  * @param {Object} [params.evidencePack] - Structured evidence pack from RAG
  * @param {Array} [params.qdrantResults] - Retrieved Qdrant items
+ * @param {boolean} [params.isDeterministicTool=false] - Whether turn was resolved by a deterministic tool
  * @returns {Promise<Object>}
  */
 export async function analyzeTurnFactCheck({
   query = "",
   evidencePack = null,
   qdrantResults = [],
+  isDeterministicTool = false,
 } = {}) {
   const tStart = performance.now();
+
+  // Fast bypass for deterministic tools (Date, Time, Math, Weather)
+  const isDateOrTimeOrMath =
+    isDeterministicTool ||
+    /\b(what time is it|current time|current date|today'?s date|todays date|what is today'?s date|what date is today|aaj kitni tarikh|aaj kya din|exact time)\b/i.test(query) ||
+    /^(?:what is |calculate |evaluate )?[\d.\s+\-*/()^%x]+$/i.test(query.trim());
+
+  if (isDateOrTimeOrMath) {
+    return {
+      credibilityScore: null,
+      verdict: "DETERMINISTIC_VERIFIED",
+      verdictLabel: "Deterministic Fact",
+      explanation: "Calculated or verified deterministically from system clock or math engine.",
+      fallacies: [],
+      citations: [],
+      latencyMs: Math.round(performance.now() - tStart),
+    };
+  }
+
   const fallacies = detectFallacies(query);
 
   // 1. Extract candidate citations from Evidence Pack or Qdrant results

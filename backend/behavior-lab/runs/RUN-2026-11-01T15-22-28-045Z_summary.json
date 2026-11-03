@@ -1,0 +1,15 @@
+{
+  "runId": "RUN-2026-11-01T15-22-28-045Z",
+  "timestamp": "2026-11-01T15:33:55.872Z",
+  "configuration": {
+    "setName": "challenges",
+    "timeoutMs": 90000
+  },
+  "stats": {
+    "totalExecuted": 31,
+    "successfulTurns": 29,
+    "timeouts": 0,
+    "errors": 0
+  },
+  "runJsonlFile": "C:\\Users\\gourav\\OneDrive\\Documents\\MAIN_IMP_SELF\\projects\\Speech_to_speech_ai\\backend\\behavior-lab\\runs\\RUN-2026-11-01T15-22-28-045Z.jsonl"
+}

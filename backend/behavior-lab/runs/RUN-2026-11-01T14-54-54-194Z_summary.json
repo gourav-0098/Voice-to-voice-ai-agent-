@@ -1,0 +1,15 @@
+{
+  "runId": "RUN-2026-11-01T14-54-54-194Z",
+  "timestamp": "2026-11-01T14:54:58.690Z",
+  "configuration": {
+    "setName": "general",
+    "questionId": "GI-L1-07"
+  },
+  "stats": {
+    "totalExecuted": 1,
+    "successfulTurns": 1,
+    "timeouts": 0,
+    "errors": 0
+  },
+  "runJsonlFile": "C:\\Users\\gourav\\OneDrive\\Documents\\MAIN_IMP_SELF\\projects\\Speech_to_speech_ai\\backend\\behavior-lab\\runs\\RUN-2026-11-01T14-54-54-194Z.jsonl"
+}

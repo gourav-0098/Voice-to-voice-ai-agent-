@@ -1,0 +1,18 @@
+{
+  "runId": "RUN-2026-10-31T19-37-52-325Z",
+  "timestamp": "2026-10-31T19:43:35.970Z",
+  "configuration": {
+    "setName": "search",
+    "level": "all",
+    "questionId": null,
+    "limit": null,
+    "timeoutMs": 45000
+  },
+  "stats": {
+    "totalExecuted": 20,
+    "successfulTurns": 20,
+    "timeouts": 0,
+    "errors": 0
+  },
+  "runJsonlFile": "C:\\Users\\gourav\\OneDrive\\Documents\\MAIN_IMP_SELF\\projects\\Speech_to_speech_ai\\backend\\behavior-lab\\runs\\RUN-2026-10-31T19-37-52-325Z.jsonl"
+}

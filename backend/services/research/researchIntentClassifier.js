@@ -19,6 +19,8 @@
 export const RESEARCH_INTENTS = {
   CONVERSATIONAL: "CONVERSATIONAL",
   CHITCHAT: "CHITCHAT",
+  CONVERSATIONAL_CONTROL: "CONVERSATIONAL_CONTROL",
+  CAPABILITY_INQUIRY: "CAPABILITY_INQUIRY",
   SIMPLE_FACT: "SIMPLE_FACT",
   CALCULATION: "CALCULATION",
   CURRENT_FACT: "CURRENT_FACT",
@@ -49,7 +51,58 @@ export function classifyResearchIntent(query = "") {
   const q = String(query || "").trim();
   const lower = q.toLowerCase();
 
-  // 0. CONVERSATIONAL: Casual greetings, pleasantries, identity questions, banter, empathy, gratitude
+  // 0. Conversational controls (language switch, speed, voice changes)
+  // Queries like: "talk to me in english", "speak in hindi", "hindi me bolo", "switch to english", "english please"
+  const isConversationalControl =
+    /\b(?:talk to me in|speak in|switch to|change language to|reply in|respond in|boliye|bolo)\s+(?:english|hindi|hinglish)\b/i.test(lower) ||
+    /\b(?:in english|in hindi|in hinglish)\s+(?:please|batao|bolo|talk|speak)\b/i.test(lower) ||
+    /\b(?:hindi\s+me\s+bolo|english\s+me\s+bolo|hindi\s+mein\s+baat\s+karo|english\s+mein\s+baat\s+karo)\b/i.test(lower) ||
+    /^(?:talk in english|talk in hindi|speak english|speak hindi|switch language)\b/i.test(lower);
+
+  if (isConversationalControl) {
+    const targetLang = /\b(?:hindi)\b/i.test(lower) ? "hindi" : /\b(?:hinglish)\b/i.test(lower) ? "hinglish" : "english";
+    return {
+      intent: RESEARCH_INTENTS.CONVERSATIONAL_CONTROL,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: false,
+      dimensions: ["conversational_control"],
+      control: { action: "CHANGE_LANGUAGE", language: targetLang },
+    };
+  }
+
+  // 0a. Identity questions (Who are you, what is your name) -> CHITCHAT
+  if (/\b(?:who are you|what is your name|tum kaun ho|aap kaun ho)\b/i.test(lower)) {
+    return {
+      intent: RESEARCH_INTENTS.CHITCHAT,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: false,
+      dimensions: ["conversational_reply"],
+    };
+  }
+
+  // 0b. Capability Inquiry (Chatly self-capabilities, supported languages, feature set)
+  // Queries like: "what u can do now for me", "what can you do", "what languages do you speak", "supported languages"
+  const isCapabilityPattern =
+    /\b(?:what (?:u|you) can do|what can (?:u|you) do|what are your capabilities|what are your features|how can you help|kya kar sakte ho|kya kya kar sakte ho)\b/i.test(lower) ||
+    /\b(?:what languages? (?:can|do) (?:u|you) (?:speak|support)|which languages? (?:can|do) (?:u|you) (?:speak|support)|supported languages?|languages? supported|bhashaen|kaunsi bhasha)\b/i.test(lower) ||
+    /^(?:what u can do now for me|what can you do for me|what can you do now|what are you capable of)\b/i.test(lower);
+
+  if (isCapabilityPattern) {
+    return {
+      intent: RESEARCH_INTENTS.CAPABILITY_INQUIRY,
+      confidence: 0.99,
+      requiresDeepResearch: false,
+      requiresSearch: false,
+      requiresCurrentDate: false,
+      dimensions: ["application_capabilities"],
+    };
+  }
+
+  // 0c. CONVERSATIONAL: Casual greetings, pleasantries, identity questions, banter, empathy, gratitude
   // Queries like: "so hello how are you smile me", "hi how are you", "kya haal hai", "namaste", "thank you", "who are you"
   // These DO NOT need web search or deep research — they should receive direct natural conversational replies in <300ms!
   const isConversationalPattern =
@@ -86,10 +139,13 @@ export function classifyResearchIntent(query = "") {
   }
 
   // 0b. WEATHER: Live weather/temperature requests
+  const isEconomicOrFinancial = /\b(gdp|inflation|cpi|wpi|growth|deficit|economic|economy|fiscal|repo|rbi|ministry|stock|share|market|valuation|revenue|sales)\b/i.test(lower);
   if (
-    /\b(weather|temperature|forecast|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i.test(lower) ||
-    /([a-zA-Z\s]+)\s+(?:ka mausam|weather)/i.test(lower) ||
-    /\b(barish hogi|kitni garmi hai|aaj ka mausam)\b/i.test(lower)
+    !isEconomicOrFinancial && (
+      /\b(weather(?:\s+forecast)?|temperature|mausam)\s+(?:in|of|at|for)?\s*([a-zA-Z\s]+)/i.test(lower) ||
+      /([a-zA-Z\s]+)\s+(?:ka mausam|weather)/i.test(lower) ||
+      /\b(barish hogi|kitni garmi hai|aaj ka mausam)\b/i.test(lower)
+    )
   ) {
     return {
       intent: RESEARCH_INTENTS.WEATHER,
@@ -173,11 +229,21 @@ export function classifyResearchIntent(query = "") {
   }
 
   // Temporal Need Detection: Determine if query requires live current-year anchoring
-  const hasExplicitCurrentTrigger =
-    /\b(latest|current|today|this month|this year|recent|new|upcoming|now|best now|as of|right now)\b/i.test(lower) ||
-    /\b(current ceo|current president|who is currently|who is the current|stock price|market cap|exchange rate|live score)\b/i.test(lower);
   const hasExplicitPastPeriod =
-    /\b(in (?:18\d\d|19\d\d|20[01]\d|202[0-5])|century|ancient|medieval|ww1|ww2|world war|dynasty|empire|historic|pact|treaty|assassinated|born in|died in|killed in)\b/i.test(lower);
+    /\b(in (?:18\d\d|19\d\d|20[01]\d|202[0-5])|century|ancient|medieval|ww1|ww2|world war|dynasty|empire|historic|pact|treaty|assassinated|born in|died in|killed in|first cm|first pm|former|past)\b/i.test(lower) ||
+    /\bwho was\b/i.test(lower);
+
+  const isCurrentOfficeholderQuery =
+    !hasExplicitPastPeriod && (
+      /\b(?:who is the|who is|kon hai|kaun hai)\s+(?:current\s+)?(?:cm|chief minister|pm|prime minister|governor|president|cabinet minister|finance minister|home minister|defence minister)\b/i.test(lower) ||
+      /\b(?:cm|chief minister|pm|prime minister|governor|president)\s+of\s+[a-zA-Z\s]+\b/i.test(lower)
+    );
+
+  const hasExplicitCurrentTrigger =
+    isCurrentOfficeholderQuery ||
+    /\b(latest|current|today|this month|this year|recent|recently|new|upcoming|now|best now|as of|right now|fy\s*202[6-9]|2026)\b/i.test(lower) ||
+    /\b(current ceo|current president|who is currently|who is the current|stock price|market cap|exchange rate|live score)\b/i.test(lower);
+
   const requiresCurrentDate = hasExplicitCurrentTrigger && !hasExplicitPastPeriod;
 
   // 1. CALCULATION
@@ -252,7 +318,7 @@ export function classifyResearchIntent(query = "") {
 
   // 5. TECHNICAL_RESEARCH: protocols, networking, real-time architectures, codecs, audio pipelines
   const isTechnicalArchitecture = /\b(webrtc|websocket|http streaming|sse|server-sent events|grpc|rest api|codec|opus|pcm|g\.711|jitter|barge-in|aec|echo cancellation|packet loss|tcp|udp|quic|tls|latency optimization|time-to-first-audio|ttfa|full duplex)\b/i.test(lower);
-  const isComparisonWords = /\b(vs|versus|compare|comparison|difference between|pros and cons|which is better|architectures|tradeoffs|trade-offs)\b/i.test(lower);
+  const isComparisonWords = /\b(vs|versus|compare|comparison|difference between|distinguish|pros and cons|which is better|architectures|tradeoffs|trade-offs)\b/i.test(lower);
 
   if (isTechnicalArchitecture && (isComparisonWords || /\b(how does|architecture|production|implementation|protocol)\b/i.test(lower))) {
     return {
@@ -311,15 +377,17 @@ export function classifyResearchIntent(query = "") {
     };
   }
 
-  // 9. CURRENT_FACT: single entity current status, leadership, stock price, single model status
+  // 9. CURRENT_FACT: single entity current status, leadership, officeholders, stock price, single model status
   if (
+    isCurrentOfficeholderQuery ||
     /\b(current ceo|who is the ceo|current price|stock price|market cap|founder of|net worth|headquarters)\b/i.test(lower) ||
     (/\b(who is the current|what is the latest)\b/i.test(lower) && !isComparisonWords)
   ) {
     return {
       intent: RESEARCH_INTENTS.CURRENT_FACT,
-      confidence: 0.88,
+      confidence: 0.90,
       requiresDeepResearch: false,
+      requiresSearch: true,
       requiresCurrentDate: true,
       dimensions: ["current_entity_value"],
     };

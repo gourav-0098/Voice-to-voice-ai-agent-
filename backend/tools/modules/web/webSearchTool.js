@@ -137,12 +137,7 @@ export const webSearchTool = {
     }
 
     if (!results || results.length === 0) {
-      const emptyPayload = {
-        query,
-        results: [],
-        retrievedAt: new Date().toISOString(),
-      };
-      toolCache.set("search", query, emptyPayload, 60);
+      // Do not cache empty or failed search results to prevent transient provider throttling from blackholing retries
       return normalizeSearchResult({}, query);
     }
 

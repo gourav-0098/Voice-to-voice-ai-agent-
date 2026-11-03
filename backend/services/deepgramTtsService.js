@@ -151,6 +151,7 @@ export async function generateSpeech(text, voiceModel = MODEL_NAME) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text: cleanText }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

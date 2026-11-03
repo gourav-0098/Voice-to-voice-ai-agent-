@@ -1,0 +1,479 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "name": "Chatly Behavior Lab - Search Mode & Research Question Set",
+    "description": "Evaluates Chatly's live autonomous SEARCH mode, query planning, evidence gating, temporal grounding (2026 anchor), source authority, and synthesis across five difficulty tiers.",
+    "defaultMode": "SEARCH",
+    "defaultEffort": "MEDIUM",
+    "totalItems": 35
+  },
+  "questions": [
+    {
+      "id": "SM-L1-01",
+      "level": 1,
+      "difficulty": "EASY_CURRENT_FACTS",
+      "category": "officeholder",
+      "name": "Current Chief Minister of Rajasthan",
+      "prompt": "Who is the current Chief Minister of Rajasthan?",
+      "expectedFactId": "FACT-RAJASTHAN-CM-CURRENT",
+      "expectedBehavior": "Correctly names Bhajan Lal Sharma. Rejects stale 2023 snippets naming Ashok Gehlot.",
+      "rubric": {
+        "requiredEntity": "Bhajan Lal Sharma",
+        "forbiddenEntity": "Ashok Gehlot is the current"
+      }
+    },
+    {
+      "id": "SM-L1-02",
+      "level": 1,
+      "difficulty": "EASY_CURRENT_FACTS",
+      "category": "monetary_policy",
+      "name": "Latest RBI Policy Repo Rate",
+      "prompt": "What is the latest officially announced RBI policy repo rate?",
+      "expectedFactId": "FACT-RBI-REPO-2026-10",
+      "expectedBehavior": "States 5.50% from the October 2026 MPC meeting (or latest official MPC decision). Must cite RBI or official policy announcement.",
+      "rubric": {
+        "expectedRate": "5.50%"
+      }
+    },
+    {
+      "id": "SM-L1-03",
+      "level": 1,
+      "difficulty": "EASY_CURRENT_FACTS",
+      "category": "ai_announcements",
+      "name": "Latest Major AI Announcements",
+      "prompt": "What are the latest major AI announcements from OpenAI and Google DeepMind?",
+      "expectedFactId": "FACT-OPENAI-ANNOUNCEMENTS-LATEST",
+      "expectedBehavior": "Cites recent frontier models and announcements (e.g. Gemini 4 Carbon / Genie 4 for Google DeepMind; Intelligent UI / GPT-6.1 Sol / DevDay persistent agents for OpenAI). Avoids stale 2023/2024 news.",
+      "rubric": {
+        "mustCoverBoth": true
+      }
+    },
+    {
+      "id": "SM-L1-04",
+      "level": 1,
+      "difficulty": "EASY_CURRENT_FACTS",
+      "category": "macro_statistics",
+      "name": "Latest Indian CPI Inflation & Reporting Month",
+      "prompt": "What is the latest published Indian CPI retail inflation figure, and which month does it describe?",
+      "expectedFactId": "FACT-CPI-INFLATION-LATEST",
+      "expectedBehavior": "Identifies September 2026 inflation at 5.54% (released October 2026 by MoSPI). Explicitly clarifies that October 2026 inflation is not yet published.",
+      "rubric": {
+        "expectedRate": "5.54%",
+        "expectedMonth": "September 2026"
+      }
+    },
+    {
+      "id": "SM-L2-01",
+      "level": 2,
+      "difficulty": "MEDIUM_PRECISE_DATA",
+      "category": "monetary_policy_precision",
+      "name": "RBI Repo Rate Decision Date & Stance",
+      "prompt": "What repo rate did the RBI announce in its latest monetary policy decision? Give the decision date, rate, policy stance, and primary source.",
+      "expectedFactId": "FACT-RBI-REPO-2026-10",
+      "expectedBehavior": "Provides exact decision date (October 7, 2026), rate (5.50%), stance ('calibrated tightening'), and cites RBI MPC statement.",
+      "rubric": {
+        "requiredDetails": [
+          "October 7, 2026",
+          "5.50%",
+          "calibrated tightening",
+          "RBI"
+        ]
+      }
+    },
+    {
+      "id": "SM-L2-02",
+      "level": 2,
+      "difficulty": "MEDIUM_PRECISE_DATA",
+      "category": "inflation_precision",
+      "name": "CPI Inflation Breakdown & Source",
+      "prompt": "What was India's most recently reported CPI inflation rate? Specify the reporting month, headline percentage, food inflation rate, and statistical publishing authority.",
+      "expectedFactId": "FACT-CPI-INFLATION-LATEST",
+      "expectedBehavior": "Distinguishes headline CPI (5.54% for September 2026) and food inflation (CFPI ~7.74%). Cites NSO/MoSPI as publishing authority.",
+      "rubric": {
+        "requireMonth": "September 2026",
+        "requireAuthority": "MoSPI"
+      }
+    },
+    {
+      "id": "SM-L2-03",
+      "level": 2,
+      "difficulty": "MEDIUM_PRECISE_DATA",
+      "category": "gdp_forecast_distinction",
+      "name": "Finance Ministry vs RBI GDP Forecast Distinction",
+      "prompt": "What GDP growth forecast has India's Finance Ministry most recently published for FY 2026-27? Distinguish the ministry's estimate from the RBI's forecast.",
+      "expectedFactId": "FACT-MOF-GDP-FY27",
+      "expectedBehavior": "Explicitly distinguishes the Ministry of Finance forecast (7.3% in Monthly Economic Review October 2026) from the RBI's projection (7.1%).",
+      "rubric": {
+        "mofForecast": "7.3%",
+        "rbiForecast": "7.1%",
+        "mustDistinguish": true
+      }
+    },
+    {
+      "id": "SM-L2-04",
+      "level": 2,
+      "difficulty": "MEDIUM_PRECISE_DATA",
+      "category": "forex_precision",
+      "name": "Forex Reserves Figure & Date",
+      "prompt": "What is India's latest available foreign-exchange reserve figure from the RBI? State the exact observation date and reporting units.",
+      "expectedFactId": "FACT-FOREX-RESERVES-LATEST",
+      "expectedBehavior": "Cites ~$719.75 billion for the week ended October 23, 2026 (or $721.02 billion for October 16) from RBI WSS.",
+      "rubric": {
+        "unit": "USD billion",
+        "requiresDate": true
+      }
+    },
+    {
+      "id": "SM-L2-05",
+      "level": 2,
+      "difficulty": "MEDIUM_PRECISE_DATA",
+      "category": "fx_benchmark",
+      "name": "USD/INR Benchmark Quote Convention",
+      "prompt": "What is the latest published USD/INR reference rate convention available from authoritative Indian market sources? State the benchmark administrator and quote convention.",
+      "expectedFactId": "FACT-USD-INR-REFERENCE",
+      "expectedBehavior": "Names FBIL (Financial Benchmarks India Pvt Ltd) / RBI. Identifies quote convention as INR per 1 USD.",
+      "rubric": {
+        "administrator": "FBIL",
+        "convention": "INR per USD"
+      }
+    },
+    {
+      "id": "SM-L3-01",
+      "level": 3,
+      "difficulty": "HARD_MULTI_SOURCE",
+      "category": "multi_source_macro",
+      "name": "Three-Way GDP Growth Forecast Comparison",
+      "prompt": "Compare the latest Indian GDP growth forecasts for FY 2026-27 from the Ministry of Finance, the Reserve Bank of India (RBI), and the IMF. Explain why their projections differ and state the reporting period and underlying assumptions.",
+      "expectedBehavior": "Compares MoF (7.3%), RBI (7.1%), and IMF (~6.5%-6.8%). Analyzes differences in consumption assumptions, inflation dampening, and global trade headwinds.",
+      "rubric": {
+        "mustCoverAllThree": [
+          "Ministry of Finance",
+          "RBI",
+          "IMF"
+        ],
+        "mustProvideReasons": true
+      }
+    },
+    {
+      "id": "SM-L3-02",
+      "level": 3,
+      "difficulty": "HARD_MULTI_SOURCE",
+      "category": "monetary_policy_evolution",
+      "name": "RBI Policy Shift Comparison",
+      "prompt": "Compare the RBI's latest monetary policy decision in October 2026 with its previous decision. Explain the change in the repo rate, the policy stance, and the official rationale stated by Governor Shaktikanta Das.",
+      "expectedBehavior": "Explains rate hike from 5.25% to 5.50% (+25 bps), stance shift from 'neutral' to 'calibrated tightening', and rationale (resurging food inflation, global crude volatility).",
+      "rubric": {
+        "mustContrastPrevious": true,
+        "stanceChange": "calibrated tightening"
+      }
+    },
+    {
+      "id": "SM-L3-03",
+      "level": 3,
+      "difficulty": "HARD_MULTI_SOURCE",
+      "category": "frontier_ai_comparison",
+      "name": "OpenAI vs Google DeepMind Recent Announcements",
+      "prompt": "Compare the major frontier AI model announcements from OpenAI and Google DeepMind in late 2026. Distinguish confirmed releases from research previews, and evaluate their stated capabilities in coding and agentic workflows.",
+      "expectedBehavior": "Evaluates Google DeepMind's Gemini 4 Carbon / Genie 4 against OpenAI's GPT-6.1 Sol / DevDay persistent agents. Distinguishes live developer access from preview features.",
+      "rubric": {
+        "mustCoverBoth": true,
+        "mustDistinguishPreviewFromRelease": true
+      }
+    },
+    {
+      "id": "SM-L3-04",
+      "level": 3,
+      "difficulty": "HARD_MULTI_SOURCE",
+      "category": "officeholder_corroboration",
+      "name": "Political Officeholder Official Verification",
+      "prompt": "Investigate who currently holds the office of Chief Minister of Rajasthan. Provide evidence from an official government source and independent news corroboration, explaining when they took office.",
+      "expectedFactId": "FACT-RAJASTHAN-CM-CURRENT",
+      "expectedBehavior": "Verifies Bhajan Lal Sharma using official state portal (rajasthan.gov.in) and independent corroboration. Mentions assumption of office in December 2023 and constituency (Sanganer).",
+      "rubric": {
+        "primarySource": "rajasthan.gov.in",
+        "correctIncumbent": "Bhajan Lal Sharma"
+      }
+    },
+    {
+      "id": "SM-L4-01",
+      "level": 4,
+      "difficulty": "VERY_HARD_COMPLEX_RESEARCH",
+      "category": "chronological_timeline",
+      "name": "Dated Timeline of Indian Monetary Policy & Inflation",
+      "prompt": "Construct a dated chronological timeline of India's monetary-policy decisions and CPI retail inflation readings from July 2026 to October 2026. Use primary data sources (RBI & MoSPI) where available.",
+      "expectedBehavior": "Produces a clean chronological timeline linking monthly inflation releases (July, August at 4.83%, September at 5.54%) to RBI MPC policy decisions and rate adjustments in October 2026.",
+      "rubric": {
+        "requireChronological": true,
+        "sources": [
+          "RBI",
+          "MoSPI"
+        ]
+      }
+    },
+    {
+      "id": "SM-L4-02",
+      "level": 4,
+      "difficulty": "VERY_HARD_COMPLEX_RESEARCH",
+      "category": "disputed_claim_investigation",
+      "name": "Current Disputed Claim Investigation",
+      "prompt": "Investigate the claim: 'India's October 2026 CPI inflation has breached 7.5% due to catastrophic crop damage.' Trace whether this claim is supported by official MoSPI data, a forecast, or unsubstantiated speculation.",
+      "expectedBehavior": "Identifies that official October 2026 CPI inflation is NOT released yet (scheduled Nov 12, 2026). Flags the claim as unverified speculation, noting September 2026 inflation was 5.54% with food inflation at 7.74%.",
+      "rubric": {
+        "unmaskSpeculation": true,
+        "stateOfficialReleaseDate": "November 12, 2026"
+      }
+    },
+    {
+      "id": "SM-L4-03",
+      "level": 4,
+      "difficulty": "VERY_HARD_COMPLEX_RESEARCH",
+      "category": "multipart_affairs",
+      "name": "Four-Part Economic State of the Nation Inquiry",
+      "prompt": "Provide verified, source-backed answers for all four subquestions: 1) What is the current RBI repo rate? 2) What was September 2026 CPI inflation? 3) What is India's latest forex reserve figure? 4) What is the Finance Ministry's latest FY 2026-27 GDP growth forecast?",
+      "expectedBehavior": "Answers all 4 parts accurately with individual sources: 1) 5.50% (RBI), 2) 5.54% (MoSPI), 3) ~$719.75B (RBI WSS), 4) 7.3% (Ministry of Finance). Zero omissions.",
+      "rubric": {
+        "mustCoverAll4Parts": true
+      }
+    },
+    {
+      "id": "SM-L5-01",
+      "level": 5,
+      "difficulty": "MAX_DEEP_RESEARCH",
+      "category": "comprehensive_macro_synthesis",
+      "name": "Comprehensive Macroeconomic Outlook Synthesis FY 2026-27",
+      "prompt": "Synthesize a comprehensive research report on India's economic outlook for FY 2026-27. You must include:\n1. GDP growth projections from Ministry of Finance (7.3%), RBI (7.1%), and IMF, explaining key variance drivers.\n2. Current monetary policy stance, repo rate (5.50%), SDF, and MSF levels with dates.\n3. Retail inflation trajectory (September 2026 headline at 5.54%, food inflation at 7.74%, RBI full-year projection at 5.2%).\n4. Foreign exchange reserves status and valuation trends in October 2026.\n5. Major external risks (oil, global supply chain, geopolitical) cited by official bodies.\nCite specific authoritative sources for each section and state remaining uncertainties.",
+      "expectedBehavior": "Deep, structured multi-section synthesis integrating official government, central bank, and multilateral data. Cites exact figures, dates, and units without hallucinating or mixing historical years.",
+      "rubric": {
+        "mustCoverAll5Sections": true,
+        "requireAuthoritativeSources": true
+      }
+    },
+    {
+      "id": "SM-L5-02",
+      "level": 5,
+      "difficulty": "MAX_DEEP_RESEARCH",
+      "category": "multi_lab_frontier_ai_brief",
+      "name": "Frontier AI Landscape Brief Late-2026",
+      "prompt": "Prepare an in-depth research brief on major late-2026 frontier AI developments across OpenAI, Google DeepMind, Anthropic, and open-source models. For each organization, detail: confirmed product announcements, technical architecture shifts (e.g. agentic loops, dynamic UIs, world simulation), benchmark achievements, and documented safety/alignment policies (e.g. unified robots.txt training opt-out standards).",
+      "expectedBehavior": "Exhaustive multi-lab comparison separating marketing hype from verifiable technical announcements. Cites primary newsroom and research blog announcements.",
+      "rubric": {
+        "mustCoverMultipleLabs": true,
+        "distinguishHypeFromFact": true
+      }
+    },
+    {
+      "id": "SM-L5-03",
+      "level": 5,
+      "difficulty": "MAX_DEEP_RESEARCH",
+      "category": "source_quality_challenge",
+      "name": "Source Quality & SEO Decontamination Challenge",
+      "prompt": "Who is the current Governor of the Reserve Bank of India, when was their term last extended or reaffirmed, and what were the primary policy pronouncements made at the October 2026 MPC meeting? Cite the primary RBI source and disregard third-party blog aggregators.",
+      "expectedBehavior": "Identifies Shaktikanta Das as Governor. References official RBI governor statement from October 7, 2026 MPC press conference. Rejects outdated or unverified blog rumors.",
+      "rubric": {
+        "governor": "Shaktikanta Das",
+        "primarySource": "RBI"
+      }
+    },
+    {
+      "id": "SM-L5-04",
+      "level": 5,
+      "difficulty": "MAX_DEEP_RESEARCH",
+      "category": "recovery_and_adaptive_search",
+      "name": "Disputed Officeholder & Historical Lineage Recovery",
+      "prompt": "Explain the full lineage of Chief Ministers of Rajasthan from 2018 to the present day in 2026. Specify each Chief Minister's political party, exact tenure dates, and identify the current incumbent with primary state portal verification.",
+      "expectedBehavior": "Traces Ashok Gehlot (INC, Dec 2018 - Dec 2023) to Bhajan Lal Sharma (BJP, Dec 2023 - present 2026). Correctly differentiates past tenure from current incumbency.",
+      "rubric": {
+        "coversGehlot": true,
+        "coversSharma": true,
+        "currentIsSharma": true
+      }
+    },
+    {
+      "id": "SM-L2-06",
+      "level": 2,
+      "difficulty": "MEDIUM",
+      "category": "monetary_policy",
+      "name": "RBI Policy Repo Rate",
+      "prompt": "What is the current policy repo rate decided by the Reserve Bank of India (RBI)?",
+      "expectedFactId": "FACT-RBI-REPO-2026-10",
+      "expectedBehavior": "Conducts web search and states verified repo rate (5.50% / 6.50% per reference).",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L2-07",
+      "level": 2,
+      "difficulty": "MEDIUM",
+      "category": "space_exploration",
+      "name": "ISRO Gaganyaan Mission Status",
+      "prompt": "What is the latest status and timeline for ISRO's Gaganyaan uncrewed test flight and crewed mission?",
+      "expectedBehavior": "Searches official ISRO mission updates and describes current status of uncrewed test missions.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L3-05",
+      "level": 3,
+      "difficulty": "HARD",
+      "category": "economic_forecasting",
+      "name": "IMF vs World Bank India GDP Forecast",
+      "prompt": "Compare the latest GDP growth projections for India published by the IMF and the World Bank.",
+      "expectedBehavior": "Identifies both IMF and World Bank official projections (approx 6.5%-7.2% range).",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L3-06",
+      "level": 3,
+      "difficulty": "HARD",
+      "category": "officeholder_verification",
+      "name": "Chief Election Commissioner Verification",
+      "prompt": "Who is the current Chief Election Commissioner of India?",
+      "expectedFactId": "FACT-CEC-INDIA",
+      "expectedBehavior": "Accurately identifies current Chief Election Commissioner Rajiv Kumar.",
+      "rubric": {
+        "requiredEntity": "Rajiv Kumar",
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L3-07",
+      "level": 3,
+      "difficulty": "HARD",
+      "category": "officeholder_verification",
+      "name": "ISRO Chairman Verification",
+      "prompt": "Who is the current Chairman of ISRO?",
+      "expectedFactId": "FACT-ISRO-CHAIRMAN",
+      "expectedBehavior": "Accurately identifies current ISRO Chairman S. Somanath.",
+      "rubric": {
+        "requiredEntity": "Somanath",
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L3-08",
+      "level": 3,
+      "difficulty": "HARD",
+      "category": "energy_transition",
+      "name": "India Renewable Energy Milestone",
+      "prompt": "What is India's official renewable energy installed capacity target for 2030 as reported by the MNRE?",
+      "expectedFactId": "FACT-INDIA-RENEWABLE-TARGET",
+      "expectedBehavior": "States 500 GW non-fossil capacity by 2030.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L4-04",
+      "level": 4,
+      "difficulty": "VERY_HARD",
+      "category": "cross_source_reconciliation",
+      "name": "IEA vs OPEC Global Oil Demand Divergence",
+      "prompt": "Explain the key divergence between the International Energy Agency (IEA) and OPEC in their medium-term global oil demand projections.",
+      "expectedBehavior": "Synthesizes the difference: IEA projects peak oil demand this decade driven by renewables/EV adoption, whereas OPEC projects sustained growth.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L4-05",
+      "level": 4,
+      "difficulty": "VERY_HARD",
+      "category": "regulatory_compliance",
+      "name": "EU AI Act Implementation Timeline",
+      "prompt": "What are the major compliance deadlines under the European Union AI Act for prohibited AI practices and high-risk AI systems?",
+      "expectedBehavior": "Outlines phased timeline: 6 months for prohibited practices, 12 months for GPAI models, 24-36 months for high-risk obligations.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L4-06",
+      "level": 4,
+      "difficulty": "VERY_HARD",
+      "category": "geopolitical_technology",
+      "name": "Global Semiconductor Export Restrictions",
+      "prompt": "Summarize the coordinated semiconductor manufacturing equipment export controls involving the United States, Netherlands (ASML), and Japan.",
+      "expectedBehavior": "Identifies restriction on advanced DUV immersion lithography and EUV systems to control advanced node capabilities.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L4-07",
+      "level": 4,
+      "difficulty": "VERY_HARD",
+      "category": "timeline_reconstruction",
+      "name": "OpenAI and Anthropic Model Safety Standards Evolution",
+      "prompt": "Reconstruct how frontier AI developers have updated their public safety frameworks, specifically OpenAI's Preparedness Framework and Anthropic's Responsible Scaling Policy (RSP).",
+      "expectedBehavior": "Details tiered biological/cyber risk thresholds (ASL levels, Capability thresholds) and governance boards.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L5-05",
+      "level": 5,
+      "difficulty": "EXPERT",
+      "category": "trade_policy",
+      "name": "EU Carbon Border Adjustment Mechanism (CBAM)",
+      "prompt": "Analyze the mechanisms of the EU Carbon Border Adjustment Mechanism (CBAM) and its specific trade implications for energy-intensive exports from developing nations like India.",
+      "expectedBehavior": "Explains carbon certificate purchase matching EU ETS price and impact on steel, aluminum, and cement exports.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L5-06",
+      "level": 5,
+      "difficulty": "EXPERT",
+      "category": "ai_architectures",
+      "name": "DeepSeek Reasoning Architecture Innovations",
+      "prompt": "Explain the architectural and algorithmic innovations behind DeepSeek's recent models, specifically Multi-Head Latent Attention (MLA) and DeepSeekMoE.",
+      "expectedBehavior": "Explains low-rank key-value joint compression (MLA) to reduce KV cache size and fine-grained experts with isolated shared experts in DeepSeekMoE.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L5-07",
+      "level": 5,
+      "difficulty": "EXPERT",
+      "category": "inflation_dynamics",
+      "name": "India CPI Food vs Core Inflation Divergence",
+      "prompt": "Examine the recent dynamics of headline CPI inflation in India, contrasting food inflation volatility against core inflation stability.",
+      "expectedFactId": "FACT-CPI-INFLATION-LATEST",
+      "expectedBehavior": "Contrasts vegetable/pulses supply-side food spikes with benign core inflation.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L5-08",
+      "level": 5,
+      "difficulty": "EXPERT",
+      "category": "international_treaties",
+      "name": "India-UK Free Trade Agreement Status",
+      "prompt": "What are the primary sticking points currently being negotiated in the proposed India-United Kingdom Free Trade Agreement (FTA)?",
+      "expectedBehavior": "Identifies mobility/visas for Indian professionals, tariff cuts on scotch whisky and electric vehicles, and rules of origin.",
+      "rubric": {
+        "minCitations": 1
+      }
+    },
+    {
+      "id": "SM-L5-09",
+      "level": 5,
+      "difficulty": "EXPERT",
+      "category": "astrophysics",
+      "name": "JWST High-Redshift Galaxy Discoveries",
+      "prompt": "Synthesize how observations from the James Webb Space Telescope (JWST) of massive high-redshift galaxies at z > 10 have challenged standard cosmological galaxy formation models.",
+      "expectedBehavior": "Explains observed galaxies (like JADES-GS-z14-0) are brighter and more massive than standard Lambda-CDM stellar assembly models predicted.",
+      "rubric": {
+        "minCitations": 1
+      }
+    }
+  ]
+}

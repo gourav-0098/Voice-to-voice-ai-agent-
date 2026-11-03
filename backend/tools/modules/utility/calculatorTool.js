@@ -134,9 +134,9 @@ export function computeExpression(rawInput) {
       };
     }
 
-    // 2. Percentages ("18% of 4500" -> "(18 / 100 * 4500)")
-    expr = expr.replace(/([\d.]+)%\s*of\s*([\d.]+)/gi, "($1 / 100 * $2)");
-    expr = expr.replace(/([\d.]+)%/g, "($1 / 100)");
+    // 2. Percentages ("18% of 4500" -> "(18 / 100 * 4500)", "15 percent of 480" -> "(15 / 100 * 480)")
+    expr = expr.replace(/([\d.]+)\s*(?:%|\bpercent\b|\bpercentage\b)\s*of\s*([\d.]+)/gi, "($1 / 100 * $2)");
+    expr = expr.replace(/([\d.]+)\s*(?:%|\bpercent\b|\bpercentage\b)/gi, "($1 / 100)");
 
     // 3. Word transformations
     expr = expr

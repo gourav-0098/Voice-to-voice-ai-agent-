@@ -1,0 +1,266 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2026-11-01T00:20:00.000Z",
+    "description": "Independently verified real-world facts for Chatly Behavior Lab benchmark evaluations (October/November 2026 temporal anchor).",
+    "totalFacts": 13
+  },
+  "facts": [
+    {
+      "id": "FACT-RBI-REPO-2026-10",
+      "question": "What is the latest officially announced RBI policy repo rate?",
+      "expectedValue": "5.50%",
+      "acceptableRange": [
+        "5.50%",
+        "5.5%",
+        "5.50 percent",
+        "5.5 percent",
+        "five point five zero",
+        "five point five percent"
+      ],
+      "unit": "Percentage per annum",
+      "reportingPeriod": "Effective from October 7, 2026 (Monetary Policy Committee Resolution)",
+      "publicationDate": "2026-10-07",
+      "sourceTitle": "Monetary Policy Statement, 2026-27: Resolution of the Monetary Policy Committee (MPC) - Reserve Bank of India",
+      "sourceUrl": "https://www.rbi.org.in",
+      "checkedTimestamp": "2026-11-01T00:19:25.000Z",
+      "category": "policy_decision",
+      "qualifications": "Increased by 25 basis points from 5.25% to 5.50% on October 7, 2026. Stance shifted from neutral to calibrated tightening. SDF rate stands at 5.25% and MSF/Bank rate at 5.75%.",
+      "confidence": "HIGH",
+      "confidenceReason": "Directly corroborated from RBI MPC October 2026 policy resolutions across multiple authoritative financial reports."
+    },
+    {
+      "id": "FACT-RBI-GDP-FY27",
+      "question": "What is the RBI's GDP growth forecast for India for FY 2026-27?",
+      "expectedValue": "7.1%",
+      "acceptableRange": [
+        "7.1%",
+        "7.10%"
+      ],
+      "unit": "Percentage (Real GDP growth year-on-year)",
+      "reportingPeriod": "Fiscal Year 2026-27 (April 2026 - March 2027)",
+      "publicationDate": "2026-10-07",
+      "sourceTitle": "RBI Monetary Policy Committee Resolution & Macroeconomic Outlook October 2026",
+      "sourceUrl": "https://www.rbi.org.in",
+      "checkedTimestamp": "2026-11-01T00:19:25.000Z",
+      "category": "forecast",
+      "qualifications": "RBI projected real GDP growth for FY2026-27 at 7.1%. CPI inflation for FY2026-27 was projected by RBI at 5.2%.",
+      "confidence": "HIGH",
+      "confidenceReason": "Official MPC resolution release from October 2026 meeting."
+    },
+    {
+      "id": "FACT-MOF-GDP-FY27",
+      "question": "What GDP growth forecast has India's Finance Ministry most recently published for FY 2026-27?",
+      "expectedValue": "7.3%",
+      "acceptableRange": [
+        "7.3%",
+        "7.2% - 7.4%",
+        "7.35% for Q2"
+      ],
+      "unit": "Percentage (Real GDP growth year-on-year)",
+      "reportingPeriod": "Fiscal Year 2026-27 (Monthly Economic Review for October 2026)",
+      "publicationDate": "2026-10-29",
+      "sourceTitle": "Monthly Economic Review October 2026 - Department of Economic Affairs, Ministry of Finance, Government of India",
+      "sourceUrl": "https://dea.gov.in/monthly-economic-review",
+      "checkedTimestamp": "2026-11-01T00:19:34.000Z",
+      "category": "forecast",
+      "qualifications": "Upgraded to 7.3% from previous estimate range of 6.8%-7.2%, following 7.8% Q1 growth and nowcasted 7.35% Q2 growth. Must be clearly distinguished from the RBI's 7.1% forecast.",
+      "confidence": "HIGH",
+      "confidenceReason": "Official Ministry of Finance Monthly Economic Review release for October 2026."
+    },
+    {
+      "id": "FACT-CPI-INFLATION-LATEST",
+      "question": "What is India's latest published CPI retail inflation figure, and which month does it describe?",
+      "expectedValue": "5.54% for September 2026",
+      "acceptableRange": [
+        "5.54%",
+        "5.54 percent",
+        "5.5% (September 2026)",
+        "five point five four",
+        "5.54"
+      ],
+      "unit": "Percentage (All-India Year-on-Year Consumer Price Index Base 2012=100)",
+      "reportingPeriod": "Month of September 2026 (Released October 14, 2026)",
+      "publicationDate": "2026-10-14",
+      "sourceTitle": "Consumer Price Index (CPI) Press Release for September 2026 - National Statistical Office (NSO), MoSPI",
+      "sourceUrl": "https://mospi.gov.in",
+      "checkedTimestamp": "2026-11-01T00:19:43.000Z",
+      "category": "observed_value",
+      "qualifications": "Headline inflation rose to 5.54% from 4.83% in August 2026, driven by food inflation (Consumer Food Price Index at 7.74%). October 2026 inflation is NOT published yet (scheduled for November 12, 2026). Stating October 2026 inflation as observed is an error.",
+      "confidence": "HIGH",
+      "confidenceReason": "Official statistical release schedule and published figures by MoSPI."
+    },
+    {
+      "id": "FACT-FOREX-RESERVES-LATEST",
+      "question": "What is India's latest available foreign-exchange reserve figure from the RBI?",
+      "expectedValue": "$719.748 billion (for week ended October 23, 2026)",
+      "acceptableRange": [
+        "$719.75 billion",
+        "$719.748 billion",
+        "$721.016 billion (for week ended October 16, 2026)"
+      ],
+      "unit": "US Dollars (Billions)",
+      "reportingPeriod": "Week ended October 23, 2026 (Published October 30, 2026 in RBI WSS)",
+      "publicationDate": "2026-10-30",
+      "sourceTitle": "Weekly Statistical Supplement (WSS) - Reserve Bank of India",
+      "sourceUrl": "https://www.rbi.org.in/scripts/WSSView.aspx",
+      "checkedTimestamp": "2026-11-01T00:19:51.000Z",
+      "category": "observed_value",
+      "qualifications": "Total reserves stood at $719.748 billion as of October 23, 2026 ($593.205 billion FCAs, $103.150 billion gold, $18.605 billion SDRs, $4.787 billion IMF position). Preceding week (October 16) was $721.016 billion.",
+      "confidence": "HIGH",
+      "confidenceReason": "Primary Reserve Bank of India Weekly Statistical Supplement published October 30, 2026."
+    },
+    {
+      "id": "FACT-RAJASTHAN-CM-CURRENT",
+      "question": "Who is the current Chief Minister of Rajasthan?",
+      "expectedValue": "Bhajan Lal Sharma",
+      "acceptableRange": [
+        "Bhajan Lal Sharma",
+        "Bhajanlal Sharma"
+      ],
+      "unit": "Individual / Officeholder",
+      "reportingPeriod": "Incumbent officeholder in 2026 (Assumed office December 15, 2023)",
+      "publicationDate": "2026-10-31",
+      "sourceTitle": "Official Portal of Government of Rajasthan & Chief Minister Secretariat",
+      "sourceUrl": "https://rajasthan.gov.in",
+      "checkedTimestamp": "2026-11-01T00:19:10.000Z",
+      "category": "official_officeholder",
+      "qualifications": "Member of Bharatiya Janata Party (BJP), represents Sanganer assembly constituency. Ashok Gehlot was the previous Chief Minister (2018-2023). Heera Lal Shastri was the first Chief Minister (1949-1951).",
+      "confidence": "HIGH",
+      "confidenceReason": "Verified against official Rajasthan state portal and legislative records."
+    },
+    {
+      "id": "FACT-RAJASTHAN-CM-FIRST",
+      "question": "Who was the first Chief Minister of Rajasthan?",
+      "expectedValue": "Pandit Hiralal Shastri",
+      "acceptableRange": [
+        "Heera Lal Shastri",
+        "Hiralal Shastri",
+        "Pandit Hiralal Shastri"
+      ],
+      "unit": "Historical Officeholder",
+      "reportingPeriod": "April 7, 1949 to January 5, 1951",
+      "publicationDate": "2026-10-31",
+      "sourceTitle": "Legislative Assembly of Rajasthan - Former Chief Ministers Official Register",
+      "sourceUrl": "https://assembly.rajasthan.gov.in",
+      "checkedTimestamp": "2026-11-01T00:19:10.000Z",
+      "category": "official_officeholder",
+      "qualifications": "First Chief Minister of the United State of Rajasthan. This is a strictly historical inquiry and must not be conflated with the current incumbent or forced into 2026 temporal constraints.",
+      "confidence": "HIGH",
+      "confidenceReason": "Official legislative records of the Government of Rajasthan."
+    },
+    {
+      "id": "FACT-OPENAI-ANNOUNCEMENTS-LATEST",
+      "question": "What are the latest major AI announcements from OpenAI in September and October 2026?",
+      "expectedValue": "Intelligent UI rollout, GPT-6.1 Sol / DevDay dots persistent agents, and updated Model Spec",
+      "acceptableRange": [
+        "Intelligent UI",
+        "Intelligent UI rollout",
+        "GPT-6.1",
+        "persistent agents",
+        "dots",
+        "OpenAI Dots",
+        "Model Spec",
+        "Intelligent UI rollout (October 7, 2026)",
+        "GPT-6.1 Sol / DevDay persistent agents ('dots')",
+        "Unified AI training opt-out robots.txt standard (__usage_ai-training) with Google and Microsoft (October 30, 2026)",
+        "Updated Model Spec (October 29, 2026)"
+      ],
+      "unit": "Announcements / Product Releases",
+      "reportingPeriod": "September - October 2026",
+      "publicationDate": "2026-10-30",
+      "sourceTitle": "OpenAI Official Newsroom & Blog Announcements",
+      "sourceUrl": "https://openai.com/news/",
+      "checkedTimestamp": "2026-11-01T00:20:00.000Z",
+      "category": "official_announcement",
+      "qualifications": "Major items include Intelligent UI (dynamic widget/UI generation in ChatGPT), persistent agents ('dots') showcased at DevDay, updated Model Spec core values, and the shared robots.txt training standard.",
+      "confidence": "HIGH",
+      "confidenceReason": "Direct verification from official OpenAI Newsroom announcements."
+    },
+    {
+      "id": "FACT-DEEPMIND-ANNOUNCEMENTS-LATEST",
+      "question": "What are the latest major AI announcements from Google DeepMind in September and October 2026?",
+      "expectedValue": "Gemini 4 Carbon frontier model, Genie 4 world simulation model, and Gemini Robotics ER 2",
+      "acceptableRange": [
+        "Gemini 4",
+        "Gemini 4 Carbon",
+        "Gemini 4 Argon",
+        "Genie 4",
+        "Gemini Robotics",
+        "Gemini 4 Carbon (October 28, 2026)",
+        "Genie 4 interactive world model (October 27, 2026)",
+        "Gemini Robotics Embodied Reasoning 2 (ER 2) on Google Cloud (October 27, 2026)",
+        "Gemini Agent integrated into Google Workspace",
+        "Gemini 4 Argon (Late September 2026)"
+      ],
+      "unit": "Announcements / Frontier Model Releases",
+      "reportingPeriod": "September - October 2026",
+      "publicationDate": "2026-10-28",
+      "sourceTitle": "Google DeepMind Official Blog & Research Publications",
+      "sourceUrl": "https://deepmind.google/discover/blog/",
+      "checkedTimestamp": "2026-11-01T00:20:10.000Z",
+      "category": "official_announcement",
+      "qualifications": "Gemini 4 Carbon launched October 28, 2026 with advanced cybersecurity and code defense; Genie 4 unveiled October 27, 2026 with real-time audio/dialogue simulation; Gemini Robotics ER 2 launched in preview on Google Cloud.",
+      "confidence": "HIGH",
+      "confidenceReason": "Direct verification from official Google DeepMind blog and Google Cloud releases."
+    },
+    {
+      "id": "FACT-USD-INR-REFERENCE",
+      "question": "What is the quote convention and authoritative source for the USD/INR reference rate in India?",
+      "expectedValue": "Reserve Bank of India (RBI) Reference Rate / FBIL (Financial Benchmarks India Pvt Ltd)",
+      "acceptableRange": [
+        "FBIL",
+        "Financial Benchmarks India",
+        "FBIL Reference Rate",
+        "RBI Reference Rate",
+        "FBIL USD/INR Reference Rate quoted per 1 USD"
+      ],
+      "unit": "INR per 1 USD",
+      "reportingPeriod": "Daily business day fixing (1:30 PM IST)",
+      "publicationDate": "2026-10-30",
+      "sourceTitle": "Financial Benchmarks India Pvt Ltd (FBIL) & RBI Reference Rates",
+      "sourceUrl": "https://www.fbil.org.in",
+      "checkedTimestamp": "2026-11-01T00:19:50.000Z",
+      "category": "observed_value",
+      "qualifications": "Authoritative Indian benchmark reference rates are published daily by FBIL at around 1:30 PM IST, computed from market transactions. Standard quote convention is Indian Rupees per 1 United States Dollar (e.g. INR/USD).",
+      "confidence": "HIGH",
+      "confidenceReason": "Statutory benchmark administrator recognized by RBI."
+    },
+    {
+      "id": "FACT-ISRO-CHAIRMAN",
+      "topic": "ISRO Leadership",
+      "expectedValue": "S. Somanath",
+      "acceptableRange": [
+        "S. Somanath",
+        "S Somanath",
+        "Shri S. Somanath",
+        "Somanath"
+      ],
+      "primarySource": "ISRO Official Portal",
+      "verificationDate": "2026-10-31"
+    },
+    {
+      "id": "FACT-CEC-INDIA",
+      "topic": "Election Commission of India Leadership",
+      "expectedValue": "Rajiv Kumar",
+      "acceptableRange": [
+        "Rajiv Kumar",
+        "Shri Rajiv Kumar"
+      ],
+      "primarySource": "Election Commission of India",
+      "verificationDate": "2026-10-31"
+    },
+    {
+      "id": "FACT-INDIA-RENEWABLE-TARGET",
+      "topic": "India Renewable Energy Milestone",
+      "expectedValue": "500 GW by 2030",
+      "acceptableRange": [
+        "500 GW",
+        "500 gigawatts",
+        "50% non-fossil capacity"
+      ],
+      "primarySource": "Ministry of New and Renewable Energy (MNRE)",
+      "verificationDate": "2026-10-31"
+    }
+  ]
+}

@@ -247,6 +247,7 @@ export async function executeAdaptiveResearch({
   const allCitations = [];
   const seenUrls = new Set();
   const openedPages = [];
+  const attemptedUrls = new Set();
   const observations = [];
 
   // 1. Resolve Mode & Execution Budget
@@ -433,10 +434,17 @@ export async function executeAdaptiveResearch({
       // Empty result recovery search
       if (!execRes.ok || execRes.state === "SEARCH_EMPTY" || execRes.sources.length === 0) {
         researchState.emptyQueries += 1;
-        const yearSuffix = intentInfo.requiresCurrentDate ? ` ${dateCtx.year}` : "";
-        const fallbackTopic = task.topic || query;
+        // Never use internal diagnostic task labels (like "Original Anchor Recovery" or "Missing Subtopic") as search queries
+        const isDiagnosticTopic = !task.topic || /^(?:Original Anchor|Primary Query Recovery|Anchor Recovery|Missing Subtopic|Diagnostic|Recovery)/i.test(task.topic);
+        const fallbackTopic = isDiagnosticTopic ? query : task.topic;
         const rewrittenQuery = sanitizePlannerQuery(
-          `${fallbackTopic.replace(/[?"'.,!]/g, "")}${yearSuffix} overview`,
+          buildSearchRecoveryQuery({
+            originalQuery: fallbackTopic,
+            failedQuery: currentTaskQuery,
+            intent: intentInfo.intent,
+            currentYear: dateCtx.year,
+            requiresCurrentDate: intentInfo.requiresCurrentDate,
+          }),
           query,
           dateCtx.year,
           intentInfo.requiresCurrentDate
@@ -546,10 +554,12 @@ export async function executeAdaptiveResearch({
       return tierScore(b.sourceType) - tierScore(a.sourceType);
     });
 
-    // Open URLs up to budget.maxUrlsToOpen
+    // Open URLs up to budget.maxUrlsToOpen, pacing across rounds and avoiding retrying failed URLs
+    const remainingTotalBudget = Math.max(0, budget.maxUrlsToOpen - openedPages.length);
+    const roundCandidateLimit = Math.min(2, remainingTotalBudget);
     const unopenedCandidates = prioritizedCandidates
-      .filter((c) => !openedPages.some((p) => p.url === c.url))
-      .slice(0, Math.max(0, budget.maxUrlsToOpen - openedPages.length));
+      .filter((c) => c.url && !attemptedUrls.has(c.url.toLowerCase().trim()))
+      .slice(0, roundCandidateLimit);
 
     if (unopenedCandidates.length > 0) {
       researchState.telemetry.planned += unopenedCandidates.length;
@@ -563,6 +573,7 @@ export async function executeAdaptiveResearch({
       });
 
       const openTasks = unopenedCandidates.map(async (candidate) => {
+        attemptedUrls.add(candidate.url.toLowerCase().trim());
         researchState.telemetry.executed += 1;
         try {
           const isSafe = await isUrlSafe(candidate.url);
@@ -716,24 +727,39 @@ export async function executeAdaptiveResearch({
       requiresCurrentDate: intentInfo.requiresCurrentDate,
     });
     if (recoveryQuery && !executedQueriesSet.has(recoveryQuery.toLowerCase().trim())) {
-      nextTasks.push({ topic: "Original Anchor Recovery", query: recoveryQuery });
+      nextTasks.push({ topic: "Primary Query Recovery", query: recoveryQuery });
     }
 
-    // 2. Missing-subtopic queries from gapAudit or detGate
-    const missingItems = [
+    // 2. Structured Missing-Subtopic Queries (Never raw diagnostic error messages)
+    const rawMissing = [
       ...(gapAudit?.missingInformation || []),
       ...(detGate.missingInformation || []),
     ];
-    for (const missing of missingItems) {
-      if (!missing) continue;
+
+    // Helper to sanitize missing subtopics: reject sentences that look like validator diagnostics
+    const cleanSubtopics = rawMissing
+      .map((item) => String(item || "").trim())
+      .filter((item) => {
+        if (!item || item.length < 3) return false;
+        // Filter out internal validator error sentences and brackets
+        if (/^(?:retrieved evidence|evidence failed|search returned|search results are irrelevant|deterministic checks)/i.test(item)) {
+          return false;
+        }
+        if (/\[.*\]/.test(item) || /\{.*\}/.test(item)) {
+          return false;
+        }
+        return true;
+      });
+
+    for (const subtopic of cleanSubtopics) {
       const missingQuery = sanitizePlannerQuery(
-        `${query} ${missing}`,
+        `${query} ${subtopic}`.replace(/\s+/g, " ").trim(),
         query,
         dateCtx.year,
         intentInfo.requiresCurrentDate
       );
       if (!executedQueriesSet.has(missingQuery.toLowerCase().trim())) {
-        nextTasks.push({ topic: `Missing Subtopic: ${missing.slice(0, 25)}`, query: missingQuery });
+        nextTasks.push({ topic: `Missing Subtopic: ${subtopic.slice(0, 25)}`, query: missingQuery });
       }
     }
 
