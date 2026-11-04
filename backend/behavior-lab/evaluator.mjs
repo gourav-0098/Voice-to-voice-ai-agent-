@@ -168,7 +168,8 @@ export function evaluateResponse(record, questionItem = null) {
   }
 
   // F. Question-Specific & Expected Answer Fact Matching
-  if (isSetA && expected) {
+  const hasFactCheck = (isSetA || id?.startsWith("C") || record.set === "set_c") && expected;
+  if (hasFactCheck) {
     const { pass, partial, missing } = checkFactMatch(actual, expected, id);
     if (pass) {
       semanticStatus = "PASS";

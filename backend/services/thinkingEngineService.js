@@ -252,13 +252,18 @@ export function getCurrentDateContext() {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
   ];
+  const dayNames = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+  ];
   const month = monthNames[now.getMonth()];
   const day = now.getDate();
+  const dayOfWeek = dayNames[now.getDay()];
   return {
     year,
     month,
     day,
-    formatted: `${month} ${day}, ${year}`,
+    dayOfWeek,
+    formatted: `${dayOfWeek}, ${month} ${day}, ${year}`,
     isoDate: now.toISOString().split("T")[0],
   };
 }
@@ -408,7 +413,9 @@ export function sanitizeSpokenReply(rawReply, options = {}) {
     .replace(/\btoolcode\b[\s\S]*/gi, "")
     .replace(/print\([a-zA-Z0-9_]+\([^)]*\)\)/gi, "")
     .replace(/^.*?(?:ek minute|ek second|hold on|let me check|main abhi check|main search karke|abhi dekh kar).*?(?:batata hoon|bata raha hoon|bata rahi hoon|dekh raha hoon)[.!?,;\s]*/i, "")
-    .replace(/^(?:I will use|I am using|Let me use|Using).*?\btool\b[^.!?]*[.!?]\s*/i, "");
+    .replace(/^(?:I will use|I am using|Let me use|Using).*?\btool\b[^.!?]*[.!?]\s*/i, "")
+    .replace(/【(?:Source\s*)?\d+(?::\d+†source)?】/gi, "")
+    .replace(/\[(?:Source\s*)?\d+\]/gi, "");
 
   if (options.stripMarkdown) {
     text = text
@@ -871,6 +878,43 @@ Do NOT search the web or cite external websites.`;
       status: "in_progress",
     });
 
+    // Financial / Crypto quote integration for live market queries
+    const isFinancialQuoteQuery = /\b(trading at|price|quote|24h change|24-hour change|stock quote|market cap)\b/i.test(effectiveQuery);
+    const foundTickers = isFinancialQuoteQuery
+      ? [...effectiveQuery.matchAll(/\b(btc|bitcoin|eth|ethereum|sol|solana|doge|dogecoin|xrp|ripple|ada|cardano|bnb|binance|nvda|nvidia|tsla|tesla|aapl|apple|msft|microsoft)\b/gi)].map((m) => m[1].toLowerCase())
+      : [];
+    const uniqueTickers = [...new Set(foundTickers)];
+    const financialObservations = [];
+    const financialPassages = [];
+
+    if (uniqueTickers.length > 0) {
+      for (const sym of uniqueTickers) {
+        try {
+          const quoteRes = await toolExecutor.executeTool("get_stock_quote", { symbol: sym });
+          if (quoteRes && quoteRes.ok && quoteRes.data) {
+            const sum = quoteRes.voiceSummary || `${quoteRes.data.companyName} (${quoteRes.data.symbol}) is currently trading at ${quoteRes.data.currency} ${quoteRes.data.currentPrice} (${quoteRes.data.changePercent >= 0 ? "+" : ""}${quoteRes.data.changePercent}% today).`;
+            financialObservations.push({
+              tool: "get_stock_quote",
+              query: sym,
+              success: true,
+              summary: sum,
+            });
+            financialPassages.push({
+              source: quoteRes.data.source || "Live Financial Feed",
+              url: `https://finance.yahoo.com/quote/${quoteRes.data.symbol}`,
+              publishedAt: quoteRes.data.marketTime || new Date().toISOString(),
+              retrievedAt: new Date().toISOString(),
+              passage: sum,
+              sourceTier: "TIER_1_PRIMARY",
+              sourceRole: "PRIMARY",
+              relevance: 1.0,
+            });
+            toolTrace.push({ tool: "get_stock_quote", args: { symbol: sym }, success: true });
+          }
+        } catch (_) {}
+      }
+    }
+
     researchData = await executeAdaptiveResearch({
       query: effectiveQuery,
       callModel: (params) => callCognitiveModel({ ...params, forceGroq }),
@@ -885,6 +929,12 @@ Do NOT search the web or cite external websites.`;
     });
 
     observations = researchData.observations || [];
+    if (financialObservations.length > 0) {
+      observations.unshift(...financialObservations);
+    }
+    if (researchData?.evidencePack && financialPassages.length > 0) {
+      researchData.evidencePack.unshift(...financialPassages);
+    }
     allCitations = researchData.citations || [];
     structuredComparison = researchData.comparisonMatrix;
     detEvidence = researchData.deterministicGate;
@@ -1027,9 +1077,10 @@ Current real-world date is ${currentDate.formatted} (Year ${currentDate.year}).$
 ${directiveLength}
 ${isNotableWorks ? "7. FOR NOTABLE / MAJOR WORKS: Present the recognized major works (titles, writings, philosophical contributions) directly and clearly. DO NOT frame as a comparative ranking scorecard." : ""}
 ${isComparisonOrTechnical ? "7. FOR COMPARISON QUESTIONS: DO NOT arbitrarily pick a single winner. Objectively explain the key criteria and trade-offs so the user can choose the best option." : ""}
-8. LANGUAGE: Always respond in the exact same language as the user's query. If the user's query is in English, reply strictly in clear, fluent English. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
+8. LANGUAGE: Always respond in the exact same language as the user's query. If the user's query is in English, reply strictly in clear, fluent English. Under NO circumstances should you use Hindi or Hinglish words if the user asked in English. If the user asks in Hindi or Hinglish, reply in natural conversational Hinglish using the Latin/English alphabet.
 9. CURRENT INCUMBENTS & OFFICEHOLDERS: For questions about current political officeholders (Chief Minister, Governor, Prime Minister, etc.), strictly rely on verified recent real-world evidence from 2024-2026. Never name former officeholders who vacated office prior to 2024 (e.g. Rajasthan's Chief Minister is Bhajan Lal Sharma, not past incumbents).
 10. ANTI-FABRICATION & EVIDENCE SUFFICIENCY: The evidence below was retrieved from live web/news search (it was NOT provided by the user). If the evidence does not contain verified specific data (e.g. specific game scores, verbatim quotes, prices, or patch versions), state clearly what could not be verified. NEVER fabricate, extrapolate, or invent missing scores, tables, quotes, or numbers.
+11. CITATION FORMATTING: Do not speak or output raw bracketed citations like 【Source 1】, 【1】, or [Source 1]. Synthesize information cleanly in your own words with natural attributions (e.g. "According to Axios...").
 
 ${comparisonBlock}
 [RETRIEVED WEB EVIDENCE PACK (AUTONOMOUSLY RETRIEVED VIA SEARCH - NOT USER PROVIDED)]:

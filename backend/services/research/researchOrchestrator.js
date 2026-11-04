@@ -95,15 +95,17 @@ export function extractPublishDate(html = "", url = "") {
  * @param {number} maxPassages
  * @returns {string[]}
  */
-export function extractKeyPassages(text = "", query = "", dimensions = [], maxPassages = 2) {
+export function extractKeyPassages(text = "", query = "", dimensions = [], maxPassages = 5) {
   if (!text || typeof text !== "string") return [];
 
   const sentences = text
     .split(/(?<=[.?!])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 30 && s.length < 450);
+    .filter((s) => s.length > 25 && s.length < 900);
 
-  if (sentences.length === 0) return [];
+  if (sentences.length === 0) {
+    return text.trim() ? [text.slice(0, 2500)] : [];
+  }
 
   const queryTerms = (query + " " + dimensions.join(" "))
     .toLowerCase()
@@ -116,8 +118,8 @@ export function extractKeyPassages(text = "", query = "", dimensions = [], maxPa
     for (const term of queryTerms) {
       if (lower.includes(term)) score += 1;
     }
-    // Boost sentences containing numbers, dates, version numbers or technical specs
-    if (/\b(202[4-6]|\d+\s*(?:ms|gb|mb|tokens|billion|million|\$|%))\b/i.test(sentence)) {
+    // Boost sentences containing numbers, dates, version numbers, percentages, currency, or quotes
+    if (/\b(202[4-7]|\d+(?:[.,]\d+)?\s*(?:%|\$|billion|million|thousand|k|m|b|bombs|points|seats|votes|monitors|delegates|states|tokens|ms|gb|mb)?|"[^"]+"|[“'][^”']+[”'])\b/i.test(sentence)) {
       score += 1.5;
     }
     return { sentence, score };
@@ -125,10 +127,17 @@ export function extractKeyPassages(text = "", query = "", dimensions = [], maxPa
 
   scored.sort((a, b) => b.score - a.score);
 
-  return scored
+  const topScored = scored
     .filter((s) => s.score > 0)
     .slice(0, maxPassages)
     .map((s) => s.sentence);
+
+  if (topScored.length > 0) {
+    return topScored;
+  }
+
+  // Fallback: Return lead sentences (first ~1,500 chars) of article
+  return sentences.slice(0, Math.min(3, maxPassages));
 }
 
 /**
@@ -247,6 +256,7 @@ export async function executeAdaptiveResearch({
   const allCitations = [];
   const seenUrls = new Set();
   const openedPages = [];
+  const cumulativeEvidenceMap = new Map();
   const attemptedUrls = new Set();
   const observations = [];
 
@@ -582,7 +592,7 @@ export async function executeAdaptiveResearch({
             return null;
           }
           researchState.resourceUsage.totalToolCalls += 1;
-          const res = await safeOutboundRequest(candidate.url, { timeoutMs: 4500 });
+          const res = await safeOutboundRequest(candidate.url, { timeoutMs: 7000 });
           if (!res.ok) {
             researchState.telemetry.failed += 1;
             return null;
@@ -590,10 +600,15 @@ export async function executeAdaptiveResearch({
 
           const html = await res.text();
           const articleText = extractCleanArticleText(html);
-          const passages = extractKeyPassages(articleText, query, researchPlan.dimensions, budget.maxPassagesPerSource);
+          let passages = extractKeyPassages(articleText, query, researchPlan.dimensions, budget.maxPassagesPerSource);
           const publishDate = extractPublishDate(html, candidate.url);
 
-          if (passages.length > 0) {
+          // Fallback: If no scored passages found, preserve the lead section of the article
+          if ((!passages || passages.length === 0) && articleText && articleText.trim().length > 60) {
+            passages = [articleText.trim().slice(0, 2500)];
+          }
+
+          if (passages && passages.length > 0) {
             researchState.telemetry.successful += 1;
             const deepItem = {
               url: candidate.url,
@@ -605,6 +620,7 @@ export async function executeAdaptiveResearch({
               sourceTier: classifySourceTier(candidate.url, candidate.publisher),
             };
             openedPages.push(deepItem);
+            cumulativeEvidenceMap.set(candidate.url.toLowerCase().trim(), deepItem);
             return deepItem;
           } else {
             researchState.telemetry.empty += 1;
@@ -620,10 +636,31 @@ export async function executeAdaptiveResearch({
       researchState.openSourcesCount = openedPages.length;
     }
 
-    // Normalize evidence pack
+    // Also populate cumulativeEvidenceMap with citations that have valid snippets/titles
+    for (const c of allCitations) {
+      if (!c.url) continue;
+      const key = c.url.toLowerCase().trim();
+      if (!cumulativeEvidenceMap.has(key)) {
+        const text = (c.snippet || c.title || "").trim();
+        if (text && text.length > 15) {
+          cumulativeEvidenceMap.set(key, {
+            url: c.url,
+            title: c.title,
+            publisher: c.publisher,
+            publishedAt: c.publishedAt || null,
+            retrievedAt: c.retrievedAt || new Date().toISOString(),
+            passage: text,
+            sourceTier: c.sourceType || classifySourceTier(c.url, c.publisher),
+          });
+        }
+      }
+    }
+
+    // Normalize evidence pack using cumulative evidence across all rounds (append-only)
+    const cumulativePassages = Array.from(cumulativeEvidenceMap.values());
     evidencePack = normalizeEvidencePack({
       citations: allCitations,
-      extractedPassages: openedPages,
+      extractedPassages: cumulativePassages.length > 0 ? cumulativePassages : openedPages,
       dimensions: researchPlan.dimensions,
     });
     researchState.verifiedEvidenceCount = evidencePack.length;
@@ -752,13 +789,28 @@ export async function executeAdaptiveResearch({
       });
 
     for (const subtopic of cleanSubtopics) {
+      let subQuery = subtopic;
+      const cleanSub = subtopic.replace(/[?"'.,!]/g, "").trim();
+      const subWords = cleanSub.split(/\s+/);
+      if (subWords.length >= 4) {
+        subQuery = cleanSub;
+      } else {
+        const keyNouns = query
+          .replace(/[?"'.,!]/g, "")
+          .split(/\s+/)
+          .filter((w) => w.length > 3 && !["what", "which", "where", "when", "tell", "about", "show", "with", "from", "many", "does", "said", "have", "been"].includes(w.toLowerCase()))
+          .slice(0, 3)
+          .join(" ");
+        subQuery = `${keyNouns} ${cleanSub}`.trim();
+      }
+
       const missingQuery = sanitizePlannerQuery(
-        `${query} ${subtopic}`.replace(/\s+/g, " ").trim(),
+        subQuery.replace(/\s+/g, " ").trim(),
         query,
         dateCtx.year,
         intentInfo.requiresCurrentDate
       );
-      if (!executedQueriesSet.has(missingQuery.toLowerCase().trim())) {
+      if (missingQuery && !executedQueriesSet.has(missingQuery.toLowerCase().trim())) {
         nextTasks.push({ topic: `Missing Subtopic: ${subtopic.slice(0, 25)}`, query: missingQuery });
       }
     }

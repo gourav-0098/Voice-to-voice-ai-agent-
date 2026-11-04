@@ -35,10 +35,15 @@ export function getSystemDateContext() {
  * - Prevents accidental stale-year queries (2024 -> 2026) for current queries
  * - PREVENTS forced 2026 injection into historical/biographical queries (Bug 2)
  */
-export function sanitizePlannerQuery(searchQuery, rawUserQuery, currentYear, requiresCurrentDate = true) {
+export function sanitizePlannerQuery(searchQuery, rawUserQuery, currentYear = 2026, requiresCurrentDate = true) {
   if (!searchQuery || typeof searchQuery !== "string") return "";
   let clean = searchQuery.trim();
   const rawLower = String(rawUserQuery || "").toLowerCase();
+
+  // Ban placeholder queries like "Primary topic inquiry"
+  if (/^(?:Primary topic inquiry|topic inquiry|Primary Query Recovery|Anchor Recovery|Search query)$/i.test(clean)) {
+    clean = String(rawUserQuery || "").replace(/[?"'.,!]/g, " ").trim();
+  }
 
   const isHistoricalOrBiographical =
     !requiresCurrentDate ||
@@ -54,7 +59,10 @@ export function sanitizePlannerQuery(searchQuery, rawUserQuery, currentYear, req
 
   const userHasExplicitPastYear = /\b(18\d\d|19\d\d|20[01]\d|202[0-5])\b/.test(rawUserQuery);
   if (!userHasExplicitPastYear && requiresCurrentDate) {
-    return clean.replace(/\b(202[0-5]|201\d)\b/g, String(currentYear));
+    clean = clean.replace(/\b(202[0-5]|201\d)\b/g, String(currentYear));
+    if (/\b(midterm|election|ballot|governorship|referendum)\b/i.test(clean) && !clean.includes(String(currentYear))) {
+      clean = `${clean} ${currentYear}`;
+    }
   }
   return clean;
 }
@@ -288,7 +296,7 @@ Respond strictly in valid JSON format:
     });
   } else {
     fallbackTasks.push({
-      topic: "Primary topic inquiry",
+      topic: query.slice(0, 40),
       query: sanitizePlannerQuery(query, query, dateCtx.year, requiresCurrentDate),
       freshness: requiresCurrentDate ? "current" : "general",
       sourcePreference: "official",

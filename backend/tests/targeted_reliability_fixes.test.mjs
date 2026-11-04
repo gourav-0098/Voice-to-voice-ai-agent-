@@ -334,6 +334,85 @@ async function runTargetedReliabilitySuite() {
     assert.ok(gateResult.relevance > 0.5, `Relevance score (${gateResult.relevance}) should be > 0.5`);
   });
 
+  // 12. Conversational Small-talk (Zero Search Routing)
+  console.log("\n🔹 12. Conversational Small-Talk Routing ('or kya hal h')");
+  await test("Colloquial greetings ('or kya hal h', 'aur bhai kya scene hai') route to CHITCHAT with zero search", () => {
+    const res1 = classifyResearchIntent("or kya hal h");
+    assert.equal(res1.intent, "CHITCHAT");
+    assert.equal(res1.requiresSearch, false);
+    assert.equal(res1.requiresDeepResearch, false);
+
+    const res2 = classifyResearchIntent("aur kya hal h");
+    assert.equal(res2.intent, "CHITCHAT");
+    assert.equal(res2.requiresSearch, false);
+
+    const res3 = classifyResearchIntent("aur bhai kya scene hai");
+    assert.equal(res3.intent, "CHITCHAT");
+    assert.equal(res3.requiresSearch, false);
+  });
+
+  // 13. Deterministic Day of Week & Citation Stripping
+  console.log("\n🔹 13. Deterministic Day of Week & Citation Stripping");
+  await test("getCurrentDateContext includes dayOfWeek and sanitizeSpokenReply strips bracketed citations", async () => {
+    const { getCurrentDateContext, sanitizeSpokenReply } = await import("../services/thinkingEngineService.js");
+    const dateCtx = getCurrentDateContext();
+    assert.ok(dateCtx.dayOfWeek, "dayOfWeek must be present");
+    assert.ok(dateCtx.formatted.includes(dateCtx.dayOfWeek), "formatted string must include dayOfWeek");
+
+    const raw1 = "According to records 【Source 1】, Donald Trump said he accepts results [Source 2].";
+    const cleaned = sanitizeSpokenReply(raw1);
+    assert.ok(!cleaned.includes("【Source 1】"));
+    assert.ok(!cleaned.includes("[Source 2]"));
+    assert.ok(cleaned.includes("According to records"));
+  });
+
+  // 14. 3-Letter Crypto Tickers Preserved in Evidence Gate
+  console.log("\n🔹 14. 3-Letter Crypto Ticker Preservation in Evidence Gate");
+  await test("Evidence gate retains BTC, ETH, and SOL tickers in relevance scoring", () => {
+    const gateRes = evaluateEvidenceDeterministic({
+      query: "What are BTC, ETH and SOL trading at right now?",
+      observations: [
+        {
+          tool: "get_stock_quote",
+          task: "BTC quote",
+          query: "BTC",
+          success: true,
+          summary: "Bitcoin (CRYPTO: BTC-USD) is currently trading at USD 80244.95 (+3.47% today).",
+        }
+      ],
+      citations: [
+        {
+          title: "Bitcoin (BTC-USD) Live Market Feed",
+          publisher: "Yahoo Finance",
+          url: "https://finance.yahoo.com/quote/BTC-USD",
+          snippet: "Bitcoin (BTC-USD) is currently trading at USD 80244.95 with daily change +3.47%.",
+          sourceType: "TIER_1_PRIMARY",
+        }
+      ],
+      currentYear: 2026,
+      intent: "FINANCIAL_CURRENT",
+      requiresCurrentDate: true,
+    });
+
+    assert.ok(gateRes.relevance > 0.2, "Relevance should capture 3-letter tickers");
+  });
+
+  // 15. Article Extraction Lead Fallback & Banned Placeholders
+  console.log("\n🔹 15. Article Extraction Lead Fallback & Banned Placeholders");
+  await test("extractKeyPassages falls back to lead sentences and sanitizePlannerQuery bans placeholders", async () => {
+    const { extractKeyPassages } = await import("../services/research/researchOrchestrator.js");
+    const { sanitizePlannerQuery } = await import("../services/research/researchQueryPlanner.js");
+
+    const articleText = "Colorado voters rejected Proposition 138 with 52 percent against. The measure would have changed voting rules statewide. Supporters had poured millions into advertising.";
+    const passages = extractKeyPassages(articleText, "Colorado Proposition 138 outcome", [], 3);
+    assert.ok(passages.length > 0, "Must extract passages from article text");
+    assert.ok(passages.some(p => p.includes("52 percent") || p.includes("Proposition 138")));
+
+    const cleanedPlaceholder = sanitizePlannerQuery("Primary topic inquiry", "Who won the race in Arizona?", 2026);
+    assert.ok(!cleanedPlaceholder.includes("Primary topic inquiry"), "Must ban 'Primary topic inquiry'");
+    assert.ok(cleanedPlaceholder.includes("Arizona"), "Should fall back to user query");
+  });
+
   console.log("\n================================================================================");
   console.log(`TOTAL TARGETED TESTS: ${total}`);
   console.log(`PASSED:               ${passed}`);

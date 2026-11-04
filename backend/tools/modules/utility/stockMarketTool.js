@@ -35,6 +35,16 @@ const COMPANY_TICKER_MAP = {
   btc: "BTC-USD",
   ethereum: "ETH-USD",
   eth: "ETH-USD",
+  solana: "SOL-USD",
+  sol: "SOL-USD",
+  doge: "DOGE-USD",
+  dogecoin: "DOGE-USD",
+  xrp: "XRP-USD",
+  ripple: "XRP-USD",
+  ada: "ADA-USD",
+  cardano: "ADA-USD",
+  bnb: "BNB-USD",
+  binance: "BNB-USD",
   reliance: "RELIANCE.NS",
   tcs: "TCS.NS",
   hdfc: "HDFCBANK.NS",
@@ -58,7 +68,7 @@ function resolveTicker(input = "") {
 function resolveAssetType(instrumentType, ticker) {
   const raw = String(instrumentType || "").toUpperCase();
   if (raw === "EQUITY") return "EQUITY";
-  if (raw === "CRYPTOCURRENCY" || ticker.includes("-USD") || ticker === "BTC" || ticker === "ETH") return "CRYPTO";
+  if (raw === "CRYPTOCURRENCY" || ticker.includes("-USD") || ["BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB"].includes(ticker)) return "CRYPTO";
   if (raw === "ETF" || ["SPY", "QQQ", "VOO", "IWM"].includes(ticker)) return "ETF";
   if (raw === "INDEX" || ticker.startsWith("^")) return "INDEX";
   return "EQUITY";

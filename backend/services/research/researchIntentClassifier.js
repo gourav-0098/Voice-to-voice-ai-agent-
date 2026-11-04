@@ -103,11 +103,12 @@ export function classifyResearchIntent(query = "") {
   }
 
   // 0c. CONVERSATIONAL: Casual greetings, pleasantries, identity questions, banter, empathy, gratitude
-  // Queries like: "so hello how are you smile me", "hi how are you", "kya haal hai", "namaste", "thank you", "who are you"
+  // Queries like: "so hello how are you smile me", "hi how are you", "kya haal hai", "or kya hal h", "namaste", "thank you", "who are you"
   // These DO NOT need web search or deep research — they should receive direct natural conversational replies in <300ms!
   const isConversationalPattern =
-    /^(?:so\s+)?(?:hello|hi|hey|heyy|hiya|namaste|pranam|ram ram|radhe radhe|kem cho|kya haal|kaise ho|how are you|how do you do|good morning|good afternoon|good evening|good night|bye|goodbye|see you)\b/i.test(lower) ||
-    /\b(?:how are you|kaise ho|kya chal raha|kya haal hai|sab badhiya|sab kaisa chal raha)\b/i.test(lower) ||
+    /^(?:so\s+|aur\s+|or\s+)?(?:hello|hi|hey|heyy|hiya|namaste|pranam|ram ram|radhe radhe|kem cho|kya haal|kya hal|kaise ho|kaisi ho|how are you|how do you do|good morning|good afternoon|good evening|good night|bye|goodbye|see you|aur bhai|or bhai)\b/i.test(lower) ||
+    /\b(?:or\s+|aur\s+)?(?:kya\s+h(?:aa)?l\s+(?:h(?:ai)?|ba)?|kya\s+chal\s+r(?:ah)?a\s+(?:h(?:ai)?|ba)?|kaise\s+ho|kaisi\s+ho|kaisa\s+hai|aur\s+batao|or\s+batao|sab\s+theek|sab\s+badhiya|kya\s+scene\s+hai)\b/i.test(lower) ||
+    /\b(?:how are you|kaise ho|kya chal raha|kya haal hai|kya hal h|sab badhiya|sab kaisa chal raha)\b/i.test(lower) ||
     /\b(?:who are you|what is your name|tum kaun ho|aap kaun ho|what can you do|kya kar sakte ho)\b/i.test(lower) ||
     /\b(?:smile me|make me smile|tell me a joke|koi joke sunao|say something nice|motivate me|cheer me up)\b/i.test(lower) ||
     /\b(?:thank you|thanks|shukriya|dhanyawad|welcome|you are great|love you|hate you)\b/i.test(lower);

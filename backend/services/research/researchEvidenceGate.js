@@ -218,12 +218,13 @@ export function evaluateEvidenceDeterministic({
   }
 
   // Keyword Relevance Check (Bug 4 & 5)
+  const KNOWN_TICKERS = new Set(["btc", "eth", "sol", "xrp", "ada", "bnb", "doge", "dot", "ltc", "avax"]);
   const stopWords = new Set(["what", "which", "where", "when", "tell", "about", "show", "with", "from", "many", "people", "were", "this", "that", "there", "their", "have", "been", "does", "said"]);
   const queryTokens = query
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !stopWords.has(w));
+    .filter((w) => (w.length > 3 || KNOWN_TICKERS.has(w)) && !stopWords.has(w));
   const matches = queryTokens.filter((k) => combinedText.includes(k));
   const relevance = queryTokens.length > 0 ? matches.length / queryTokens.length : 1;
 
@@ -252,11 +253,37 @@ export function evaluateEvidenceDeterministic({
 
   // Subject Entity Overlap & Negative Topic Rejection (Generalized from Perplexity & Comet patterns)
   // Ensures evidence matches the primary subject entities (e.g. pilot, flight) and rejects completely mismatched viral stories
-  const subjectEntities = queryTokens.filter((t) => t.length > 3 && !["latest", "recent", "about", "story", "full", "tell"].includes(t));
+  const subjectEntities = queryTokens.filter((t) => (t.length > 3 || KNOWN_TICKERS.has(t)) && !["latest", "recent", "about", "story", "full", "tell"].includes(t));
   const hasSubjectMatch = subjectEntities.length === 0 || subjectEntities.some((entity) => combinedText.includes(entity));
 
   if (!hasSubjectMatch) {
     missingSubtopicReason = `Retrieved evidence does not contain references to the subject entity: [${subjectEntities.join(", ")}].`;
+  }
+
+  // Requested Fact Validations (Dates for "when", numbers for "how many/count/percent/supply", quotes for "words/quotes")
+  let missingFactReason = null;
+  const asksForDateOrWhen = /\b(?:when|what date|what day|swearing-in|inauguration|scheduled for)\b/i.test(lowerQ);
+  if (asksForDateOrWhen && !isHistorical) {
+    const hasDateOrYear = /\b(?:january|february|march|april|may|june|july|august|september|october|november|december|\b\d{1,2}(?:st|nd|rd|th)?\b|\b202[4-7]\b)\b/i.test(combinedText);
+    if (!hasDateOrYear) {
+      missingFactReason = "Retrieved evidence lacks specific calendar date, month, or timeline.";
+    }
+  }
+
+  const asksForQuantityOrNumber = /\b(?:how many|how much|total count|percentage|%|what percent|circulating supply|trading at|share price|death toll|number of)\b/i.test(lowerQ);
+  if (asksForQuantityOrNumber && !missingFactReason) {
+    const hasDigits = /\b\d+(?:[.,]\d+)?\b/.test(combinedText);
+    if (!hasDigits) {
+      missingFactReason = "Retrieved evidence lacks quantitative data, digits, or counts.";
+    }
+  }
+
+  const asksForVerbatimQuote = /\b(?:exact words|what words|what did .* say|verbatim|quote)\b/i.test(lowerQ);
+  if (asksForVerbatimQuote && !missingFactReason && !missingSubtopicReason) {
+    const hasStatement = /["'“][^"'”]{5,}["'”]|(?:said|stated|told|commented|wrote|posted|claimed)\b/i.test(combinedText);
+    if (!hasStatement) {
+      missingFactReason = "Retrieved evidence lacks direct quotes or attributed statements.";
+    }
   }
 
   // Viral pilot inquiry check (Golden Example 7 & 19): verify evidence actually mentions pilot/aviation incident
@@ -298,19 +325,20 @@ export function evaluateEvidenceDeterministic({
     }
   }
 
+  const primaryDefect = missingSubtopicReason || missingFactReason;
   const passed =
     validObservations.length > 0 &&
     validUrlCitations.length > 0 &&
     relevance >= 0.20 &&
     duplicateRate < 0.85 &&
-    !missingSubtopicReason;
+    !primaryDefect;
 
   return {
     passed,
     sufficient: passed && freshnessOk,
     state: passed ? "SEARCH_SUCCESS" : "SEARCH_PARTIAL",
-    reason: missingSubtopicReason || (passed ? "Deterministic checks passed." : "Evidence failed relevance or coverage thresholds."),
-    missingInformation: missingSubtopicReason ? [missingSubtopicReason] : passed ? [] : ["Insufficient factual coverage of key inquiry terms"],
+    reason: primaryDefect || (passed ? "Deterministic checks passed." : "Evidence failed relevance or coverage thresholds."),
+    missingInformation: primaryDefect ? [primaryDefect] : passed ? [] : ["Insufficient factual coverage of key inquiry terms"],
     conflicts: [],
     freshnessOk,
     sourceCount,
@@ -344,7 +372,7 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
         url: item.url,
         publishedAt: item.publishedAt || null,
         retrievedAt: item.retrievedAt || new Date().toISOString(),
-        passage: passage.slice(0, 500),
+        passage: passage.slice(0, 3000),
         sourceTier: item.sourceTier || classifySourceTier(item.url, item.publisher),
         sourceRole: item.sourceTier === SOURCE_TIERS.TIER_1_PRIMARY ? "PRIMARY" : "REPORTING",
         relevance: item.relevance || 0.95,
@@ -373,7 +401,7 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
         url: c.url,
         publishedAt: c.publishedAt || null,
         retrievedAt: c.retrievedAt || new Date().toISOString(),
-        passage: passage.slice(0, 400),
+        passage: passage.slice(0, 1000),
         sourceTier: c.sourceType ? c.sourceType : classifySourceTier(c.url, c.publisher),
         sourceRole: "DISCOVERY",
         relevance: 0.85,
@@ -381,7 +409,7 @@ export function normalizeEvidencePack({ citations = [], extractedPassages = [], 
     }
   }
 
-  return pack.slice(0, 12);
+  return pack.slice(0, 20);
 }
 
 /**
