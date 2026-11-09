@@ -35,7 +35,10 @@ export function createTopicState(initial = {}) {
  * @returns {boolean}
  */
 export function isFollowUpQuery(query = "") {
-  const q = String(query || "").trim().toLowerCase();
+  const q = String(query || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/, "");
   if (!q) return false;
 
   const followUpTriggers = [

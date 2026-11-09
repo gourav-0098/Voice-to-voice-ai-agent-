@@ -37,22 +37,148 @@ import {
 const toolRouter = new ToolRouter();
 
 export const COGNITIVE_MODELS = {
-  FAST_MODEL: process.env.CHATLY_FAST_MODEL || "gemini-3.1-flash-lite",
+  FAST_MODEL: process.env.CHATLY_FAST_MODEL || "gemini-3.5-flash",
   REASONING_MODEL: process.env.CHATLY_REASONING_MODEL || "openai/gpt-oss-120b",
   FAST_REASONER: process.env.CHATLY_FAST_REASONER || "qwen/qwen3.8-27b",
   BACKUP_REASONER: process.env.CHATLY_BACKUP_REASONER || "openai/gpt-oss-20b",
 };
 
-const STABLE_GEMINI_FALLBACKS = [
-  "gemini-3.1-flash-lite",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-flash-lite-latest",
-  "gemini-flash-latest",
+export const STABLE_GEMINI_FALLBACKS = [
+  process.env.CHATLY_GEMINI_FALLBACK_1 || "gemini-3.5-flash",
+  process.env.CHATLY_GEMINI_FALLBACK_2 || "gemini-2.5-flash",
+  process.env.CHATLY_GEMINI_FALLBACK_3 || "gemini-flash-latest",
 ];
 
-let groqCooldownUntil = 0;
+export const groqModelCooldowns = new Map();
+
+/**
+ * Strips raw debug markers, tool output wrappers, and internal formatting
+ */
+export function cleanRawSnippetText(text) {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(/^Verified web search evidence for\s+["'][^"']+["']:\s*/gi, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/<\/?(?:untrusted_evidence_data|evidence|tool_call|context)[^>]*>/gi, "")
+    .replace(/\[(?:SOURCE|FINANCIAL_QUOTE|SEARCH_EMPTY|SEARCH_ERROR|TOOL_[A-Z_]+|STRUCTURED COMPARISON DATASET|TEMPORAL ANCHOR|RETRIEVED WEB EVIDENCE PACK)[^\]]*\]/gi, "")
+    .replace(/【[^】]+】|\[\d+\]/g, "")
+    .replace(/Encyclopedia entry for [^.]+ on Wikipedia\./gi, "")
+    .replace(/\s*Reported by [^.]+ on [^.]+\./gi, "")
+    .replace(/\s*\([^)]+,\s*(?:ESTABLISHED_REPORTING|PRIMARY_RECORD|ACADEMIC|SECONDARY_COMMENTARY|UNVERIFIED_BLOG)\)/gi, "")
+    .replace(/^([^:]{10,120}):\s*\1/i, "$1") // De-duplicate repeated title prefixes
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Builds a clean, multi-observation evidence fallback when synthesis models fail
+ */
+export function buildSafeEvidenceFallback({ query, observations = [], citations = [], evidencePack = [], detGate = null, gapData = null }) {
+  // 1. Check for financial / stock quotes
+  const financialObs = observations.filter((o) => o.tool === "get_stock_quote" && o.success && o.summary);
+  if (financialObs.length > 0) {
+    const formattedQuotes = financialObs.map((o) => cleanRawSnippetText(o.summary)).filter(Boolean);
+    if (formattedQuotes.length === 1) {
+      return formattedQuotes[0];
+    }
+    if (formattedQuotes.length > 1) {
+      return formattedQuotes.join(" Additionally, ");
+    }
+  }
+
+  // 2. Tokenize query for relevance scoring
+  const STOP_WORDS = new Set([
+    "what", "which", "where", "when", "tell", "about", "show", "with", "from",
+    "that", "this", "does", "have", "been", "will", "would", "the", "and", "for",
+    "are", "were", "was", "how", "who", "whom", "why", "had", "has", "can", "could",
+    "should", "they", "their", "there", "then", "into", "over", "more", "most", "some"
+  ]);
+
+  const queryLower = (query || "").toLowerCase();
+  const queryTokens = queryLower
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+
+  const facts = [];
+  const seenTexts = new Set();
+
+  const addFact = (text, publisher = null) => {
+    const clean = cleanRawSnippetText(text);
+    if (!clean || clean.length < 20) return;
+    if (/^Encyclopedia entry for/i.test(clean) || /^Search returned no usable/i.test(clean)) return;
+
+    // Reject echo of query itself
+    if (clean.toLowerCase() === queryLower || queryLower.includes(clean.toLowerCase())) return;
+
+    const sig = clean.slice(0, 60).toLowerCase();
+    if (seenTexts.has(sig)) return;
+    seenTexts.add(sig);
+
+    // Score relevance against whole query tokens
+    const lower = clean.toLowerCase();
+    const cleanWords = new Set(lower.replace(/[^\w\s]/g, " ").split(/\s+/));
+    const score = queryTokens.reduce((acc, t) => acc + (cleanWords.has(t) || lower.includes(t) ? 1 : 0), 0);
+
+    facts.push({
+      text: clean,
+      publisher: publisher || null,
+      score,
+    });
+  };
+
+  // Prioritize evidencePack passages and citations
+  for (const p of (evidencePack || [])) {
+    if (p.passage) addFact(p.passage, p.publisher || p.source);
+  }
+  for (const c of (citations || [])) {
+    const textToUse = [c.title, c.snippet].filter(Boolean).join(". ");
+    addFact(textToUse, c.publisher);
+  }
+  for (const o of (observations || [])) {
+    if (o.success && o.summary && o.tool !== "get_stock_quote") {
+      addFact(o.summary);
+    }
+  }
+
+  // Sort by relevance score descending
+  facts.sort((a, b) => b.score - a.score);
+
+  // Take top relevant facts (up to 3) with score > 0
+  const topFacts = facts.filter((f) => f.score > 0);
+
+  // If no relevant facts found, return an honest limitation statement (never output unrelated facts)
+  if (topFacts.length === 0) {
+    if (detGate && !detGate.passed) {
+      return `Available records do not contain sufficient verified details to answer all aspects of this inquiry.`;
+    }
+    return `Verified records for the requested information could not be retrieved at this time.`;
+  }
+
+  const selected = topFacts.slice(0, 3);
+
+  const formattedSentences = selected.map((f, idx) => {
+    let t = f.text;
+    if (!/[.!?]$/.test(t)) t += ".";
+    if (f.publisher && !t.toLowerCase().includes(f.publisher.toLowerCase())) {
+      if (idx > 0 && selected[idx - 1].publisher === f.publisher) {
+        return `Additionally, ${t}`;
+      }
+      return `According to ${f.publisher}, ${t}`;
+    }
+    return t;
+  });
+
+  let response = formattedSentences.join(" ");
+
+  // If deterministic gate or gap data indicates unresolved contradictions
+  const hasConflict = Boolean(detGate?.hasContradiction || detGate?.conflicts?.length > 0 || gapData?.conflicts?.length > 0);
+  if (hasConflict) {
+    response += " Note that reporting contains conflicting or unverified details regarding these events.";
+  }
+
+  return response;
+}
 
 /**
  * Execute prompt with targeted tier and automatic failover
@@ -65,24 +191,47 @@ let groqCooldownUntil = 0;
  * @param {boolean} [opts.forceGroq=false]
  * @param {number} [opts.maxTokens=1200]
  */
-async function callCognitiveModel({
+export async function callCognitiveModel({
   systemPrompt,
   messages,
   tier = "FAST",
   temperature = 0.3,
   forceGroq = false,
   maxTokens = 1200,
+  signal = null,
 }) {
+  if (signal?.aborted) {
+    const abortErr = new Error("OPERATION_ABORTED");
+    abortErr.name = "AbortError";
+    throw abortErr;
+  }
   const groqApiKey = process.env.GROQ_API_KEY;
 
   const tryGroqModel = async (modelId) => {
+    if (signal?.aborted) {
+      const abortErr = new Error("OPERATION_ABORTED");
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
     if (!groqApiKey) throw new Error("GROQ_API_KEY not configured");
-    if (Date.now() < groqCooldownUntil) {
-      throw new Error(`Groq in cooldown until ${new Date(groqCooldownUntil).toLocaleTimeString()} following 429`);
+    const modelCooldownUntil = groqModelCooldowns.get(modelId) || 0;
+    if (Date.now() < modelCooldownUntil) {
+      throw new Error(`Groq ${modelId} in cooldown until ${new Date(modelCooldownUntil).toLocaleTimeString()} following 429`);
     }
     const controller = new AbortController();
     const groqTimeoutMs = Math.max(25000, Math.min(80000, Math.ceil((maxTokens || 1200) * 16)));
     const timer = setTimeout(() => controller.abort(), groqTimeoutMs);
+
+    const onUpstreamAbort = () => {
+      controller.abort();
+    };
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener("abort", onUpstreamAbort, { once: true });
+      }
+    }
 
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -103,8 +252,8 @@ async function callCognitiveModel({
       if (!res.ok) {
         const errText = await res.text();
         if (res.status === 429) {
-          groqCooldownUntil = Date.now() + 30000;
-          console.warn("[THINKING ENGINE] Groq TPM 429 hit. Enabling sticky 30s failover to Gemini key pool.");
+          groqModelCooldowns.set(modelId, Date.now() + 20000);
+          console.warn(`[THINKING ENGINE] Groq ${modelId} hit rate limit (429). Cooled down for 20s.`);
         }
         throw new Error(`Groq ${modelId} HTTP ${res.status}: ${errText}`);
       }
@@ -117,22 +266,37 @@ async function callCognitiveModel({
       throw new Error(`Groq ${modelId} returned empty reply`);
     } finally {
       clearTimeout(timer);
+      if (signal) {
+        signal.removeEventListener("abort", onUpstreamAbort);
+      }
     }
   };
 
   const tryGemini = async (preferredModel = COGNITIVE_MODELS.FAST_MODEL) => {
+    if (signal?.aborted) {
+      const abortErr = new Error("OPERATION_ABORTED");
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
     return await geminiKeyManager.executeWithFailover(async (client) => {
-      const modelsToTry = [preferredModel, ...STABLE_GEMINI_FALLBACKS.filter((m) => m !== preferredModel)];
+      const modelsToTry = [...new Set([preferredModel, ...STABLE_GEMINI_FALLBACKS])];
       let lastErr = null;
 
       for (const model of modelsToTry) {
+        if (signal?.aborted) {
+          const abortErr = new Error("OPERATION_ABORTED");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        let timer;
+        let onAbort;
         try {
           const contents = messages.map((m) => ({
             role: m.role === "user" || m.role === "system" ? "user" : "model",
             parts: [{ text: m.content }],
           }));
 
-          const geminiTimeoutMs = Math.max(25000, Math.min(90000, Math.ceil((maxTokens || 1200) * 18)));
+          const geminiTimeoutMs = Math.max(25000, Math.min(60000, Math.ceil((maxTokens || 1200) * 16)));
 
           const generatePromise = client.models.generateContent({
             model,
@@ -141,14 +305,34 @@ async function callCognitiveModel({
               systemInstruction: systemPrompt,
               temperature,
               maxOutputTokens: maxTokens,
+              abortSignal: signal || undefined,
             },
           });
 
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Gemini ${model} request timed out after ${geminiTimeoutMs}ms`)), geminiTimeoutMs)
-          );
+          const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`Gemini ${model} request timed out after ${geminiTimeoutMs}ms`)), geminiTimeoutMs);
+          });
 
-          const response = await Promise.race([generatePromise, timeoutPromise]);
+          const racePromises = [generatePromise, timeoutPromise];
+          if (signal) {
+            racePromises.push(
+              new Promise((_, reject) => {
+                if (signal.aborted) {
+                  const abortErr = new Error("OPERATION_ABORTED");
+                  abortErr.name = "AbortError";
+                  return reject(abortErr);
+                }
+                onAbort = () => {
+                  const abortErr = new Error("OPERATION_ABORTED");
+                  abortErr.name = "AbortError";
+                  reject(abortErr);
+                };
+                signal.addEventListener("abort", onAbort, { once: true });
+              })
+            );
+          }
+
+          const response = await Promise.race(racePromises);
 
           const reply = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || "";
           if (reply.trim()) {
@@ -156,8 +340,26 @@ async function callCognitiveModel({
           }
         } catch (err) {
           lastErr = err;
+          if (signal?.aborted || err?.name === "AbortError" || err?.message === "OPERATION_ABORTED") {
+            throw err;
+          }
           const msg = String(err?.message || "");
+          if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
+            // Re-throw immediately so executeWithFailover advances to the next key in the pool,
+            // rather than repeating doomed requests with other models on the same exhausted key!
+            throw err;
+          }
+          if (msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("timed out") || msg.includes("TIMEOUT")) {
+            // Service level overload or timeout: re-throw immediately so cognitive cascade can advance to Groq
+            // rather than burning latency retrying across models on a failing Gemini service!
+            throw err;
+          }
           console.warn(`[THINKING ENGINE] Gemini ${model} failed (${msg.slice(0, 80)}). Trying fallback...`);
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (signal && onAbort) {
+            signal.removeEventListener("abort", onAbort);
+          }
         }
       }
       throw lastErr || new Error("All Gemini models failed on current key");
@@ -166,42 +368,89 @@ async function callCognitiveModel({
 
   // Execution dispatch based on Tier
   if (tier === "REASONING") {
-    // 120B Heavyweight planner / deep research
+    // 120B Heavyweight planner / deep research -> 27B -> Gemini -> Backup Reasoner
     if (!forceGroq && !groqApiKey) return await tryGemini();
     try {
       return await tryGroqModel(COGNITIVE_MODELS.REASONING_MODEL);
     } catch (e1) {
+      if (signal?.aborted) {
+        const abortErr = new Error("OPERATION_ABORTED");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
+      if (e1?.name === "AbortError" || e1?.message === "OPERATION_ABORTED") throw e1;
       console.warn(`[THINKING ENGINE] 120B failed, falling back to 27B reasoner:`, e1.message);
       try {
         return await tryGroqModel(COGNITIVE_MODELS.FAST_REASONER);
       } catch (e2) {
-        return await tryGemini();
+        if (signal?.aborted) {
+          const abortErr = new Error("OPERATION_ABORTED");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        if (e2?.name === "AbortError" || e2?.message === "OPERATION_ABORTED") throw e2;
+        try {
+          return await tryGemini();
+        } catch (e3) {
+          if (signal?.aborted) {
+            const abortErr = new Error("OPERATION_ABORTED");
+            abortErr.name = "AbortError";
+            throw abortErr;
+          }
+          if (e3?.name === "AbortError" || e3?.message === "OPERATION_ABORTED") throw e3;
+          console.warn(`[THINKING ENGINE] Gemini failed after Groq reasoning, trying backup Groq reasoner:`, e3.message);
+          return await tryGroqModel(COGNITIVE_MODELS.BACKUP_REASONER);
+        }
       }
     }
   }
 
   if (tier === "FAST_REASONER") {
-    // Qwen 27B (~350ms) for gap checking & intermediate checks
+    // Qwen 27B (~350ms) -> Backup Reasoner -> Gemini
     if (!forceGroq && !groqApiKey) return await tryGemini();
     try {
       return await tryGroqModel(COGNITIVE_MODELS.FAST_REASONER);
     } catch (e1) {
+      if (signal?.aborted) {
+        const abortErr = new Error("OPERATION_ABORTED");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
+      if (e1?.name === "AbortError" || e1?.message === "OPERATION_ABORTED") throw e1;
       try {
         return await tryGroqModel(COGNITIVE_MODELS.BACKUP_REASONER);
       } catch (e2) {
+        if (signal?.aborted) {
+          const abortErr = new Error("OPERATION_ABORTED");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        if (e2?.name === "AbortError" || e2?.message === "OPERATION_ABORTED") throw e2;
         return await tryGemini();
       }
     }
   }
 
-  // Default: FAST_MODEL (Gemini Flash -> Qwen 27B)
+  // Default: FAST_MODEL (Gemini Flash -> Qwen 27B -> Qwen 20B)
   if (forceGroq) {
     try {
       return await tryGroqModel(COGNITIVE_MODELS.FAST_REASONER);
-    } catch (_) {
+    } catch (e1) {
+      if (signal?.aborted) {
+        const abortErr = new Error("OPERATION_ABORTED");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
+      if (e1?.name === "AbortError" || e1?.message === "OPERATION_ABORTED") throw e1;
       try {
         return await tryGroqModel(COGNITIVE_MODELS.BACKUP_REASONER);
       } catch (err) {
+        if (signal?.aborted) {
+          const abortErr = new Error("OPERATION_ABORTED");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        if (err?.name === "AbortError" || err?.message === "OPERATION_ABORTED") throw err;
         console.warn("[THINKING ENGINE] Groq unavailable, falling back to Gemini key pool:", err.message);
         return await tryGemini(COGNITIVE_MODELS.FAST_MODEL);
       }
@@ -210,8 +459,27 @@ async function callCognitiveModel({
 
   try {
     return await tryGemini(COGNITIVE_MODELS.FAST_MODEL);
-  } catch (_) {
-    return await tryGroqModel(COGNITIVE_MODELS.FAST_REASONER);
+  } catch (err) {
+    if (signal?.aborted) {
+      const abortErr = new Error("OPERATION_ABORTED");
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
+    if (err?.name === "AbortError" || err?.message === "OPERATION_ABORTED") throw err;
+    console.warn(`[THINKING ENGINE] Primary Gemini failed (${err.message}). Trying Groq fast reasoner...`);
+    if (!groqApiKey) throw err;
+    try {
+      return await tryGroqModel(COGNITIVE_MODELS.FAST_REASONER);
+    } catch (gErr) {
+      if (signal?.aborted) {
+        const abortErr = new Error("OPERATION_ABORTED");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
+      if (gErr?.name === "AbortError" || gErr?.message === "OPERATION_ABORTED") throw gErr;
+      console.warn(`[THINKING ENGINE] Groq fast reasoner failed (${gErr.message}). Trying backup reasoner...`);
+      return await tryGroqModel(COGNITIVE_MODELS.BACKUP_REASONER);
+    }
   }
 }
 
@@ -410,6 +678,7 @@ Respond strictly in JSON format:
 export function sanitizeSpokenReply(rawReply, options = {}) {
   if (!rawReply || typeof rawReply !== "string") return "";
   let text = rawReply
+    .replace(/```[\s\S]*?```/g, "")
     .replace(/\btoolcode\b[\s\S]*/gi, "")
     .replace(/print\([a-zA-Z0-9_]+\([^)]*\)\)/gi, "")
     .replace(/^.*?(?:ek minute|ek second|hold on|let me check|main abhi check|main search karke|abhi dekh kar).*?(?:batata hoon|bata raha hoon|bata rahi hoon|dekh raha hoon)[.!?,;\s]*/i, "")
@@ -879,7 +1148,7 @@ Do NOT search the web or cite external websites.`;
     });
 
     // Financial / Crypto quote integration for live market queries
-    const isFinancialQuoteQuery = /\b(trading at|price|quote|24h change|24-hour change|stock quote|market cap)\b/i.test(effectiveQuery);
+    const isFinancialQuoteQuery = /\b(trading at|price|quote|24h change|24-hour change|stock quote|market cap|circulating supply|token supply|supply cap|total supply)\b/i.test(effectiveQuery);
     const foundTickers = isFinancialQuoteQuery
       ? [...effectiveQuery.matchAll(/\b(btc|bitcoin|eth|ethereum|sol|solana|doge|dogecoin|xrp|ripple|ada|cardano|bnb|binance|nvda|nvidia|tsla|tesla|aapl|apple|msft|microsoft)\b/gi)].map((m) => m[1].toLowerCase())
       : [];
@@ -900,7 +1169,7 @@ Do NOT search the web or cite external websites.`;
               summary: sum,
             });
             financialPassages.push({
-              source: quoteRes.data.source || "Live Financial Feed",
+              source: quoteRes.data.source || (quoteRes.data.circulatingSupply ? "On-Chain Ledger & Financial Feed" : "Live Financial Feed"),
               url: `https://finance.yahoo.com/quote/${quoteRes.data.symbol}`,
               publishedAt: quoteRes.data.marketTime || new Date().toISOString(),
               retrievedAt: new Date().toISOString(),
@@ -917,7 +1186,7 @@ Do NOT search the web or cite external websites.`;
 
     researchData = await executeAdaptiveResearch({
       query: effectiveQuery,
-      callModel: (params) => callCognitiveModel({ ...params, forceGroq }),
+      callModel: (params) => callCognitiveModel({ ...params, forceGroq, signal: params.signal || signal }),
       recordStep,
       options: {
         forceGroq,
@@ -1081,6 +1350,8 @@ ${isComparisonOrTechnical ? "7. FOR COMPARISON QUESTIONS: DO NOT arbitrarily pic
 9. CURRENT INCUMBENTS & OFFICEHOLDERS: For questions about current political officeholders (Chief Minister, Governor, Prime Minister, etc.), strictly rely on verified recent real-world evidence from 2024-2026. Never name former officeholders who vacated office prior to 2024 (e.g. Rajasthan's Chief Minister is Bhajan Lal Sharma, not past incumbents).
 10. ANTI-FABRICATION & EVIDENCE SUFFICIENCY: The evidence below was retrieved from live web/news search (it was NOT provided by the user). If the evidence does not contain verified specific data (e.g. specific game scores, verbatim quotes, prices, or patch versions), state clearly what could not be verified. NEVER fabricate, extrapolate, or invent missing scores, tables, quotes, or numbers.
 11. CITATION FORMATTING: Do not speak or output raw bracketed citations like 【Source 1】, 【1】, or [Source 1]. Synthesize information cleanly in your own words with natural attributions (e.g. "According to Axios...").
+12. MULTI-STATEMENT & VENUE ATTRIBUTION: When multiple credible sources describe separate statements, calls, interviews, or posts made by the same public figure on an event, preserve the distinct statements and attribute each to its specific venue or platform (e.g., distinguishing a call-in interview, an official statement to print press, or a social media post). Do not collapse distinct statements into one or assume the first source is the sole record.
+13. PRESERVATION OF REQUESTED NUMERICAL FACTS: When the user query asks for specific numbers, percentages, vote shares, block counts, or circulating supply figures, ensure those exact verified figures from the evidence are preserved in the response. If sources indicate an election or ballot measure is "too close to call" or contested, state that status explicitly while retaining the reported vote count or percentage (e.g. "with 52% in favor, but the race remains too close to call"). Do not discard specific percentages in favor of vague generalities.
 
 ${comparisonBlock}
 [RETRIEVED WEB EVIDENCE PACK (AUTONOMOUSLY RETRIEVED VIA SEARCH - NOT USER PROVIDED)]:
@@ -1088,20 +1359,81 @@ ${evidenceText}
 
 User Query: "${effectiveQuery}"`;
 
-      try {
-        const synthAi = await callCognitiveModel({
-          systemPrompt: isLongFormSearch
-            ? "You are Chatly, an intelligent research and intelligence AI delivering authoritative, comprehensive, verified reports with clean GitHub-flavored markdown. Cover all requested facets thoroughly."
-            : "You are Chatly, an intelligent conversational AI delivering accurate, verified conclusions directly. Never output toolcode, python, or promises to search.",
-          messages: [{ role: "user", content: synthesisPrompt }],
-          tier: synthesisTier,
-          forceGroq: isLongFormSearch ? false : forceGroq,
-          temperature: 0.2,
-          maxTokens: Math.max(budget.responseBudgetTokens || 3500, isLongFormSearch ? 5000 : 2500),
-        });
-        spokenReply = sanitizeSpokenReply(synthAi.reply);
-      } catch (err) {
-        spokenReply = validObservations[0]?.summary || "Based on verified records, the information has been retrieved.";
+      const synthStart = performance.now();
+      if (signal?.aborted) {
+        console.warn("🛑 [SYNTHESIS] Client disconnected, aborting response synthesis");
+        spokenReply = "Request was cancelled by client.";
+        if (researchData?.latencyWaterfall) {
+          researchData.latencyWaterfall.synthesis = {
+            startMs: Math.round(synthStart - t0),
+            endMs: Math.round(performance.now() - t0),
+            durationMs: Math.round(performance.now() - synthStart),
+            success: false,
+            error: "CLIENT_ABORTED",
+          };
+        }
+      } else {
+        try {
+          const synthAi = await callCognitiveModel({
+            systemPrompt: isLongFormSearch
+              ? "You are Chatly, an intelligent research and intelligence AI delivering authoritative, comprehensive, verified reports with clean GitHub-flavored markdown. Cover all requested facets thoroughly."
+              : "You are Chatly, an intelligent conversational AI delivering accurate, verified conclusions directly. Never output toolcode, python, or promises to search.",
+            messages: [{ role: "user", content: synthesisPrompt }],
+            tier: synthesisTier,
+            forceGroq: isLongFormSearch ? false : forceGroq,
+            temperature: 0.2,
+            maxTokens: Math.max(budget.responseBudgetTokens || 3500, isLongFormSearch ? 5000 : 2500),
+            signal,
+          });
+          spokenReply = sanitizeSpokenReply(synthAi.reply);
+          if (researchData?.latencyWaterfall) {
+            researchData.latencyWaterfall.synthesis = {
+              startMs: Math.round(synthStart - t0),
+              endMs: Math.round(performance.now() - t0),
+              durationMs: Math.round(performance.now() - synthStart),
+              success: true,
+              model: synthAi.model,
+              provider: synthAi.provider,
+            };
+          }
+        } catch (err) {
+          if (signal?.aborted || err?.name === "AbortError" || err?.message === "OPERATION_ABORTED") {
+            spokenReply = "Request was cancelled by client.";
+            if (researchData?.latencyWaterfall) {
+              researchData.latencyWaterfall.synthesis = {
+                startMs: Math.round(synthStart - t0),
+                endMs: Math.round(performance.now() - t0),
+                durationMs: Math.round(performance.now() - synthStart),
+                success: false,
+                error: "CLIENT_ABORTED",
+              };
+            }
+          } else {
+            try {
+              spokenReply = buildSafeEvidenceFallback({
+                query: effectiveQuery,
+                observations: validObservations,
+                citations: allCitations,
+                evidencePack: researchData?.evidencePack || [],
+                detGate: detEvidence || researchData?.deterministicGate || null,
+                gapData: qwenGapData,
+              });
+            } catch (fallbackErr) {
+              console.error("⚠️ [SYNTHESIS FALLBACK ERROR]:", fallbackErr);
+              spokenReply = "Available records do not contain sufficient verified details to answer all aspects of this inquiry.";
+            }
+            if (researchData?.latencyWaterfall) {
+              researchData.latencyWaterfall.synthesis = {
+                startMs: Math.round(synthStart - t0),
+                endMs: Math.round(performance.now() - t0),
+                durationMs: Math.round(performance.now() - synthStart),
+                success: false,
+                error: err.message,
+                fallbackUsed: "SAFE_EVIDENCE_SYNTHESIS",
+              };
+            }
+          }
+        }
       }
     }
   }
@@ -1133,6 +1465,8 @@ User Query: "${effectiveQuery}"`;
     citations: allCitations,
     thinkingSteps,
     totalDurationMs,
+    latencyWaterfall: researchData?.latencyWaterfall || null,
+    urlObservability: researchData?.urlObservability || [],
     researchMeta,
     researchState: researchData?.researchState || null,
     telemetry: researchData?.telemetry || null,

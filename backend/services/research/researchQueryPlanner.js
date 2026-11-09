@@ -45,20 +45,27 @@ export function sanitizePlannerQuery(searchQuery, rawUserQuery, currentYear = 20
     clean = String(rawUserQuery || "").replace(/[?"'.,!]/g, " ").trim();
   }
 
+  // Explicit Year Detection: Any explicit 4-digit year in user's query (past or future: 1919, 1992, 2020, 2024, 2028, 2030)
+  const explicitYearMatch = String(rawUserQuery || "").match(/\b(1[789]\d\d|20\d\d)\b/);
+  const userHasExplicitYear = Boolean(explicitYearMatch);
+
   const isHistoricalOrBiographical =
     !requiresCurrentDate ||
     /\b(gandhi|ww1|ww2|world war|treaty|pact|ancient|medieval|history|assassinated|born in|died in|works of|books of|hinduism|buddhism|shakespeare|einstein|tagore)\b/i.test(rawLower);
 
   if (isHistoricalOrBiographical) {
     // Under historical/notable works mode: DO NOT force current year into query!
-    clean = clean.replace(/\b(202[0-9]|201\d)\b/g, "").replace(/\s{2,}/g, " ").trim();
+    // If the user specified an explicit year (e.g. 1919, 2015), preserve it; otherwise strip any hallucinated modern years
+    if (!userHasExplicitYear) {
+      clean = clean.replace(/\b(202[0-9]|201\d)\b/g, "").replace(/\s{2,}/g, " ").trim();
+    }
     // Normalize "best work of X" to "notable works X" if present
     clean = clean.replace(/\bbest work(?:s)? of\b/gi, "notable works of");
     return clean;
   }
 
-  const userHasExplicitPastYear = /\b(18\d\d|19\d\d|20[01]\d|202[0-5])\b/.test(rawUserQuery);
-  if (!userHasExplicitPastYear && requiresCurrentDate) {
+  // Only inject/anchor current year when user did NOT supply an explicit year and inquiry genuinely requires current date
+  if (!userHasExplicitYear && requiresCurrentDate) {
     clean = clean.replace(/\b(202[0-5]|201\d)\b/g, String(currentYear));
     if (/\b(midterm|election|ballot|governorship|referendum)\b/i.test(clean) && !clean.includes(String(currentYear))) {
       clean = `${clean} ${currentYear}`;
@@ -106,6 +113,7 @@ export async function formulateResearchPlan({
   dimensions = [],
   callModel,
   requiresCurrentDate = true,
+  signal = null,
 }) {
   const dateCtx = getSystemDateContext();
   const isHistorical =
@@ -164,13 +172,39 @@ Respond strictly in valid JSON format:
   "followupAllowed": true
 }`;
 
+  const PLANNING_TIMEOUT_MS = 3500;
+  const plannerAbortController = new AbortController();
+  const onUpstreamAbort = () => {
+    const err = new Error("OPERATION_ABORTED");
+    err.name = "AbortError";
+    plannerAbortController.abort(err);
+  };
+  if (signal) {
+    if (signal.aborted) {
+      plannerAbortController.abort();
+    } else {
+      signal.addEventListener("abort", onUpstreamAbort, { once: true });
+    }
+  }
+
+  let timer;
   try {
-    const res = await callModel({
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        plannerAbortController.abort(new Error(`PLANNING_TIMEOUT_${PLANNING_TIMEOUT_MS}MS`));
+        reject(new Error(`PLANNING_TIMEOUT_${PLANNING_TIMEOUT_MS}MS`));
+      }, PLANNING_TIMEOUT_MS);
+    });
+
+    const callPromise = callModel({
       systemPrompt: "You are a strategic research planner. Output only valid JSON without explanatory conversation.",
       messages: [{ role: "user", content: planningPrompt }],
       tier: "REASONING", // GPT-OSS 120B
       temperature: 0.1,
+      signal: plannerAbortController.signal,
     });
+
+    const res = await Promise.race([callPromise, timeoutPromise]);
 
     const parsed = extractJsonBlock(res);
     if (parsed && Array.isArray(parsed.searchTasks) && parsed.searchTasks.length > 0) {
@@ -180,7 +214,17 @@ Respond strictly in valid JSON format:
       }));
       return parsed;
     }
-  } catch (_) {}
+  } catch (err) {
+    if (signal?.aborted) {
+      throw err;
+    }
+    console.warn(`⚠️ [PLANNING] Planner LLM failed or exceeded ${PLANNING_TIMEOUT_MS}ms (${err.message}); falling back to deterministic plan.`);
+  } finally {
+    clearTimeout(timer);
+    if (signal) {
+      signal.removeEventListener("abort", onUpstreamAbort);
+    }
+  }
 
   // Deterministic Fallback Plan if LLM call fails or times out
   const fallbackTasks = [];
@@ -282,25 +326,45 @@ Respond strictly in valid JSON format:
     });
   } else if (intent === RESEARCH_INTENTS.COMPARISON) {
     const isAi = /\b(ai|llm|model|api|openai|google|anthropic|groq)\b/i.test(query);
+    const cleanComparisonQuery = query.replace(/[?"'.,!]/g, "").trim();
     fallbackTasks.push({
       topic: "Overall market landscape",
-      query: `${query.replace(/[?"'.,!]/g, "").slice(0, 80).trim()}${requiresCurrentDate ? ` ${dateCtx.year}` : ""}`,
+      query: `${cleanComparisonQuery}${requiresCurrentDate ? ` ${dateCtx.year}` : ""}`,
       freshness: requiresCurrentDate ? "current" : "general",
       sourcePreference: "benchmark",
     });
     fallbackTasks.push({
       topic: isAi ? "Latency and pricing tradeoffs" : "Comparative feature tradeoffs",
-      query: isAi ? `AI API pricing latency comparison ${dateCtx.year}` : `${query.replace(/[?"'.,!]/g, "").slice(0, 50).trim()} features tradeoffs comparison`,
+      query: isAi ? `AI API pricing latency comparison ${dateCtx.year}` : `${cleanComparisonQuery} features tradeoffs comparison`,
       freshness: requiresCurrentDate ? "current" : "general",
       sourcePreference: "official",
     });
   } else {
-    fallbackTasks.push({
-      topic: query.slice(0, 40),
-      query: sanitizePlannerQuery(query, query, dateCtx.year, requiresCurrentDate),
-      freshness: requiresCurrentDate ? "current" : "general",
-      sourcePreference: "official",
-    });
+    // Multi-part question decomposition: preserve full queries and split on two-part conjunctions
+    const multiPartMatch = query.split(/\s*,\s*and\s+|\s+and\s+(?:what|who|how|where|when|by\s+how|which)\b/i);
+    if (multiPartMatch.length >= 2 && multiPartMatch[0].trim().length >= 10 && multiPartMatch[1].trim().length >= 10) {
+      const part1 = multiPartMatch[0].trim();
+      const part2 = multiPartMatch[1].trim();
+      fallbackTasks.push({
+        topic: part1,
+        query: sanitizePlannerQuery(part1, query, dateCtx.year, requiresCurrentDate),
+        freshness: requiresCurrentDate ? "current" : "general",
+        sourcePreference: "official",
+      });
+      fallbackTasks.push({
+        topic: part2,
+        query: sanitizePlannerQuery(part2, query, dateCtx.year, requiresCurrentDate),
+        freshness: requiresCurrentDate ? "current" : "general",
+        sourcePreference: "official",
+      });
+    } else {
+      fallbackTasks.push({
+        topic: query.trim(),
+        query: sanitizePlannerQuery(query, query, dateCtx.year, requiresCurrentDate),
+        freshness: requiresCurrentDate ? "current" : "general",
+        sourcePreference: "official",
+      });
+    }
   }
 
   return {

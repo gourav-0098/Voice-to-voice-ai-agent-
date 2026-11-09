@@ -153,6 +153,31 @@ export const stockMarketTool = {
       const assetType = resolveAssetType(meta.instrumentType, ticker);
       const isCrypto = assetType === "CRYPTO";
 
+      let circulatingSupply = null;
+      let circulatingSupplyFormatted = null;
+      let maxSupply = null;
+      let supplyCapPercentage = null;
+
+      if (ticker === "BTC-USD") {
+        try {
+          const btcSupplyRes = await fetch("https://blockchain.info/q/totalbc", {
+            headers: { "User-Agent": "Mozilla/5.0" },
+            signal: AbortSignal.timeout(2500),
+          });
+          if (btcSupplyRes.ok) {
+            const rawSat = await btcSupplyRes.text();
+            const satoshis = Number(rawSat.trim());
+            if (satoshis > 0) {
+              const btcSupply = Math.floor(satoshis / 1e8);
+              circulatingSupply = btcSupply;
+              circulatingSupplyFormatted = `${btcSupply.toLocaleString("en-US")} BTC`;
+              maxSupply = 21000000;
+              supplyCapPercentage = `${((btcSupply / 21000000) * 100).toFixed(1)}%`;
+            }
+          }
+        } catch (_) {}
+      }
+
       const marketTimestamp = meta.regularMarketTime
         ? new Date(meta.regularMarketTime * 1000).toISOString()
         : new Date().toISOString();
@@ -167,6 +192,10 @@ export const stockMarketTool = {
         previousClose: prevClose,
         dayRange: `${dayLow} - ${dayHigh}`,
         fiftyTwoWeekRange: yearLow && yearHigh ? `${yearLow} - ${yearHigh}` : null,
+        circulatingSupply,
+        circulatingSupplyFormatted,
+        maxSupply,
+        supplyCapPercentage,
         exchange: meta.fullExchangeName || meta.exchangeName || "Exchange",
         source: isCrypto ? "Live 24/7 Crypto Feed" : "Exchange Feed (Yahoo Finance)",
         isDelayed: !isCrypto, // Standard 15-minute public exchange delay for equities
@@ -205,6 +234,9 @@ export const stockMarketTool = {
     const unit = d.assetType === "CRYPTO" ? "" : d.assetType === "INDEX" ? " points" : " per share";
 
     let summary = `${d.companyName} (${d.assetType}: ${d.symbol}) is currently trading at ${d.currency} ${d.currentPrice}${unit} (${sign}${d.changePercent}% today). Day range is ${d.dayRange} ${d.currency}${delayText}.`;
+    if (d.circulatingSupplyFormatted) {
+      summary += ` Reported circulating supply is ${d.circulatingSupplyFormatted} (approx ${d.supplyCapPercentage} of the ${d.maxSupply ? (d.maxSupply / 1e6) + "M" : "total"} cap).`;
+    }
     if (d.fiftyTwoWeekRange) {
       summary += ` 52-week range is ${d.fiftyTwoWeekRange} ${d.currency}.`;
     }

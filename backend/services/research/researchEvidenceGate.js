@@ -260,29 +260,58 @@ export function evaluateEvidenceDeterministic({
     missingSubtopicReason = `Retrieved evidence does not contain references to the subject entity: [${subjectEntities.join(", ")}].`;
   }
 
-  // Requested Fact Validations (Dates for "when", numbers for "how many/count/percent/supply", quotes for "words/quotes")
+  // Requested Fact Validations (Fact-proximate validations, not merely global regex presence)
   let missingFactReason = null;
   const asksForDateOrWhen = /\b(?:when|what date|what day|swearing-in|inauguration|scheduled for)\b/i.test(lowerQ);
   if (asksForDateOrWhen && !isHistorical) {
-    const hasDateOrYear = /\b(?:january|february|march|april|may|june|july|august|september|october|november|december|\b\d{1,2}(?:st|nd|rd|th)?\b|\b202[4-7]\b)\b/i.test(combinedText);
-    if (!hasDateOrYear) {
-      missingFactReason = "Retrieved evidence lacks specific calendar date, month, or timeline.";
+    const datePattern = /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+\d{1,2}\b/i;
+    const hasRelevantDate = datePattern.test(combinedText);
+    if (!hasRelevantDate) {
+      missingFactReason = "Retrieved evidence lacks a specific calendar date (month and day) relevant to the timeline.";
     }
   }
 
   const asksForQuantityOrNumber = /\b(?:how many|how much|total count|percentage|%|what percent|circulating supply|trading at|share price|death toll|number of)\b/i.test(lowerQ);
   if (asksForQuantityOrNumber && !missingFactReason) {
-    const hasDigits = /\b\d+(?:[.,]\d+)?\b/.test(combinedText);
-    if (!hasDigits) {
-      missingFactReason = "Retrieved evidence lacks quantitative data, digits, or counts.";
+    const metricTerms = ["percent", "%", "points?", "monitors?", "governorships?", "seats?", "states?", "killed", "dead", "deaths?", "casualties?", "bombs?", "runs?", "questions?", "networks?", "assets?", "supply", "coins?", "dollars?", "btc", "eth", "sol", "\\$"];
+    const metricPattern = new RegExp(`(?:\\b\\d+(?:[.,]\\d+)?(?:\\s*(?:million|billion|k|m|%|percent))?\\s*(?:${metricTerms.join("|")})|(?:${metricTerms.join("|")})\\s*(?:of|around|about|nearly|at|over|reached)?\\s*\\$?\\s*\\d+(?:[.,]\\d+)?)`, "i");
+
+    const hasEntityProximateDigits = subjectEntities.some((entity) => {
+      const proxRegex = new RegExp(`(?:${entity}[^.!?\\n]{0,80}\\b\\d+(?:[.,]\\d+)?|\\b\\d+(?:[.,]\\d+)?[^.!?\\n]{0,80}${entity})`, "i");
+      return proxRegex.test(combinedText);
+    });
+
+    const hasRelevantQuantity = metricPattern.test(combinedText) || hasEntityProximateDigits;
+    if (!hasRelevantQuantity) {
+      missingFactReason = "Retrieved evidence lacks quantitative data or counts relevant to the requested subject/metric.";
+    }
+  }
+
+  const asksForPercentage = /\b(?:percentage|%|what percent|percent of|percentage backed)\b/i.test(lowerQ);
+  if (asksForPercentage && !missingFactReason) {
+    const hasPercentage = /(?:\b\d+(?:\.\d+)?\s*%|\b\d+(?:\.\d+)?\s*percent(?:age)?\b)/i.test(combinedText);
+    if (!hasPercentage) {
+      missingFactReason = "Retrieved evidence lacks a specific percentage figure requested by the query.";
+    }
+  }
+
+  const asksForSupply = /\b(?:circulating supply|token supply|supply cap|total supply)\b/i.test(lowerQ);
+  if (asksForSupply && !missingFactReason) {
+    const hasSupplyMetric = /\b(?:supply|circulating|cap)\b/i.test(combinedText) && /\b\d{1,3}(?:[.,]\d{3})*(?:\s*(?:million|billion|k|m|btc|eth|sol|coins?|tokens?|%))?\b/i.test(combinedText);
+    if (!hasSupplyMetric) {
+      missingFactReason = "Retrieved evidence lacks circulating supply or token metric figures requested by the query.";
     }
   }
 
   const asksForVerbatimQuote = /\b(?:exact words|what words|what did .* say|verbatim|quote)\b/i.test(lowerQ);
   if (asksForVerbatimQuote && !missingFactReason && !missingSubtopicReason) {
-    const hasStatement = /["'“][^"'”]{5,}["'”]|(?:said|stated|told|commented|wrote|posted|claimed)\b/i.test(combinedText);
-    if (!hasStatement) {
-      missingFactReason = "Retrieved evidence lacks direct quotes or attributed statements.";
+    const hasProximateQuoteOrStatement = subjectEntities.some((entity) => {
+      const quoteRegex = new RegExp(`(?:${entity}[^.!?\\n]{0,80}(?:said|stated|told|commented|wrote|posted|claimed|accepted|blamed|confirmed)|(?:said|stated|told|commented|wrote|posted|claimed)[^.!?\\n]{0,80}${entity})`, "i");
+      return quoteRegex.test(combinedText);
+    }) || /["'“][^"'”]{5,}["'”]/.test(combinedText);
+
+    if (!hasProximateQuoteOrStatement) {
+      missingFactReason = "Retrieved evidence lacks direct quotes or attributed statements connected to the subject.";
     }
   }
 

@@ -7,6 +7,21 @@ import { fileURLToPath } from "url";
 // Checkpoint 0: Entry point log
 console.log("📍 [CHECKPOINT 0] Initializing Express app in backend/index.js...");
 
+// Process-level error resilience to guard against Node 22 Undici parser assertion bug
+process.on("uncaughtException", (err) => {
+  if (err?.code === "ERR_ASSERTION" && err?.message?.includes("!this.paused")) {
+    console.warn("⚠️ [UNDICI SILENCED ASSERTION]: Suppressed Node 22 Undici parser finish assertion:", err.message);
+    return;
+  }
+  console.error("💥 [FATAL UNCAUGHT EXCEPTION]:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("💥 [FATAL UNHANDLED REJECTION]:", reason?.message || reason);
+  process.exit(1);
+});
+
 // Internal modules
 import connectDB from "./config/db.js";
 import authRouter from "./routes/auth.js";

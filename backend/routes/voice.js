@@ -209,6 +209,14 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders?.();
 
+  // Client cancellation listener (aborts background research if client disconnects prematurely)
+  const clientAbortController = new AbortController();
+  res.on("close", () => {
+    if (!res.writableFinished && !res.writableEnded) {
+      clientAbortController.abort();
+    }
+  });
+
   const sendEvent = (event, data) => {
     if (res.writableEnded || res.destroyed) return;
     try {
@@ -297,8 +305,11 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
         mode: selectedMode,
         effort,
         thinkingLevel,
+        signal: clientAbortController.signal,
         onStep: (step) => {
-          sendEvent("thinking_step", step);
+          if (!clientAbortController.signal.aborted) {
+            sendEvent("thinking_step", step);
+          }
         },
       });
 
@@ -307,6 +318,19 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
       }
 
       const replyText = thinkingResult.reply;
+
+      if (clientAbortController.signal.aborted) {
+        sendEvent("cancelled", { message: "Request was cancelled by client." });
+        res.end();
+        return;
+      }
+
+      if (!replyText || !replyText.trim()) {
+        console.error("❌ [STREAMING ERROR]: Thinking loop returned empty reply");
+        sendEvent("error", { message: "Engine failed to synthesize a valid reply.", status: "EMPTY_RESPONSE" });
+        res.end();
+        return;
+      }
 
       // Stream tokens to UI preserving exact whitespace, newlines, and code fences
       const tokens = replyText.match(/(\s+|\S+)/g) || [replyText];
@@ -348,6 +372,7 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
       });
 
       sendEvent("done", {
+        status: "SUCCESS",
         reply: replyText,
         thinkingSteps: thinkingResult.thinkingSteps,
         firstAudioTimeMs: thinkingResult.totalDurationMs,
@@ -357,6 +382,8 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
         isGuest,
         ragSource: "thinking_engine",
         citations: thinkingResult.citations,
+        latencyWaterfall: thinkingResult.latencyWaterfall || null,
+        urlObservability: thinkingResult.urlObservability || [],
       });
 
       res.end();
@@ -564,7 +591,7 @@ router.post("/stream", voiceLimiter, optionalVerifyToken, async (req, res) => {
     res.end();
   } catch (err) {
     console.error("❌ [STREAMING ERROR]:", err.message);
-    sendEvent("error", { message: err.message });
+    sendEvent("error", { message: err.message, status: "ERROR" });
     res.end();
   }
 });

@@ -293,6 +293,12 @@ export async function executeAdaptiveResearch({
       iterationsRun: 0,
       tokensUsedEstimate: 0,
     },
+    latencyWaterfall: {
+      planning: { startMs: 0, endMs: 0, durationMs: 0, success: false },
+      rounds: [],
+      totalDurationMs: 0,
+    },
+    urlObservability: [],
   };
 
   // 3. Research Intent Classification
@@ -311,6 +317,7 @@ export async function executeAdaptiveResearch({
   });
 
   // 4. Initial Query Planning via Gemini Flash (primary research controller)
+  const planningStart = performance.now();
   recordStep({
     phase: "PLANNING",
     title: "Planning research",
@@ -324,7 +331,16 @@ export async function executeAdaptiveResearch({
     dimensions: intentInfo.dimensions,
     callModel: (params) => callModel({ ...params, tier: budget.plannerModelTier }),
     requiresCurrentDate: intentInfo.requiresCurrentDate,
+    signal: options.signal,
   });
+
+  const planningEnd = performance.now();
+  researchState.latencyWaterfall.planning = {
+    startMs: Math.round(planningStart - t0),
+    endMs: Math.round(planningEnd - t0),
+    durationMs: Math.round(planningEnd - planningStart),
+    success: true,
+  };
 
   // Extract initial search tasks (governed by budget.maxPlannedQueriesPerIter)
   const initialTasks = Array.isArray(researchPlan.searchTasks) && researchPlan.searchTasks.length > 0
@@ -354,6 +370,34 @@ export async function executeAdaptiveResearch({
     const iteration = researchState.researchIteration;
     researchState.resourceUsage.iterationsRun = iteration;
 
+    const roundStart = performance.now();
+    const currentRoundLog = {
+      round: iteration,
+      startMs: Math.round(roundStart - t0),
+      endMs: 0,
+      durationMs: 0,
+      searchProviderCalls: [],
+      recoverySearches: [],
+      pageExtraction: {
+        durationMs: 0,
+        urlsProcessed: 0,
+        successCount: 0,
+        failureCount: 0,
+      },
+      semanticGap: {
+        durationMs: 0,
+        called: false,
+        success: false,
+        gapsFound: 0,
+        conflictsFound: 0,
+      },
+      evidenceValidation: {
+        durationMs: 0,
+        passed: false,
+        reason: null,
+      },
+    };
+
     // Hard ceiling check: User cancellation
     if (options.signal?.aborted) {
       researchState.stopReason = STOP_REASONS.USER_INTERRUPTED;
@@ -364,9 +408,13 @@ export async function executeAdaptiveResearch({
     // Hard ceiling check: Wall clock
     const elapsedNow = performance.now() - t0;
     researchState.resourceUsage.totalWallClockMs = Math.round(elapsedNow);
-    if (elapsedNow >= budget.maxWallClockMs) {
-      console.warn(`⚠️ [Research Ceilings] Hard time ceiling reached: ${elapsedNow.toFixed(0)}ms >= ${budget.maxWallClockMs}ms`);
-      researchState.stopReason = STOP_REASONS.TIME_BUDGET_REACHED;
+    const hasExecutedAnySearch = researchState.executedQueries.length > 0;
+    const effectiveCeilingMs = hasExecutedAnySearch
+      ? budget.maxWallClockMs
+      : Math.min(budget.maxWallClockMs + 3500, (options.timeoutMs || 85000) - 10000);
+    if (elapsedNow >= effectiveCeilingMs) {
+      console.warn(`⚠️ [Research Ceilings] Hard time ceiling reached: ${elapsedNow.toFixed(0)}ms >= ${effectiveCeilingMs}ms (firstSearchBypass: ${!hasExecutedAnySearch})`);
+      researchState.stopReason = hasExecutedAnySearch ? STOP_REASONS.TIME_BUDGET_REACHED : STOP_REASONS.UNRESOLVED_INSUFFICIENT_EVIDENCE;
       break;
     }
 
@@ -429,6 +477,8 @@ export async function executeAdaptiveResearch({
       });
 
       let rawExecRes = null;
+      let searchErr = null;
+      const searchStart = performance.now();
       try {
         rawExecRes = await toolExecutor.executeTool(
           "web_search",
@@ -436,10 +486,19 @@ export async function executeAdaptiveResearch({
           { context: { thinkingMode: true } }
         );
       } catch (err) {
+        searchErr = err.message;
         rawExecRes = { ok: false, state: "SEARCH_ERROR", voiceSummary: err.message };
       }
+      const searchDurationMs = Math.round(performance.now() - searchStart);
 
       let execRes = normalizeSearchResult(rawExecRes, currentTaskQuery);
+      currentRoundLog.searchProviderCalls.push({
+        query: currentTaskQuery,
+        durationMs: searchDurationMs,
+        success: execRes.ok !== false && execRes.state !== "SEARCH_ERROR",
+        resultCount: execRes.sources?.length || 0,
+        error: searchErr,
+      });
 
       // Empty result recovery search
       if (!execRes.ok || execRes.state === "SEARCH_EMPTY" || execRes.sources.length === 0) {
@@ -462,19 +521,32 @@ export async function executeAdaptiveResearch({
 
         if (!executedQueriesSet.has(rewrittenQuery.toLowerCase().trim())) {
           executedQueriesSet.add(rewrittenQuery.toLowerCase().trim());
+          const recStart = performance.now();
+          let retryRes = null;
+          let retryErr = null;
           try {
             researchState.resourceUsage.totalToolCalls += 1;
-            const retryRes = await toolExecutor.executeTool(
+            retryRes = await toolExecutor.executeTool(
               "web_search",
               { query: rewrittenQuery },
               { context: { thinkingMode: true } }
             );
-            const normalizedRetry = normalizeSearchResult(retryRes, rewrittenQuery);
-            if (normalizedRetry.ok && normalizedRetry.sources.length > 0) {
-              execRes = normalizedRetry;
-              currentTaskQuery = rewrittenQuery;
-            }
-          } catch (_) {}
+          } catch (err) {
+            retryErr = err.message;
+          }
+          const recDurationMs = Math.round(performance.now() - recStart);
+          const normalizedRetry = normalizeSearchResult(retryRes, rewrittenQuery);
+          currentRoundLog.recoverySearches.push({
+            query: rewrittenQuery,
+            durationMs: recDurationMs,
+            success: normalizedRetry.ok && (normalizedRetry.sources?.length || 0) > 0,
+            resultCount: normalizedRetry.sources?.length || 0,
+            error: retryErr,
+          });
+          if (normalizedRetry.ok && normalizedRetry.sources.length > 0) {
+            execRes = normalizedRetry;
+            currentTaskQuery = rewrittenQuery;
+          }
         }
       }
 
@@ -568,7 +640,14 @@ export async function executeAdaptiveResearch({
     const remainingTotalBudget = Math.max(0, budget.maxUrlsToOpen - openedPages.length);
     const roundCandidateLimit = Math.min(2, remainingTotalBudget);
     const unopenedCandidates = prioritizedCandidates
-      .filter((c) => c.url && !attemptedUrls.has(c.url.toLowerCase().trim()))
+      .filter((c) => {
+        if (!c.url) return false;
+        const low = c.url.toLowerCase().trim();
+        if (attemptedUrls.has(low)) return false;
+        // Opaque redirect wrappers like Google News RSS SPA cannot be scraped via direct GET; prioritize direct publisher URLs
+        if (low.includes("news.google.com/rss/articles")) return false;
+        return true;
+      })
       .slice(0, roundCandidateLimit);
 
     if (unopenedCandidates.length > 0) {
@@ -582,23 +661,62 @@ export async function executeAdaptiveResearch({
         status: "in_progress",
       });
 
+      const extractStart = performance.now();
+      let extractedCount = 0;
+      let extractFailedCount = 0;
+
       const openTasks = unopenedCandidates.map(async (candidate) => {
         attemptedUrls.add(candidate.url.toLowerCase().trim());
         researchState.telemetry.executed += 1;
+        const urlStart = performance.now();
+        let domain = "";
+        try { domain = new URL(candidate.url).hostname; } catch (_) {}
+
+        const urlLog = {
+          originalUrl: candidate.url,
+          canonicalUrl: null,
+          domain,
+          httpStatus: null,
+          resolutionSuccess: false,
+          extractionSuccess: false,
+          responseBytes: 0,
+          extractionDurationMs: 0,
+          failureReason: null,
+        };
+
         try {
           const isSafe = await isUrlSafe(candidate.url);
           if (!isSafe) {
+            urlLog.failureReason = "SSRF_BLOCKED";
             researchState.telemetry.failed += 1;
+            extractFailedCount += 1;
+            urlLog.extractionDurationMs = Math.round(performance.now() - urlStart);
+            researchState.urlObservability.push(urlLog);
             return null;
           }
           researchState.resourceUsage.totalToolCalls += 1;
           const res = await safeOutboundRequest(candidate.url, { timeoutMs: 7000 });
+          urlLog.httpStatus = res.status;
+          urlLog.resolutionSuccess = res.ok;
+
           if (!res.ok) {
+            urlLog.failureReason = `HTTP_${res.status}`;
             researchState.telemetry.failed += 1;
+            extractFailedCount += 1;
+            urlLog.extractionDurationMs = Math.round(performance.now() - urlStart);
+            researchState.urlObservability.push(urlLog);
             return null;
           }
 
           const html = await res.text();
+          urlLog.responseBytes = html.length;
+
+          // Check canonical link in HTML
+          const canonMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+          if (canonMatch) {
+            urlLog.canonicalUrl = canonMatch[1];
+          }
+
           const articleText = extractCleanArticleText(html);
           let passages = extractKeyPassages(articleText, query, researchPlan.dimensions, budget.maxPassagesPerSource);
           const publishDate = extractPublishDate(html, candidate.url);
@@ -609,9 +727,12 @@ export async function executeAdaptiveResearch({
           }
 
           if (passages && passages.length > 0) {
+            urlLog.extractionSuccess = true;
+            extractedCount += 1;
             researchState.telemetry.successful += 1;
             const deepItem = {
               url: candidate.url,
+              canonicalUrl: urlLog.canonicalUrl,
               title: candidate.title,
               publisher: candidate.publisher,
               publishedAt: publishDate || candidate.publishedAt || null,
@@ -621,18 +742,35 @@ export async function executeAdaptiveResearch({
             };
             openedPages.push(deepItem);
             cumulativeEvidenceMap.set(candidate.url.toLowerCase().trim(), deepItem);
+            urlLog.extractionDurationMs = Math.round(performance.now() - urlStart);
+            researchState.urlObservability.push(urlLog);
             return deepItem;
           } else {
+            urlLog.failureReason = "NO_USEFUL_PASSAGES";
             researchState.telemetry.empty += 1;
+            extractFailedCount += 1;
+            urlLog.extractionDurationMs = Math.round(performance.now() - urlStart);
+            researchState.urlObservability.push(urlLog);
             return null;
           }
-        } catch (_) {
+        } catch (err) {
+          urlLog.failureReason = err.name === "AbortError" || err.message?.includes("timeout") ? "TIMEOUT" : (err.message || "FETCH_ERROR");
           researchState.telemetry.failed += 1;
+          extractFailedCount += 1;
+          urlLog.extractionDurationMs = Math.round(performance.now() - urlStart);
+          researchState.urlObservability.push(urlLog);
           return null;
         }
       });
 
       await Promise.all(openTasks);
+      const extractionDurationMs = Math.round(performance.now() - extractStart);
+      currentRoundLog.pageExtraction = {
+        durationMs: extractionDurationMs,
+        urlsProcessed: unopenedCandidates.length,
+        successCount: extractedCount,
+        failureCount: extractFailedCount,
+      };
       researchState.openSourcesCount = openedPages.length;
     }
 
@@ -673,6 +811,7 @@ export async function executeAdaptiveResearch({
       status: "in_progress",
     });
 
+    const valStart = performance.now();
     detGate = evaluateEvidenceDeterministic({
       query,
       observations,
@@ -681,6 +820,13 @@ export async function executeAdaptiveResearch({
       intent: intentInfo.intent,
       requiresCurrentDate: intentInfo.requiresCurrentDate,
     });
+    const valDurationMs = Math.round(performance.now() - valStart);
+    currentRoundLog.evidenceValidation = {
+      durationMs: valDurationMs,
+      passed: detGate.passed,
+      reason: detGate.reason || null,
+      state: detGate.state,
+    };
 
     researchState.rejectedResults = detGate.rejectedResults?.length || 0;
 
@@ -696,6 +842,7 @@ export async function executeAdaptiveResearch({
     } else {
       // In-depth internal reasoning (MEDIUM, HIGH, MAX effort)
       if (evidencePack.length > 0 && detGate.passed) {
+        const gapStart = performance.now();
         gapAudit = await evaluateSemanticGap({
           query,
           evidencePack,
@@ -703,6 +850,14 @@ export async function executeAdaptiveResearch({
           callModel,
           currentDateFormatted: dateCtx.formatted,
         });
+        const gapDurationMs = Math.round(performance.now() - gapStart);
+        currentRoundLog.semanticGap = {
+          durationMs: gapDurationMs,
+          called: true,
+          success: gapAudit?.sufficient ?? false,
+          gapsFound: gapAudit?.missingInformation?.length || 0,
+          conflictsFound: gapAudit?.conflicts?.length || 0,
+        };
 
         researchState.missingSubtopics = gapAudit.missingInformation || [];
         researchState.contradictions = gapAudit.conflicts || [];
@@ -727,6 +882,9 @@ export async function executeAdaptiveResearch({
         thought: `Validated ${allCitations.length} sources satisfying coverage and freshness. Completing research.`,
         status: "completed",
       });
+      currentRoundLog.endMs = Math.round(performance.now() - t0);
+      currentRoundLog.durationMs = Math.round(performance.now() - roundStart);
+      researchState.latencyWaterfall.rounds.push(currentRoundLog);
       break;
     }
 
@@ -735,6 +893,9 @@ export async function executeAdaptiveResearch({
     if (!budget.allowAdaptiveLoop || iteration >= budget.maxIterationsCeiling) {
       researchState.currentEvidenceState = "INSUFFICIENT";
       researchState.stopReason = detGate.passed ? STOP_REASONS.EVIDENCE_SUFFICIENT : STOP_REASONS.UNRESOLVED_INSUFFICIENT_EVIDENCE;
+      currentRoundLog.endMs = Math.round(performance.now() - t0);
+      currentRoundLog.durationMs = Math.round(performance.now() - roundStart);
+      researchState.latencyWaterfall.rounds.push(currentRoundLog);
       break;
     }
 
@@ -829,6 +990,10 @@ export async function executeAdaptiveResearch({
     }
 
     // If no new tasks could be formulated, exit loop
+    currentRoundLog.endMs = Math.round(performance.now() - t0);
+    currentRoundLog.durationMs = Math.round(performance.now() - roundStart);
+    researchState.latencyWaterfall.rounds.push(currentRoundLog);
+
     if (nextTasks.length === 0) {
       researchState.stopReason = detGate.passed ? STOP_REASONS.EVIDENCE_SUFFICIENT : STOP_REASONS.UNRESOLVED_INSUFFICIENT_EVIDENCE;
       break;
@@ -843,6 +1008,10 @@ export async function executeAdaptiveResearch({
       status: "completed",
     });
   }
+
+  const durationMs = Math.round(performance.now() - t0);
+  researchState.resourceUsage.totalWallClockMs = durationMs;
+  researchState.latencyWaterfall.totalDurationMs = durationMs;
 
   // 6. Structured Comparison Matrix (for COMPARISON & TECHNICAL_RESEARCH ONLY)
   let comparisonMatrix = null;
@@ -880,8 +1049,9 @@ export async function executeAdaptiveResearch({
     }
   }
 
-  const durationMs = Math.round(performance.now() - t0);
-  researchState.resourceUsage.totalWallClockMs = durationMs;
+  const finalDurationMs = Math.round(performance.now() - t0);
+  researchState.resourceUsage.totalWallClockMs = finalDurationMs;
+  researchState.latencyWaterfall.totalDurationMs = finalDurationMs;
 
   // 7. Research Provenance & Metadata
   const researchMeta = {
@@ -898,7 +1068,7 @@ export async function executeAdaptiveResearch({
     freshnessChecked: detGate?.freshnessOk ?? false,
     deterministicPassed: detGate?.passed ?? false,
     semanticSufficient: gapAudit?.sufficient ?? (detGate?.passed ?? false),
-    researchDurationMs: durationMs,
+    researchDurationMs: finalDurationMs,
     telemetry: researchState.telemetry,
     resourceUsage: researchState.resourceUsage,
   };
@@ -917,8 +1087,10 @@ export async function executeAdaptiveResearch({
     deterministicGate: detGate,
     researchMeta,
     researchState,
+    latencyWaterfall: researchState.latencyWaterfall,
+    urlObservability: researchState.urlObservability,
     telemetry: researchState.telemetry,
-    durationMs,
+    durationMs: finalDurationMs,
   };
 }
 

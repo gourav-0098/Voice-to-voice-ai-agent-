@@ -2102,14 +2102,107 @@ export default function VoicePage() {
     lastTtfa,
   };
 
+  // =========================================================
+  // UI-ONLY DERIVED VALUES (no backend or pipeline impact)
+  // =========================================================
+  const isSplitView = conversationMode === "voice-chat";
+  const activeVoiceMeta = VOICE_OPTIONS.find((v) => v.id === selectedVoice) || VOICE_OPTIONS[0];
+  const activePersonaMeta = PERSONA_OPTIONS.find((p) => p.id === selectedPersona) || PERSONA_OPTIONS[0];
+  const isSaffronPersona = selectedPersona === "andhbhakt" || selectedPersona === "saffron";
+
+  const PIPELINE_UI: Record<
+    VisualizerState,
+    { label: string; color: string; chip: string; headline: string; hint: string }
+  > = {
+    idle: {
+      label: "Ready",
+      color: "bg-emerald-500",
+      chip: "border-slate-200 bg-white/70 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300",
+      headline: "Ready when you are",
+      hint: "Tap the mic or hold Space to start talking.",
+    },
+    listening: {
+      label: "Listening",
+      color: "bg-rose-500",
+      chip: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-300",
+      headline: "I'm listening…",
+      hint: "Speak naturally — I'll answer when you pause. Barge-in is always on.",
+    },
+    transcribing: {
+      label: "Transcribing",
+      color: "bg-amber-400",
+      chip: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+      headline: "Catching that…",
+      hint: "Converting your voice into text.",
+    },
+    synthesizing: {
+      label: "Thinking",
+      color: "bg-sky-400",
+      chip: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-300",
+      headline: "Thinking it through…",
+      hint: "Searching, reasoning and preparing your answer.",
+    },
+    speaking: {
+      label: "Speaking",
+      color: "bg-emerald-400",
+      chip: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+      headline: "Chatly is speaking",
+      hint: "Jump in anytime — just start talking to interrupt.",
+    },
+  };
+  const pipelineUi = PIPELINE_UI[pipelineState];
+
+  const orbTheme =
+    pipelineState === "listening"
+      ? {
+          gradient: "from-rose-500 via-red-500 to-orange-500",
+          glow: "shadow-[0_0_90px_-12px_rgba(244,63,94,0.75)]",
+        }
+      : pipelineState === "speaking"
+      ? isSaffronPersona
+        ? { gradient: "from-amber-500 via-orange-500 to-rose-500", glow: "shadow-[0_0_90px_-12px_rgba(245,158,11,0.75)]" }
+        : { gradient: "from-emerald-500 via-teal-400 to-cyan-400", glow: "shadow-[0_0_90px_-12px_rgba(16,185,129,0.75)]" }
+      : pipelineState === "synthesizing"
+      ? { gradient: "from-sky-500 via-cyan-400 to-blue-500", glow: "shadow-[0_0_80px_-14px_rgba(14,165,233,0.7)]" }
+      : pipelineState === "transcribing"
+      ? { gradient: "from-amber-500 via-yellow-400 to-orange-400", glow: "shadow-[0_0_80px_-14px_rgba(245,158,11,0.7)]" }
+      : isSaffronPersona
+      ? { gradient: "from-amber-500/80 via-orange-500/70 to-rose-500/60", glow: "shadow-[0_0_60px_-18px_rgba(245,158,11,0.55)]" }
+      : { gradient: "from-emerald-500/90 via-teal-400/80 to-cyan-400/70", glow: "shadow-[0_0_60px_-18px_rgba(16,185,129,0.55)]" };
+
+  const orbEmoji =
+    pipelineState === "listening"
+      ? "🔴"
+      : pipelineState === "speaking"
+      ? isSaffronPersona
+        ? "🦁"
+        : "🔊"
+      : pipelineState === "synthesizing"
+      ? "✨"
+      : pipelineState === "transcribing"
+      ? "⚡"
+      : isSaffronPersona
+      ? "🚩"
+      : "🎙️";
+
+  const quotaHourly = quota?.isAdmin ? "∞" : quota ? String(quota.remainingHourly) : "—";
+  const quotaDaily = quota?.isAdmin ? "∞" : quota ? String(quota.remainingDaily) : "—";
+
   return (
     <div
-      className={`min-h-screen flex flex-col transition-colors duration-300 ${
+      className={`voice-studio relative min-h-screen flex flex-col overflow-x-hidden transition-colors duration-300 ${
         isDark
           ? "bg-[#07080a] text-white selection:bg-emerald-500 selection:text-white"
           : "bg-slate-50 text-slate-900 selection:bg-emerald-600 selection:text-white"
       }`}
     >
+      {/* Ambient aurora background */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className={`ambient-blob absolute -top-40 left-[8%] h-[520px] w-[520px] rounded-full blur-[140px] ${isDark ? "bg-emerald-500/12" : "bg-emerald-400/15"}`} />
+        <div className={`ambient-blob absolute top-[16%] right-[-12%] h-[480px] w-[480px] rounded-full blur-[150px] ${isDark ? "bg-cyan-500/10" : "bg-cyan-400/12"}`} style={{ animationDelay: "-6s" }} />
+        <div className={`ambient-blob absolute bottom-[-12%] left-[32%] h-[440px] w-[440px] rounded-full blur-[150px] ${isDark ? "bg-amber-500/8" : "bg-amber-300/12"}`} style={{ animationDelay: "-12s" }} />
+      </div>
+
       {/* =====================================================
           LOGIN REQUIRED MODAL
       ===================================================== */}
@@ -2177,13 +2270,10 @@ export default function VoicePage() {
       ===================================================== */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
-          {/* Backdrop blur */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
             onClick={() => setMobileDrawerOpen(false)}
           />
-
-          {/* Sliding sheet */}
           <div className="fixed inset-y-0 right-0 w-full max-w-md sm:max-w-lg p-5 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-300">
             <SettingsPanel
               {...settingsPanelProps}
@@ -2194,763 +2284,841 @@ export default function VoicePage() {
       )}
 
       {/* =====================================================
-          MAIN STAGE
+          APP SHELL
       ===================================================== */}
-      <div className="flex-1 flex flex-col min-h-screen max-w-4xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6">
-        {/* Streamlined Main Header */}
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4 gap-3 transition-colors">
-          {/* Left: Brand */}
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-sm sm:text-base font-bold text-slate-900 dark:text-white transition hover:opacity-85"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-bold text-sm shadow-md shadow-emerald-500/25">
-                🎙️
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl transition-colors dark:border-white/[0.08] dark:bg-[#07080a]/75">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            {/* Brand */}
+            <Link href="/" className="group flex items-center gap-2.5">
+              <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-400 text-white shadow-lg shadow-emerald-500/25 transition-transform group-hover:scale-105">
+                <span className="text-lg">🎙️</span>
+                <span className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/25" />
               </span>
-              <span>Chatly</span>
-              <span className="hidden sm:inline-block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                Voice AI
+              <span className="flex flex-col leading-none">
+                <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">Chatly</span>
+                <span className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Voice Studio</span>
               </span>
             </Link>
-          </div>
 
-          {/* Center/Right: Pipeline Status + Debate Arena + Theme Toggle + Settings */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Mode Switcher Pill (Fast | Search) */}
-            <button
-              type="button"
-              onClick={cycleOperatingMode}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs ${
-                operatingMode === "SEARCH"
-                  ? "border-blue-500/50 bg-blue-500/15 text-blue-600 dark:text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.25)] ring-1 ring-blue-500/30"
-                  : "border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-              title={`Active Mode: ${operatingMode} | Click to toggle (Fast ⇄ Search)`}
-            >
-              <span>{operatingMode === "SEARCH" ? "🔍" : "⚡"}</span>
-              <span className="hidden sm:inline capitalize">{operatingMode.toLowerCase()} Mode</span>
-            </button>
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold sm:px-3 ${pipelineUi.chip}`}>
+                <span className="relative flex h-2 w-2">
+                  <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 ${pipelineUi.color} ${pipelineState !== "idle" ? "animate-ping" : ""}`} />
+                  <span className={`relative inline-flex h-2 w-2 rounded-full ${pipelineUi.color}`} />
+                </span>
+                <span className="hidden capitalize sm:inline">{pipelineUi.label}</span>
+              </div>
 
-            {/* AI vs AI Debate Arena Launcher */}
-            <button
-              type="button"
-              onClick={() => setIsDebateModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20 active:scale-95 shadow-xs"
-              title="Launch AI vs AI Debate Arena: Saffron Debater vs Rationalist Analyst"
-            >
-              <span>⚔️</span>
-              <span className="hidden sm:inline">Debate Arena</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setIsDebateModalOpen(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 shadow-xs transition hover:bg-amber-500/20 active:scale-95 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20"
+                title="Launch AI vs AI Debate Arena"
+              >
+                <span>⚔️</span>
+                <span className="hidden md:inline">Debate Arena</span>
+              </button>
 
-            {/* Keyboard Shortcuts Button */}
-            <button
-              type="button"
-              onClick={() => setShowShortcutsModal(true)}
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white text-xs font-mono transition cursor-pointer active:scale-95"
-              title="Keyboard Shortcuts (Space to talk, M to mute, Esc to cancel, ? for help)"
-            >
-              <span>⌨️</span>
-              <span>Hotkeys</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowShortcutsModal(true)}
+                className="hidden lg:inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/60 px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:text-slate-900 active:scale-95 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:text-white"
+                title="Keyboard shortcuts"
+              >
+                <span>⌨️</span>
+                <span>Hotkeys</span>
+              </button>
 
-            {/* Dynamic Status Indicator Chip */}
-            <div
-              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
-                pipelineState === "listening"
-                  ? "border-red-500/50 bg-red-500/15 text-red-500 dark:text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.25)]"
-                  : pipelineState === "transcribing"
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                  : pipelineState === "synthesizing"
-                  ? "border-sky-500/50 bg-sky-500/15 text-sky-600 dark:text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]"
-                  : pipelineState === "speaking"
-                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-                  : isDark
-                  ? "border-white/10 bg-white/5 text-zinc-300"
-                  : "border-slate-200 bg-white text-slate-700 shadow-xs"
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  pipelineState === "listening"
-                    ? "bg-red-500 animate-ping"
-                    : pipelineState === "transcribing"
-                    ? "bg-amber-400 animate-pulse"
-                    : pipelineState === "synthesizing"
-                    ? "bg-sky-400 dark:bg-cyan-400 animate-pulse"
-                    : pipelineState === "speaking"
-                    ? "bg-emerald-400 animate-pulse"
-                    : "bg-emerald-500"
-                }`}
-              />
-              <span className="capitalize">
-                {pipelineState === "idle"
-                  ? "Ready"
-                  : pipelineState === "synthesizing"
-                  ? "Thinking..."
-                  : pipelineState === "transcribing"
-                  ? "Transcribing..."
-                  : pipelineState === "speaking"
-                  ? "Chatly Speaking"
-                  : "Listening..."}
-              </span>
+              <ThemeToggle />
+
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                aria-label="Open settings"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800 shadow-xs transition hover:bg-slate-100 active:scale-95 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 sm:px-3"
+              >
+                <span className="text-sm">⚙️</span>
+                <span className="hidden sm:inline">Settings</span>
+              </button>
             </div>
-
-            {/* Theme Toggle */}
-            <ThemeToggle />
-
-            {/* Settings Button (Laptop, Desktop & Mobile) */}
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(true)}
-              aria-label="Open settings dashboard"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border cursor-pointer transition border-slate-200 bg-white text-slate-800 hover:bg-slate-100 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 text-xs font-semibold active:scale-95"
-            >
-              <span className="text-sm">⚙️</span>
-              <span className="hidden sm:inline">Settings</span>
-            </button>
           </div>
         </header>
 
-        {/* ERROR ALERT */}
-        {error && (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 animate-in fade-in duration-200">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <span className="text-lg">⚠️</span>
-                <div>
-                  <p className="text-sm font-semibold text-red-500 dark:text-red-400">Notice</p>
-                  <p className="mt-0.5 text-xs leading-5 text-red-700 dark:text-red-200/90">{error}</p>
+        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 pb-6 pt-3 sm:px-6 sm:pt-4">
+          {/* ERROR ALERT */}
+          {error && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3.5 animate-in fade-in duration-200">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-lg">⚠️</span>
+                  <div>
+                    <p className="text-sm font-semibold text-red-500 dark:text-red-400">Notice</p>
+                    <p className="mt-0.5 text-xs leading-5 text-red-700 dark:text-red-200/90">{error}</p>
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => setError(null)}
-                className="text-xs text-slate-500 dark:text-zinc-400 hover:underline cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* =====================================================
-            STAGE: VOICE ONLY & SPLIT MODES (ORB VISUALIZER)
-        ===================================================== */}
-        {conversationMode !== "text-only" && (
-          <div className="flex flex-col items-center justify-center py-6 sm:py-8">
-            {/* Status Instruction */}
-            <p
-              className={`mb-4 text-xs sm:text-sm font-medium tracking-wide transition-colors ${
-                pipelineState === "listening"
-                  ? "text-red-500 dark:text-red-400"
-                  : pipelineState === "transcribing"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : pipelineState === "speaking"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : pipelineState === "synthesizing"
-                  ? "text-sky-600 dark:text-cyan-400"
-                  : isDark
-                  ? "text-zinc-400"
-                  : "text-slate-600"
-              }`}
-            >
-              {pipelineState === "listening"
-                ? "🎙️ Listening... (Barge-in active: speak anytime to interrupt)"
-                : pipelineState === "speaking"
-                ? "🔊 Chatly is speaking (Click Interrupt to cut in)"
-                : pipelineState === "synthesizing"
-                ? "✨ Chatly is thinking..."
-                : pipelineState === "transcribing"
-                ? "⚡ Transcribing..."
-                : "Click the microphone button or start speaking"}
-            </p>
-
-            {/* AUDIO REACTIVE CANVAS + ORB CONTAINER */}
-            <div className="relative mb-6 flex items-center justify-center" style={{ width: 280, height: 280 }}>
-              {/* Web Audio API Analyser Reactive Canvas */}
-              <VisualizerCanvas
-                state={pipelineState}
-                analyserNode={activeAnalyser}
-                isDark={isDark}
-                size={280}
-                personaMode={selectedPersona}
-              />
-
-              {/* Central Glowing Core Orb */}
-              <div
-                className={`relative z-10 flex items-center justify-center rounded-full transition-all duration-300 shadow-2xl ${
-                  pipelineState === "listening"
-                    ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-red-600 to-rose-400 shadow-red-500/50 scale-105"
-                    : pipelineState === "speaking"
-                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
-                      ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-amber-600 via-orange-500 to-amber-400 shadow-amber-500/60 scale-105 animate-pulse"
-                      : selectedPersona === "secular"
-                      ? "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-blue-600 via-cyan-500 to-teal-400 shadow-cyan-500/60 scale-105 animate-pulse"
-                      : "w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-emerald-500/50 scale-105 animate-pulse"
-                    : pipelineState === "synthesizing"
-                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
-                      ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-orange-600 to-amber-500 shadow-orange-500/40 animate-pulse"
-                      : "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/40 animate-pulse"
-                    : pipelineState === "transcribing"
-                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-gradient-to-tr from-amber-600 to-yellow-500 shadow-amber-500/40"
-                    : (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
-                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-amber-500/10 border border-amber-500/30 text-amber-500"
-                    : isDark
-                    ? "w-22 h-22 sm:w-26 sm:h-26 bg-white/5 border border-white/10"
-                    : "w-22 h-22 sm:w-26 sm:h-26 bg-white border border-slate-200 shadow-lg"
-                }`}
-              >
-                <span className="text-3xl sm:text-4xl select-none">
-                  {pipelineState === "listening"
-                    ? "🔴"
-                    : pipelineState === "speaking"
-                    ? (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
-                      ? "🦁"
-                      : "🔊"
-                    : pipelineState === "synthesizing"
-                    ? "✨"
-                    : pipelineState === "transcribing"
-                    ? "⚡"
-                    : (selectedPersona === "andhbhakt" || selectedPersona === "saffron")
-                    ? "🚩"
-                    : "🎙️"}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Debate Starter Chips */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-2xl px-3 mb-5">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider mr-1">
-                Quick Topics:
-              </span>
-              {QUICK_DEBATE_PROMPTS.map((item, i) => (
                 <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    sendVoiceToBackend(item.prompt);
-                  }}
-                  className="text-xs px-3 py-1.5 rounded-full border transition-all cursor-pointer font-medium active:scale-95 shadow-xs border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white dark:hover:border-white/20"
+                  onClick={() => setError(null)}
+                  className="text-xs text-slate-500 transition hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white"
                 >
-                  {item.label}
+                  Dismiss
                 </button>
-              ))}
-            </div>
-
-            {/* Real-Time Fact-Check HUD & Truth Meter */}
-            {isFactCheckHudEnabled && activeFactCheck && (
-              <div className="w-full max-w-xl px-2 mb-3">
-                <FactCheckHUD
-                  data={activeFactCheck}
-                  onClose={() => setActiveFactCheck(null)}
-                />
               </div>
-            )}
+            </div>
+          )}
 
-            {/* CONTROLS (Speak, Stop, Interrupt) */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto px-4 sm:px-0">
-              <button
-                type="button"
-                disabled={!isStarted}
-                onClick={() => {
-                  toggleListening();
-                }}
-                className={`w-full sm:w-auto touch-manipulation select-none rounded-2xl sm:rounded-full px-8 py-3.5 font-semibold text-sm sm:text-base transition-all duration-150 cursor-pointer active:scale-95 text-center ${
-                  !isStarted
-                    ? "cursor-not-allowed opacity-50 border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-zinc-600"
-                    : listening
-                    ? "border border-red-500 bg-red-600 text-white shadow-[0_0_30px_rgba(239,68,68,0.45)] hover:bg-red-700"
-                    : isDark
-                    ? "border border-white/20 bg-white text-black hover:bg-zinc-200 shadow-md"
-                    : "border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
-                }`}
-              >
-                <span className="flex items-center justify-center gap-2.5">
-                  <span className="text-base sm:text-lg">
-                    {listening ? "⏹️" : "🎙️"}
-                  </span>
-                  <span>
-                    {listening
-                      ? "Click to Stop Talking"
-                      : "Click to Speak"}
-                  </span>
-                </span>
-              </button>
-
-              {isAiSpeaking && (
+          {/* =====================================================
+              COMMAND DOCK — MODE, EFFORT, LANGUAGE, QUOTA
+          ===================================================== */}
+          <div
+            className={`mt-3 rounded-2xl border p-2 shadow-sm backdrop-blur-xl transition-colors ${
+              isDark ? "border-white/[0.08] bg-white/[0.03]" : "border-slate-200 bg-white/80"
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              {/* Operating Mode */}
+              <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 text-[11px] dark:border-white/10 dark:bg-white/5">
                 <button
                   type="button"
-                  onClick={stopAiSpeaking}
-                  className="w-full sm:w-auto cursor-pointer rounded-2xl sm:rounded-full border border-red-500/40 bg-red-500/10 px-6 py-3.5 text-xs sm:text-sm font-semibold text-red-500 dark:text-red-400 transition hover:bg-red-500/20 active:scale-95 text-center"
+                  onClick={() => handleSetOperatingMode("FAST")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-semibold transition ${
+                    operatingMode === "FAST"
+                      ? "bg-white text-amber-600 shadow-xs dark:bg-zinc-800 dark:text-amber-400"
+                      : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
+                  }`}
+                  title="FAST — ultra-low latency conversation"
                 >
-                  ⏹️ Interrupt AI (Barge-in)
+                  <span>⚡</span>
+                  <span>Fast</span>
                 </button>
-              )}
-            </div>
-
-            {/* Quick Volume Control Bar */}
-            <div className="mt-4 flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] backdrop-blur-md shadow-xs">
-              <button
-                type="button"
-                onClick={handleToggleMute}
-                className="text-sm cursor-pointer hover:scale-110 active:scale-95 transition"
-                title={voiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
-              >
-                {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={voiceMuted ? 0 : volume}
-                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-24 sm:w-28 h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
-                aria-label="Quick volume control"
-              />
-              <span className="text-[11px] font-mono font-medium text-slate-600 dark:text-zinc-400 w-8 text-right">
-                {Math.round((voiceMuted ? 0 : volume) * 100)}%
-              </span>
-            </div>
-
-            {/* Subtitles pill in Voice-Only mode */}
-            {conversationMode === "voice-only" && (interimText || aiResponse) && (
-              <div className="mt-6 w-full max-w-lg px-4 text-center">
-                <div className="rounded-2xl p-4 border backdrop-blur-md shadow-lg transition bg-white border-slate-200 dark:bg-white/[0.04] dark:border-white/10">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
-                    {interimText ? "You Spoke" : "Chatly AI"}
-                  </p>
-                  <p className="text-sm text-slate-800 dark:text-zinc-200">
-                    {interimText || aiResponse}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* =====================================================
-            CONVERSATION HISTORY & CHAT PANEL
-        ===================================================== */}
-        {conversationMode !== "voice-only" && (
-          <div className="flex-1 flex flex-col mt-4 max-w-3xl w-full mx-auto">
-            {/* Transcript Header with Clear History & Export Options */}
-            <div className="flex flex-wrap items-center justify-between px-2 mb-3 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
-                  Conversation Transcript ({messages.length})
-                </span>
-                {isAiSpeaking && (
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
-                    Speaking...
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleSetOperatingMode("SEARCH")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-semibold transition ${
+                    operatingMode === "SEARCH"
+                      ? "bg-white text-blue-600 shadow-xs dark:bg-zinc-800 dark:text-blue-400"
+                      : "text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white"
+                  }`}
+                  title="SEARCH — adaptive multi-query research"
+                >
+                  <span>🔍</span>
+                  <span>Search</span>
+                </button>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                {messages.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => exportConversationTranscript(messages)}
-                      title="Download conversation transcript as formatted text file"
-                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 dark:text-zinc-300"
-                    >
-                      📄 Export
-                    </button>
-                    {messages.some((m) => !!m.audio) && (
+              {/* Effort */}
+              <div className="relative inline-flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowEffortPopover((p) => !p)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10"
+                  title="Effort budget for the active mode"
+                >
+                  <span className="font-normal text-slate-500 dark:text-zinc-400">Effort</span>
+                  <span className="font-semibold capitalize text-emerald-600 dark:text-emerald-400">{effortLevel.toLowerCase()}</span>
+                  <span className="text-[9px] text-slate-500">▾</span>
+                </button>
+                {showEffortPopover && (
+                  <div className="absolute bottom-full left-0 z-50 mb-1.5 w-40 rounded-xl border border-slate-200 bg-white p-1.5 text-xs shadow-xl animate-in fade-in zoom-in-95 duration-100 dark:border-white/15 dark:bg-zinc-900">
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                      Global Effort
+                    </div>
+                    {(["LOW", "MEDIUM", "HIGH", "MAX"] as const).map((eff) => (
                       <button
+                        key={eff}
                         type="button"
                         onClick={() => {
-                          const lastAudioMsg = [...messages].reverse().find((m) => !!m.audio);
-                          if (lastAudioMsg && lastAudioMsg.audio) {
-                            exportAudioFile(lastAudioMsg.audio, "wav", "chatly-ai-response.wav");
-                          }
+                          handleSetEffortLevel(eff);
+                          setShowEffortPopover(false);
                         }}
-                        title="Download latest AI audio response as WAV file"
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${
+                          effortLevel === eff
+                            ? "bg-emerald-500/10 font-semibold text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-700 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-white/5"
+                        }`}
                       >
-                        🎵 Audio
+                        <span className={`flex h-3 w-3 items-center justify-center rounded-full border ${effortLevel === eff ? "border-emerald-500 bg-emerald-500" : "border-slate-400"}`}>
+                          {effortLevel === eff && <span className="h-1 w-1 rounded-full bg-white" />}
+                        </span>
+                        <span className="capitalize">{eff.toLowerCase()}</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={clearHistory}
-                      className="text-xs text-slate-500 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition cursor-pointer ml-1"
-                    >
-                      Clear
-                    </button>
-                  </>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Real-time Fact-Check & Truth Meter HUD in Transcript */}
-            {isFactCheckHudEnabled && activeFactCheck && (
-              <div className="px-1 mb-3">
-                <FactCheckHUD
-                  data={activeFactCheck}
-                  onClose={() => setActiveFactCheck(null)}
-                />
+              <span className="hidden h-5 w-px bg-slate-200 dark:bg-white/10 sm:block" />
+
+              {/* Language quick filter */}
+              <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 text-[11px] dark:border-white/10 dark:bg-white/5">
+                {(["all", "hi", "en"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => handleLanguageFilterChange(lang)}
+                    className={`rounded-lg px-2 py-1.5 font-semibold transition ${
+                      selectedLanguage === lang
+                        ? "bg-white text-slate-900 shadow-xs dark:bg-zinc-800 dark:text-white"
+                        : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white"
+                    }`}
+                    title={lang === "all" ? "All languages" : lang === "hi" ? "Hindi / Hinglish" : "English"}
+                  >
+                    {lang === "all" ? "🌐 All" : lang === "hi" ? "🇮🇳 हिं" : "🇬🇧 EN"}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* Scrollable Message Feed */}
-            <div
-              ref={chatScrollRef}
-              className="flex-1 overflow-y-auto rounded-3xl border p-4 sm:p-6 space-y-4 max-h-[420px] transition-colors border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-white/[0.02] dark:shadow-none"
-            >
-              {messages.length === 0 && !isAiLoading && (
-                <div className="py-12 text-center">
-                  <p className="text-3xl mb-2">💬</p>
-                  <p className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                    No messages yet.
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">
-                    Press the microphone button or type below to begin.
-                  </p>
-                </div>
+              {/* Hands-free */}
+              <button
+                type="button"
+                onClick={() => setHandsFree(!handsFree)}
+                aria-pressed={handsFree}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold transition active:scale-95 ${
+                  handsFree
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                    : "border-slate-200 bg-slate-100 text-slate-500 hover:text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:text-white"
+                }`}
+                title="Automatically reopen the mic after Chatly finishes speaking"
+              >
+                <span>🤟</span>
+                <span className="hidden md:inline">Hands-free</span>
+              </button>
+
+              {/* Voice shortcut */}
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                className="hidden items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 transition hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:text-white xl:inline-flex"
+                title="Change voice model and persona"
+              >
+                <span>🎙️</span>
+                <span className="max-w-[150px] truncate">{activeVoiceMeta.label.replace(/^[^A-Za-z0-9]+/, "")}</span>
+              </button>
+
+              <div className="flex-1" />
+
+              {lastTtfa != null && (
+                <span className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-white/60 px-2 py-1 text-[10px] font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400 sm:inline-flex">
+                  <span>⚡</span>
+                  <span className="font-mono">{lastTtfa}ms</span>
+                  <span className="font-normal text-slate-500 dark:text-zinc-400">TTFA</span>
+                </span>
               )}
 
-              {messages.map((msg) => {
-                const isUser = msg.sender === "user";
-                const timeString = new Date(msg.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+              <button
+                type="button"
+                onClick={() => (currentUser ? setMobileDrawerOpen(true) : setShowLoginModal(true))}
+                className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 md:inline-flex"
+                title={currentUser ? "Open account & quota" : "Sign in to unlock a larger quota"}
+              >
+                <span className="uppercase tracking-wider text-slate-500 dark:text-zinc-400">Quota</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400">{quotaHourly}/hr</span>
+                <span className="text-slate-300 dark:text-zinc-600">·</span>
+                <span className="font-mono text-sky-600 dark:text-sky-400">{quotaDaily}/day</span>
+              </button>
+            </div>
+          </div>
 
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${isUser ? "items-end" : "items-start"} animate-in fade-in duration-200`}
-                  >
-                    {/* Speaker & Timestamp header */}
-                    <div className="flex items-center gap-2 mb-1 px-1">
-                      <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300">
-                        {isUser ? currentUser?.name || "You" : "Chatly AI"}
+          {/* Live Fact-Check HUD — rendered once for every mode */}
+          {isFactCheckHudEnabled && activeFactCheck && (
+            <div className="mt-3">
+              <FactCheckHUD data={activeFactCheck} onClose={() => setActiveFactCheck(null)} />
+            </div>
+          )}
+
+          {/* =====================================================
+              STUDIO GRID
+          ===================================================== */}
+          <div
+            className={`mt-3 flex-1 ${
+              isSplitView
+                ? "grid items-start gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]"
+                : "flex flex-col items-center gap-4"
+            }`}
+          >
+            {/* =====================================================
+                VOICE STAGE
+            ===================================================== */}
+            {conversationMode !== "text-only" && (
+              <section
+                className={`relative w-full overflow-hidden rounded-3xl border shadow-sm transition-colors ${
+                  isDark ? "border-white/[0.08] bg-white/[0.025]" : "border-slate-200 bg-white/85"
+                } ${isSplitView ? "mx-auto max-w-2xl lg:mx-0 lg:max-w-none" : "mx-auto max-w-2xl"}`}
+              >
+                <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+                  <div className={`absolute -top-28 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full blur-3xl ${isDark ? "bg-emerald-500/10" : "bg-emerald-400/15"}`} />
+                  <div className={`absolute -bottom-24 right-0 h-56 w-56 rounded-full blur-3xl ${isDark ? "bg-cyan-500/10" : "bg-cyan-400/10"}`} />
+                </div>
+
+                <div className="relative z-10 flex flex-col p-4 sm:p-6">
+                  {/* Stage header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${pipelineUi.chip}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${pipelineUi.color}`} />
+                        {pipelineUi.label}
                       </span>
-                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">{timeString}</span>
+                      <span className="hidden truncate text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-400 sm:inline">
+                        {activePersonaMeta.icon} {activePersonaMeta.label}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setHandsFree(!handsFree)}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition ${
+                        handsFree
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                          : "border-slate-200 bg-white/60 text-slate-500 hover:text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:text-white"
+                      }`}
+                      title="Automatically reopen the mic after speaking"
+                    >
+                      <span>🤟</span>
+                      <span className="hidden sm:inline">{handsFree ? "Hands-free on" : "Hands-free off"}</span>
+                    </button>
+                  </div>
 
-                    {/* Message Bubble */}
+                  {/* Orb */}
+                  <div className="relative mx-auto my-4 flex h-[280px] w-[280px] items-center justify-center sm:my-5 sm:h-[300px] sm:w-[300px]">
+                    <span className="orb-ring" />
+<span className={`absolute inset-6 rounded-full border ${isDark ? "border-white/[0.05]" : "border-slate-200/70"}`} />
+                    <span
+                      className={`absolute inset-2 rounded-full border ${
+                        pipelineState === "listening"
+                          ? "animate-pulse border-rose-500/20"
+                          : pipelineState === "speaking"
+                          ? "animate-pulse border-emerald-500/20"
+                          : "border-transparent"
+                      }`}
+                      style={{ animationDuration: "2.4s" }}
+                    />
+                    <VisualizerCanvas
+                      state={pipelineState}
+                      analyserNode={activeAnalyser}
+                      isDark={isDark}
+                      size={280}
+                      personaMode={selectedPersona}
+                    />
+
                     <div
-                      className={`group relative max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed transition ${
-                        isUser
-                          ? isDark
-                            ? "bg-emerald-600/30 border border-emerald-500/40 text-emerald-100 rounded-tr-none shadow-sm"
-                            : "bg-emerald-600 text-white rounded-tr-none shadow-sm"
+                      className={`relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-tr text-white transition-all duration-300 sm:h-28 sm:w-28 ${orbTheme.gradient} ${orbTheme.glow} ${
+                        pipelineState === "listening" || pipelineState === "speaking" ? "scale-105" : ""
+                      } ${pipelineState === "synthesizing" ? "animate-pulse" : ""}`}
+                    >
+                      <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/30" />
+                      <span className="select-none text-3xl sm:text-4xl">{orbEmoji}</span>
+                    </div>
+                  </div>
+
+                  {/* Status copy */}
+                  <div className="text-center">
+                    <p className={`shimmer-text text-sm font-semibold sm:text-base ${isDark ? "text-zinc-100" : "text-slate-900"}`}>{pipelineUi.headline}</p>
+                    <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-slate-500 dark:text-zinc-400">{pipelineUi.hint}</p>
+                  </div>
+
+                  {/* Primary controls */}
+                  <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={!isStarted}
+                      onClick={toggleListening}
+                      className={`w-full touch-manipulation select-none rounded-2xl px-6 py-3.5 text-sm font-semibold shadow-lg transition-all duration-150 active:scale-[0.97] sm:w-auto sm:rounded-full ${
+                        !isStarted
+                          ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500 opacity-60 dark:border-white/5 dark:bg-white/5 dark:text-zinc-600"
+                          : listening
+                          ? "border border-rose-500 bg-rose-600 text-white shadow-rose-600/30 hover:bg-rose-700"
+                          : isAiSpeaking
+                          ? "border border-amber-500/50 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
                           : isDark
-                          ? "bg-white/[0.05] border border-white/10 text-zinc-200 rounded-tl-none shadow-sm"
-                          : "bg-slate-100/90 border border-slate-200 text-slate-800 rounded-tl-none shadow-xs"
+                          ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-black shadow-emerald-500/20 hover:brightness-110"
+                          : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/25 hover:brightness-110"
                       }`}
                     >
-                      {/* Clickable RAG Grounding Indicator Drawer Trigger */}
-                      {msg.ragSource && (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="text-base">{listening ? "⏹️" : "🎙️"}</span>
+                        <span>{listening ? "Stop & send" : isAiSpeaking ? "Barge in & speak" : "Start speaking"}</span>
+                      </span>
+                    </button>
+
+                    {isAiSpeaking && (
+                      <button
+                        type="button"
+                        onClick={stopAiSpeaking}
+                        className="w-full rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-3.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/20 active:scale-95 dark:text-red-400 sm:w-auto sm:rounded-full"
+                      >
+                        ⏹ Stop AI
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-center text-[10px] text-slate-500 dark:text-zinc-400">
+                    Hold <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">Space</kbd> to talk
+                    <span className="mx-1.5 text-slate-300 dark:text-zinc-700">·</span>
+                    <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">M</kbd> mute
+                    <span className="mx-1.5 text-slate-300 dark:text-zinc-700">·</span>
+                    <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">Esc</kbd> stop
+                  </p>
+
+                  {/* Volume */}
+                  <div className={`mt-4 flex items-center gap-3 rounded-2xl border px-3 py-2.5 ${isDark ? "border-white/[0.07] bg-white/[0.03]" : "border-slate-200 bg-white"}`}>
+                    <button
+                      type="button"
+                      onClick={handleToggleMute}
+                      className="text-base transition hover:scale-110 active:scale-95"
+                      title={voiceMuted ? "Unmute AI voice" : "Mute AI voice"}
+                    >
+                      {voiceMuted || volume === 0 ? "🔇" : volume < 0.35 ? "🔈" : volume < 0.75 ? "🔉" : "🔊"}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={voiceMuted ? 0 : volume}
+                      onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                      className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-emerald-500 dark:bg-zinc-700"
+                      aria-label="AI voice volume"
+                    />
+                    <span className="w-8 text-right font-mono text-[11px] font-medium text-slate-600 dark:text-zinc-400">
+                      {Math.round((voiceMuted ? 0 : volume) * 100)}%
+                    </span>
+                  </div>
+
+                  {/* Quick prompts */}
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-zinc-400">Try a prompt</p>
+                      <span className="text-[10px] text-slate-500 dark:text-zinc-400">Tap to ask instantly</span>
+                    </div>
+                    <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+                      {QUICK_DEBATE_PROMPTS.map((item, i) => (
                         <button
+                          key={i}
                           type="button"
-                          onClick={() => {
-                            setGroundingDrawerData({
-                              ragSource: msg.ragSource!,
-                              groundingDetails: msg.groundingDetails,
-                              messageText: msg.text,
-                            });
-                            setIsGroundingDrawerOpen(true);
-                          }}
-                          title="Click to view verified knowledge graph sources, matched topic & counter-arguments"
-                          className={`mb-2.5 mr-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md transition-all shadow-xs cursor-pointer hover:scale-105 active:scale-95 group/badge ${
-                            msg.ragSource.includes("political_debate_rag")
-                              ? isDark
-                                ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 ring-1 ring-amber-500/20"
-                                : "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                              : msg.ragSource.includes("fact_checks_rag")
-                              ? isDark
-                                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 ring-1 ring-emerald-500/20"
-                                : "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                              : isDark
-                              ? "border-purple-500/40 bg-purple-500/15 text-purple-200 hover:bg-purple-500/25"
-                              : "border-purple-300 bg-purple-50 text-purple-900 hover:bg-purple-100"
-                          }`}
+                          onClick={() => sendVoiceToBackend(item.prompt)}
+                          className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:border-emerald-400/50 hover:bg-emerald-50 hover:text-emerald-800 active:scale-95 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:border-emerald-400/30 dark:hover:bg-emerald-400/10 dark:hover:text-white"
                         >
-                          <span className="text-sm select-none">
-                            {msg.ragSource.includes("political_debate_rag")
-                              ? "🚩"
-                              : msg.ragSource.includes("fact_checks_rag")
-                              ? "⚖️"
-                              : "🧠"}
-                          </span>
-                          <span className="font-semibold">
-                            {msg.ragSource.includes("political_debate_rag")
-                              ? "Debate GraphRAG Grounded"
-                              : msg.ragSource.includes("fact_checks_rag")
-                              ? "Fact-Check Grounded"
-                              : "Knowledge Grounded"}
-                          </span>
-                          <span className="text-[10px] opacity-70 group-hover/badge:opacity-100 underline decoration-dotted ml-0.5">
-                            🔍 View Sources
-                          </span>
+                          {item.label}
                         </button>
-                      )}
+                      ))}
+                    </div>
+                  </div>
 
-                      {/* Gemini / ChatGPT Style Tool Usage Indicator */}
-                      {msg.toolUsed && (() => {
-                        const meta = getToolIndicatorMeta(msg.toolUsed);
-                        if (!meta) return null;
-                        return (
-                          <div
-                            className={`mb-2.5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md transition-all shadow-xs ${
-                              isDark
-                                ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
-                                : "border-sky-300 bg-sky-50 text-sky-900"
-                            }`}
-                          >
-                            <span className="text-sm select-none">{meta.icon}</span>
-                            <span className="font-semibold">{meta.badgeText}</span>
-                            {meta.detailText && (
-                              <>
-                                <span className="opacity-40">•</span>
-                                <span className="font-normal opacity-90 truncate max-w-[200px] sm:max-w-[280px]">
-                                  {meta.detailText}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Live Truth Meter & Fallacy Tag on Message */}
-                      {msg.factCheck && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveFactCheck(msg.factCheck!);
-                            setIsFactCheckHudEnabled(true);
-                          }}
-                          title="Click to view full Truth Meter audit and fallacy breakdown in HUD"
-                          className={`mb-2.5 mr-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                            (msg.factCheck.credibilityScore ?? 70) >= 80
-                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                              : (msg.factCheck.credibilityScore ?? 70) >= 50
-                              ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                              : "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                          }`}
-                        >
-                          <span>{(msg.factCheck.credibilityScore ?? 70) >= 80 ? "✓" : (msg.factCheck.credibilityScore ?? 70) >= 50 ? "⚖️" : "⚠️"}</span>
-                          <span>Truth: {Math.round(msg.factCheck.credibilityScore ?? 70)}%</span>
-                          {msg.factCheck.fallaciesDetected && msg.factCheck.fallaciesDetected.length > 0 && (
-                            <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-300 text-[10px]">
-                              {msg.factCheck.fallaciesDetected.length} fallacy
+                  {/* Subtitles in voice-only mode */}
+                  {conversationMode === "voice-only" && (interimText || aiResponse) && (
+                    <div className="mt-5 w-full">
+                      <div className={`rounded-2xl border p-3.5 backdrop-blur-md ${isDark ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-white"}`}>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className={`text-[10px] font-bold uppercase tracking-wider ${interimText ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {interimText ? "You" : "Chatly AI"}
+                          </p>
+                          {isAiSpeaking && (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                              speaking
                             </span>
                           )}
-                        </button>
-                      )}
-
-                      {/* Thinking Mode Autonomous Cognitive Reasoning Accordion */}
-                      {msg.thinkingSteps && msg.thinkingSteps.length > 0 && (
-                        <div className="mb-2.5">
-                          <ThinkingAccordion steps={msg.thinkingSteps} />
                         </div>
-                      )}
-
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
-
-                      {/* Quick Actions (Copy & Replay) */}
-                      <div className="mt-2 pt-2 border-t border-slate-200/80 dark:border-white/10 flex items-center gap-2 transition">
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(msg.text, msg.id)}
-                          className="text-[10px] text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white transition cursor-pointer flex items-center gap-1 font-medium"
-                        >
-                          {copiedId === msg.id ? "✓ Copied!" : "📋 Copy"}
-                        </button>
-
-                        {!isUser && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (msg.audio) {
-                                playDeepgramAudio(msg.audio, "audio/wav", msg.text);
-                              } else {
-                                speakAiResponse(msg.text);
-                              }
-                            }}
-                            className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition cursor-pointer flex items-center gap-1 ml-2 font-medium"
-                          >
-                            ▶ Replay Voice
-                          </button>
-                        )}
+                        <p className="text-sm leading-relaxed text-slate-800 dark:text-zinc-200">{interimText || aiResponse}</p>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Thinking Live Stepper (Multi-Step Autonomous Loop) */}
-              {isAiLoading && currentThinkingSteps.length > 0 && (
-                <div className="w-full">
-                  <ThinkingLiveStepper steps={currentThinkingSteps} />
-                </div>
-              )}
-
-              {/* Gemini / ChatGPT Style Live Tool & Thinking Indicator */}
-              {isAiLoading && currentThinkingSteps.length === 0 && (
-                <div className="flex flex-col items-start animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2 mb-1 px-1">
-                    <span className="text-[11px] font-semibold text-sky-600 dark:text-cyan-400">Chatly AI</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-ping" />
-                      Consulting tools & synthesizing...
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl rounded-tl-none border shadow-xs bg-sky-50 border-sky-200 text-sky-900 dark:bg-white/[0.04] dark:border-white/10 dark:text-cyan-300">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 dark:bg-cyan-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500 dark:bg-cyan-500"></span>
-                    </span>
-                    <span className="text-xs font-medium">Running live tool</span>
-                    <div className="flex items-center gap-1 ml-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce [animation-delay:-0.3s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce [animation-delay:-0.15s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-cyan-400 animate-bounce" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Interim Realtime Transcript */}
-              {interimText && (
-                <div className="flex flex-col items-end opacity-75">
-                  <span className="text-[10px] text-red-500 dark:text-red-400 mb-1">Transcribing live...</span>
-                  <div className="rounded-2xl rounded-tr-none border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs text-red-700 dark:text-red-200 italic">
-                    {interimText}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* MANUAL TEXT INPUT BAR WITH MODE SELECTION & DYNAMIC ITERATION LEVEL */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!manualInput.trim()) return;
-                const textToSend = manualInput.trim();
-                setManualInput("");
-                sendVoiceToBackend(textToSend);
-              }}
-              className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl border p-2 backdrop-blur-sm transition border-slate-300 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:focus-within:border-white/30 dark:shadow-none"
-            >
-              {/* Mode Selection Button (Beside Text Input Field) */}
-              {/* Mode Selector & Controls Group (Beside Text Input Field) */}
-              <div className="flex flex-wrap items-center gap-1.5 shrink-0 px-1">
-                {/* Exactly 2 Primary Modes Segmented Pill: FAST, SEARCH */}
-                <div className="inline-flex items-center rounded-xl p-0.5 border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 text-xs select-none">
-                  <button
-                    type="button"
-                    onClick={() => handleSetOperatingMode("FAST")}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      operatingMode === "FAST"
-                        ? "bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-xs font-bold"
-                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                    title="FAST MODE: Ultra-low latency conversation and deterministic tools"
-                  >
-                    <span>⚡</span>
-                    <span className="hidden sm:inline">Fast</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetOperatingMode("SEARCH")}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      operatingMode === "SEARCH"
-                        ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-bold"
-                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                    title="SEARCH MODE: Adaptive multi-query research with internal reasoning"
-                  >
-                    <span>🔍</span>
-                    <span className="hidden sm:inline">Search</span>
-                  </button>
-                </div>
-
-                {/* Global Effort Control (Shared across Fast and Search modes) */}
-                <div className="relative inline-flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowEffortPopover((p) => !p)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-[11px] font-medium text-slate-700 dark:text-zinc-300 cursor-pointer transition select-none"
-                    title="Global Effort: Unified compute and resource budget across chosen mode"
-                  >
-                    <span className="text-slate-400 dark:text-zinc-500 font-normal">Effort:</span>
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 capitalize">{effortLevel.toLowerCase()}</span>
-                    <span className="text-[10px] text-slate-400">▾</span>
-                  </button>
-                  {showEffortPopover && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-36 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-zinc-900 shadow-lg p-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-2 py-1 font-semibold text-[10px] text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                        Global Effort
-                      </div>
-                      {(["LOW", "MEDIUM", "HIGH", "MAX"] as const).map((eff) => (
-                        <label
-                          key={eff}
-                          onClick={() => {
-                            handleSetEffortLevel(eff);
-                            setShowEffortPopover(false);
-                          }}
-                          className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer transition text-xs select-none ${
-                            effortLevel === eff
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold"
-                              : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/5"
-                          }`}
-                        >
-                          <span className={`w-3 h-3 rounded-full border flex items-center justify-center ${effortLevel === eff ? "border-emerald-500 bg-emerald-500" : "border-slate-400"}`}>
-                            {effortLevel === eff && <span className="w-1 h-1 rounded-full bg-white" />}
-                          </span>
-                          <span className="capitalize">{eff.toLowerCase()}</span>
-                        </label>
-                      ))}
                     </div>
                   )}
                 </div>
-              </div>
+              </section>
+            )}
 
-              {/* Text Input Field */}
-              <input
-                type="text"
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                placeholder={
-                  operatingMode === "SEARCH"
-                    ? `Search live facts & deep research (Effort: ${effortLevel.toLowerCase()})...`
-                    : `Chat with Chatly (Fast Mode | Effort: ${effortLevel.toLowerCase()})...`
-                }
-                className="flex-1 bg-transparent px-3 py-2 text-sm outline-none text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-zinc-500"
-              />
+            {/* =====================================================
+                CONVERSATION PANEL
+            ===================================================== */}
+            {conversationMode !== "voice-only" && (
+              <section className={`flex w-full min-w-0 flex-col ${isSplitView ? "mx-auto max-w-3xl lg:mx-0 lg:max-w-none" : "mx-auto max-w-3xl"}`}>
+                <div
+                  className={`flex flex-col overflow-hidden rounded-3xl border shadow-sm transition-colors ${
+                    isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-slate-200 bg-white/85"
+                  }`}
+                >
+                  {/* Panel header */}
+                  <div className={`flex items-center justify-between gap-2 border-b px-3.5 py-2.5 ${isDark ? "border-white/[0.07]" : "border-slate-100"}`}>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm dark:border-white/10 dark:bg-white/5">
+                        💬
+                      </span>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-bold ${isDark ? "text-white" : "text-slate-900"}`}>Conversation</p>
+                        <p className="truncate text-[10px] text-slate-500 dark:text-zinc-400">
+                          {messages.length === 0 ? "No messages yet" : `${messages.length} message${messages.length === 1 ? "" : "s"}`}
+                          {isAiSpeaking ? " · speaking" : pipelineState === "synthesizing" ? " · thinking" : ""}
+                        </p>
+                      </div>
+                    </div>
 
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={!manualInput.trim() || isAiLoading}
-                className="cursor-pointer shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-              >
-                Send →
-              </button>
-            </form>
+                    <div className="flex items-center gap-1">
+                      {messages.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => exportConversationTranscript(messages)}
+                            title="Download transcript"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10"
+                          >
+                            📄<span className="hidden sm:inline">Export</span>
+                          </button>
+                          {messages.some((m) => !!m.audio) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const lastAudioMsg = [...messages].reverse().find((m) => !!m.audio);
+                                if (lastAudioMsg && lastAudioMsg.audio) {
+                                  exportAudioFile(lastAudioMsg.audio, "wav", "chatly-ai-response.wav");
+                                }
+                              }}
+                              title="Download latest AI audio"
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-[10px] font-medium text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+                            >
+                              🎵<span className="hidden sm:inline">Audio</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={clearHistory}
+                            title="Clear history"
+                            className="inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1.5 text-[10px] font-medium text-slate-500 transition hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400"
+                          >
+                            🗑<span className="hidden sm:inline">Clear</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Message feed */}
+                  <div
+                    ref={chatScrollRef}
+                    className={`flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-4 ${
+                      isSplitView ? "max-h-[460px] lg:max-h-[calc(100vh-330px)]" : "max-h-[440px]"
+                    }`}
+                  >
+                    {messages.length === 0 && !isAiLoading && (
+                      <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+                        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/15 to-cyan-500/10 text-2xl shadow-inner">
+                          🎙️
+                        </div>
+                        <p className={`text-sm font-bold ${isDark ? "text-white" : "text-slate-900"}`}>Start a conversation</p>
+                        <p className="mt-1 max-w-[280px] text-xs leading-relaxed text-slate-500 dark:text-zinc-400">
+                          Speak naturally in Hindi, Hinglish or English. Chatly answers with grounded, real-time voice.
+                        </p>
+                        <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+                          {QUICK_DEBATE_PROMPTS.slice(0, 3).map((item, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => sendVoiceToBackend(item.prompt)}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600 transition hover:border-emerald-400/50 hover:text-emerald-700 active:scale-95 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:text-white"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {messages.map((msg) => {
+                      const isUser = msg.sender === "user";
+                      const timeString = new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+
+                      return (
+                        <div key={msg.id} className={`flex items-end gap-2.5 animate-in fade-in duration-200 ${isUser ? "flex-row-reverse" : ""}`}>
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border text-sm shadow-sm ${
+                              isUser
+                                ? "border-emerald-500/30 bg-emerald-500/10"
+                                : isDark
+                                ? "border-white/10 bg-white/[0.05]"
+                                : "border-slate-200 bg-slate-100"
+                            }`}
+                          >
+                            {isUser ? (
+                              currentUser?.avatar ? (
+                                <img src={currentUser.avatar} alt={currentUser.name} className="h-full w-full object-cover" />
+                              ) : (
+                                "🧑"
+                              )
+                            ) : (
+                              "🤖"
+                            )}
+                          </div>
+
+                          <div className={`flex min-w-0 max-w-[86%] flex-col ${isUser ? "items-end" : "items-start"}`}>
+                            <div className="mb-1 flex items-center gap-1.5 px-1">
+                              <span className={`text-[10px] font-bold ${isDark ? "text-zinc-300" : "text-slate-700"}`}>
+                                {isUser ? currentUser?.name || "You" : "Chatly AI"}
+                              </span>
+                              {!isUser && msg.model && (
+                                <span className="rounded-full border border-slate-200 px-1.5 py-px text-[9px] font-medium text-slate-500 dark:border-white/10 dark:text-zinc-400">
+                                  {msg.model}
+                                </span>
+                              )}
+                              <span className="text-[9px] text-slate-500 dark:text-zinc-400">{timeString}</span>
+                            </div>
+
+                            <div
+                              className={`w-full rounded-2xl border px-3.5 py-3 text-sm leading-relaxed shadow-sm transition ${
+                                isUser
+                                  ? isDark
+                                    ? "rounded-tr-md border-emerald-500/35 bg-emerald-500/20 text-emerald-50"
+                                    : "rounded-tr-md border-emerald-600 bg-emerald-600 text-white"
+                                  : isDark
+                                  ? "rounded-tl-md border-white/10 bg-white/[0.05] text-zinc-200"
+                                  : "rounded-tl-md border-slate-200 bg-slate-50 text-slate-800"
+                              }`}
+                            >
+                              {/* RAG grounding badge */}
+                              {msg.ragSource && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundingDrawerData({
+                                      ragSource: msg.ragSource!,
+                                      groundingDetails: msg.groundingDetails,
+                                      messageText: msg.text,
+                                    });
+                                    setIsGroundingDrawerOpen(true);
+                                  }}
+                                  title="View verified sources and counter-arguments"
+                                  className={`group/badge mb-2 mr-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
+                                    msg.ragSource.includes("political_debate_rag")
+                                      ? isDark
+                                        ? "border-amber-500/40 bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/20 hover:bg-amber-500/25"
+                                        : "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                      : msg.ragSource.includes("fact_checks_rag")
+                                      ? isDark
+                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/20 hover:bg-emerald-500/25"
+                                        : "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                                      : isDark
+                                      ? "border-purple-500/40 bg-purple-500/15 text-purple-200 hover:bg-purple-500/25"
+                                      : "border-purple-300 bg-purple-50 text-purple-900 hover:bg-purple-100"
+                                  }`}
+                                >
+                                  <span className="text-xs select-none">
+                                    {msg.ragSource.includes("political_debate_rag") ? "🚩" : msg.ragSource.includes("fact_checks_rag") ? "⚖️" : "🧠"}
+                                  </span>
+                                  <span className="font-semibold">
+                                    {msg.ragSource.includes("political_debate_rag")
+                                      ? "Debate GraphRAG Grounded"
+                                      : msg.ragSource.includes("fact_checks_rag")
+                                      ? "Fact-Check Grounded"
+                                      : "Knowledge Grounded"}
+                                  </span>
+                                  <span className="text-[10px] underline decoration-dotted opacity-70 group-hover/badge:opacity-100">🔍 Sources</span>
+                                </button>
+                              )}
+
+                              {/* Tool usage indicator */}
+                              {msg.toolUsed && (() => {
+                                const meta = getToolIndicatorMeta(msg.toolUsed);
+                                if (!meta) return null;
+                                return (
+                                  <div
+                                    className={`mb-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium backdrop-blur-md shadow-xs ${
+                                      isDark ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-200" : "border-sky-300 bg-sky-50 text-sky-900"
+                                    }`}
+                                  >
+                                    <span className="text-xs select-none">{meta.icon}</span>
+                                    <span className="font-semibold">{meta.badgeText}</span>
+                                    {meta.detailText && (
+                                      <>
+                                        <span className="opacity-40">•</span>
+                                        <span className="max-w-[180px] truncate font-normal opacity-90 sm:max-w-[260px]">{meta.detailText}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Fact-check score */}
+                              {msg.factCheck && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveFactCheck(msg.factCheck!);
+                                    setIsFactCheckHudEnabled(true);
+                                  }}
+                                  title="Open the full Truth Meter audit"
+                                  className={`mb-2 mr-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
+                                    (msg.factCheck.credibilityScore ?? 70) >= 80
+                                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                      : (msg.factCheck.credibilityScore ?? 70) >= 50
+                                      ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                      : "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                                  }`}
+                                >
+                                  <span>{(msg.factCheck.credibilityScore ?? 70) >= 80 ? "✓" : (msg.factCheck.credibilityScore ?? 70) >= 50 ? "⚖️" : "⚠️"}</span>
+                                  <span>Truth: {Math.round(msg.factCheck.credibilityScore ?? 70)}%</span>
+                                  {msg.factCheck.fallaciesDetected && msg.factCheck.fallaciesDetected.length > 0 && (
+                                    <span className="rounded-full bg-rose-500/20 px-1.5 py-px text-[9px] text-rose-600 dark:text-rose-300">
+                                      {msg.factCheck.fallaciesDetected.length} fallacy
+                                    </span>
+                                  )}
+                                </button>
+                              )}
+
+                              {msg.thinkingSteps && msg.thinkingSteps.length > 0 && (
+                                <div className="mb-2.5">
+                                  <ThinkingAccordion steps={msg.thinkingSteps} />
+                                </div>
+                              )}
+
+                              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+
+                              {/* Message actions */}
+                              <div className={`mt-2 flex items-center gap-3 border-t pt-2 ${isUser ? "border-white/20 dark:border-emerald-300/20" : "border-slate-200/80 dark:border-white/10"}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(msg.text, msg.id)}
+                                  className={`flex items-center gap-1 text-[10px] font-medium transition ${
+                                    isUser ? "text-white/70 hover:text-white dark:text-emerald-100/70 dark:hover:text-white" : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white"
+                                  }`}
+                                >
+                                  {copiedId === msg.id ? "✓ Copied" : "📋 Copy"}
+                                </button>
+
+                                {!isUser && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (msg.audio) {
+                                        playDeepgramAudio(msg.audio, "audio/wav", msg.text);
+                                      } else {
+                                        speakAiResponse(msg.text);
+                                      }
+                                    }}
+                                    className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                  >
+                                    ▶ Replay
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Live thinking stepper */}
+                    {isAiLoading && currentThinkingSteps.length > 0 && (
+                      <div className="w-full">
+                        <ThinkingLiveStepper steps={currentThinkingSteps} />
+                      </div>
+                    )}
+
+                    {/* Loading placeholder */}
+                    {isAiLoading && currentThinkingSteps.length === 0 && (
+                      <div className="flex items-end gap-2.5 animate-in fade-in duration-200">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm ${isDark ? "border-white/10 bg-white/[0.05]" : "border-slate-200 bg-slate-100"}`}>
+                          🤖
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <div className="mb-1 flex items-center gap-1.5 px-1">
+                            <span className={`text-[10px] font-bold ${isDark ? "text-zinc-300" : "text-slate-700"}`}>Chatly AI</span>
+                            <span className="flex items-center gap-1 text-[9px] text-slate-500 dark:text-zinc-400">
+                              <span className="h-1.5 w-1.5 animate-ping rounded-full bg-sky-500 dark:bg-cyan-400" />
+                              consulting tools
+                            </span>
+                          </div>
+                          <div className={`flex items-center gap-2.5 rounded-2xl rounded-tl-md border px-4 py-3 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-sky-200 bg-sky-50"}`}>
+                            <div className="flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:-0.3s] dark:bg-cyan-400" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:-0.15s] dark:bg-cyan-400" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 dark:bg-cyan-400" />
+                            </div>
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Synthesizing answer…</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Interim live transcript */}
+                    {interimText && (
+                      <div className="flex flex-col items-end opacity-90">
+                        <span className="mb-1 flex items-center gap-1 px-1 text-[9px] font-semibold text-rose-500 dark:text-rose-400">
+                          <span className="h-1 w-1 animate-pulse rounded-full bg-rose-500" />
+                          Listening live
+                        </span>
+                        <div className="max-w-[86%] rounded-2xl rounded-tr-md border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs italic text-rose-700 dark:text-rose-200">
+                          {interimText}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Composer */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!manualInput.trim()) return;
+                      const textToSend = manualInput.trim();
+                      setManualInput("");
+                      sendVoiceToBackend(textToSend);
+                    }}
+                    className={`flex items-center gap-2 border-t p-2 ${isDark ? "border-white/[0.07] bg-white/[0.02]" : "border-slate-100 bg-white"}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      aria-label={listening ? "Stop voice input" : "Start voice input"}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-base transition active:scale-95 ${
+                        listening
+                          ? "border-rose-500/50 bg-rose-500/15 text-rose-500 dark:text-rose-300"
+                          : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10"
+                      }`}
+                      title={listening ? "Stop listening" : "Start voice input"}
+                    >
+                      {listening ? "⏹️" : "🎙️"}
+                    </button>
+
+                    <input
+                      type="text"
+                      value={manualInput}
+                      onChange={(e) => setManualInput(e.target.value)}
+                      placeholder={
+                        operatingMode === "SEARCH"
+                          ? `Search live facts & deep research (${effortLevel.toLowerCase()} effort)…`
+                          : `Ask Chatly anything (${effortLevel.toLowerCase()} effort)…`
+                      }
+                      className="min-w-0 flex-1 bg-transparent px-1.5 py-2 text-sm outline-none text-slate-900 placeholder:text-slate-500 dark:text-white dark:placeholder:text-zinc-500"
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={!manualInput.trim() || isAiLoading}
+                      className={`shrink-0 rounded-xl px-4 py-2.5 text-xs font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${
+                        isDark ? "bg-white text-black hover:bg-zinc-200" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      Send
+                    </button>
+                  </form>
+                </div>
+              </section>
+            )}
           </div>
-        )}
 
-        {/* FOOTER */}
-        <footer className="mt-auto pt-6 text-center text-xs text-slate-500 dark:text-zinc-500">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <span>Model: {activeModel}</span>
-            <span>•</span>
-            <span>Voice: {selectedVoice.replace("aura-", "").replace("-en", "")}</span>
-            <span>•</span>
-            <span>Mode: {conversationMode}</span>
-            <span>•</span>
-            <span>Loop: {handsFree ? "Continuous" : "Push-to-Talk"}</span>
-          </div>
-        </footer>
+          {/* Footer */}
+          <footer className="mt-auto pt-6 text-center text-[10px] text-slate-500 dark:text-zinc-400">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-emerald-500" /> {activeModel}</span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span>{activeVoiceMeta.label.replace(/^[^A-Za-z0-9]+/, "")}</span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="capitalize">{activePersonaMeta.label}</span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span>{handsFree ? "Hands-free loop" : "Push-to-talk"}</span>
+            </div>
+          </footer>
+        </main>
       </div>
 
       {/* Clickable Grounding Source Sliding Drawer */}
@@ -2974,7 +3142,7 @@ export default function VoicePage() {
 
       {/* Keyboard Shortcuts Modal */}
       {showShortcutsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="relative w-full max-w-md rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 shadow-2xl text-slate-900 dark:text-white">
             <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10">
               <div className="flex items-center gap-2">
@@ -2983,7 +3151,7 @@ export default function VoicePage() {
               </div>
               <button
                 onClick={() => setShowShortcutsModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg font-bold p-1 cursor-pointer"
+                className="text-slate-500 hover:text-slate-600 dark:hover:text-white text-lg font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>

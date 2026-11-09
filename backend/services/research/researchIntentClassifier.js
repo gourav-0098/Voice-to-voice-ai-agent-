@@ -231,8 +231,10 @@ export function classifyResearchIntent(query = "") {
 
   // Temporal Need Detection: Determine if query requires live current-year anchoring
   const hasExplicitPastPeriod =
-    /\b(in (?:18\d\d|19\d\d|20[01]\d|202[0-5])|century|ancient|medieval|ww1|ww2|world war|dynasty|empire|historic|pact|treaty|assassinated|born in|died in|killed in|first cm|first pm|former|past)\b/i.test(lower) ||
+    /\b(18\d\d|19\d\d|20[01]\d|202[0-5]|century|ancient|medieval|ww1|ww2|world war|dynasty|empire|historic|pact|treaty|assassinated|born in|died in|killed in|first cm|first pm|former|past)\b/i.test(lower) ||
     /\bwho was\b/i.test(lower);
+
+  const hasExplicitFuturePeriod = /\b(202[7-9]|20[3-9]\d)\b/.test(lower);
 
   const isCurrentOfficeholderQuery =
     !hasExplicitPastPeriod && (
@@ -240,12 +242,32 @@ export function classifyResearchIntent(query = "") {
       /\b(?:cm|chief minister|pm|prime minister|governor|president)\s+of\s+[a-zA-Z\s]+\b/i.test(lower)
     );
 
+  const isCurrentElectoralOrPoliticalEvent =
+    !hasExplicitPastPeriod &&
+    !hasExplicitFuturePeriod &&
+    (
+      /\b(?:midterms?|election results?|ballot measures?|republican losses|democratic wins|flipped governorships?|poised to become|election monitors)\b/i.test(lower) ||
+      (/\b(?:blame|blamed|losses|results|won|lost|race|voting)\b/i.test(lower) && /\b(?:republican|democrat|trump|biden|gop|midterms?|election|voting)\b/i.test(lower))
+    );
+
   const hasExplicitCurrentTrigger =
     isCurrentOfficeholderQuery ||
+    isCurrentElectoralOrPoliticalEvent ||
     /\b(latest|current|today|this month|this year|recent|recently|new|upcoming|now|best now|as of|right now|fy\s*202[6-9]|2026)\b/i.test(lower) ||
     /\b(current ceo|current president|who is currently|who is the current|stock price|market cap|exchange rate|live score)\b/i.test(lower);
 
-  const requiresCurrentDate = hasExplicitCurrentTrigger && !hasExplicitPastPeriod;
+  const requiresCurrentDate = hasExplicitCurrentTrigger && !hasExplicitPastPeriod && !hasExplicitFuturePeriod;
+
+  if (isCurrentElectoralOrPoliticalEvent) {
+    return {
+      intent: RESEARCH_INTENTS.CURRENT_EVENT,
+      confidence: 0.94,
+      requiresDeepResearch: true,
+      requiresSearch: true,
+      requiresCurrentDate: true,
+      dimensions: ["election_outcomes", "candidate_statements", "reporting_sources", "electoral_impact"],
+    };
+  }
 
   // 1. CALCULATION
   if (

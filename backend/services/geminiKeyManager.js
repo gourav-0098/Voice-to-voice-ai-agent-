@@ -166,6 +166,10 @@ class GeminiKeyManager {
           console.warn(`🔄 [GEMINI FAILOVER] Key slot #${slotNum} reached quota limit. Switching to next key...`);
         } else {
           console.warn(`⚠️ [GEMINI KEY ERROR] Key slot #${slotNum} reported error:`, msg);
+          if (msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("timed out") || msg.includes("TIMEOUT")) {
+            // Service-level outage or network timeout is provider-wide, fail immediately so caller can fail over to Groq
+            throw err;
+          }
         }
       }
     }

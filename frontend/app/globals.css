@@ -58,53 +58,29 @@ html.light {
 }
 
 body {
-  background-color: var(--background);
+  background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
-  overflow-x: hidden;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
-/* =========================================================
-   SLEEK MODERN SCROLLBAR STYLING
-   ========================================================= */
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
-}
-
-.dark * {
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-}
-
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
-  border-radius: 9999px;
-  transition: background-color 0.2s ease;
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 3px;
 }
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-}
-
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.5);
 }
-
 .dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
-
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
@@ -138,6 +114,22 @@ body {
   to { opacity: 0; transform: scale(1.4); }
 }
 
+@keyframes auroraDrift {
+  0% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(3%, -2%, 0) scale(1.08); }
+  100% { transform: translate3d(0,0,0) scale(1); }
+}
+
+@keyframes orbRingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 /* =========================================================
    THEME ADAPTIVE GLASS & CARD UTILITIES
    ========================================================= */
@@ -153,4 +145,78 @@ body {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: 0 4px 20px -2px var(--shadow-color);
+}
+
+/* =========================================================
+   /voice — NEXT-LEVEL STUDIO OVERRIDES
+   ========================================================= */
+
+.voice-studio {
+  background-image:
+    radial-gradient(1200px 600px at 12% -10%, rgba(16,185,129,0.10), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(6,182,212,0.10), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(245,158,11,0.06), transparent 60%);
+}
+
+.voice-studio .ambient-blob {
+  animation: auroraDrift 18s ease-in-out infinite;
+}
+
+.voice-studio header {
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.04), 0 8px 32px -12px rgba(0,0,0,0.35);
+}
+
+.voice-studio section {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.voice-studio section:hover {
+  transform: translateY(-1px);
+}
+
+.voice-studio button {
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.voice-studio button:active {
+  transform: scale(0.97);
+}
+
+.voice-studio input:focus,
+.voice-studio textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+
+.voice-studio ::selection {
+  background: rgba(16,185,129,0.35);
+  color: #fff;
+}
+
+.voice-studio .orb-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 1.5px dashed rgba(16,185,129,0.35);
+  animation: orbRingSpin 14s linear infinite;
+  pointer-events: none;
+}
+
+.voice-studio .shimmer-text {
+  background: linear-gradient(90deg, currentColor 0%, #34d399 50%, currentColor 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-studio *,
+  .voice-studio *::before,
+  .voice-studio *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

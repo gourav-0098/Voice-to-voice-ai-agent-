@@ -271,6 +271,88 @@ function checkFactMatch(actual, expected, id) {
     A095: [["tokyo", "celsius", "fahrenheit", "°c", "°f", "cloudy", "rain", "clear", "degrees"]],
     A098: [["new york", "celsius", "fahrenheit", "°c", "°f", "cloudy", "degrees"]],
     A099: [["paris", "celsius", "fahrenheit", "°c", "°f", "cloudy", "degrees"]],
+
+    // Set C Questions
+    C001: [
+      ["absolutely willing", "willing to accept", "accept those results", "accept the results"],
+      ["democrats", "work with democrats"]
+    ],
+    C002: [
+      // Multi-statement attribution: Axios/Fox News (ballot), WSJ (Iran war), or Guardian (Fox News blame)
+      ["ballot", "iran war", "fox news"],
+      ["would have won", "partly to blame", "blamed", "bears responsibility"]
+    ],
+    C006: [
+      ["hakeem", "jeffries"],
+      ["january 3", "jan 3", "january 3, 2027", "jan 3, 2027"]
+    ],
+    C008: [
+      ["georgia"], ["iowa"], ["texas"], ["ohio"], ["nevada"],
+      ["trump", "2024", "yes"]
+    ],
+    C014: [
+      // Covers both parts: (1) DOJ monitors count (~1000), (2) voting proceeded normally / smoothly
+      ["1,000", "1000", "thousand"],
+      ["normally", "smoothly", "minimal delays", "without major disruptions", "peacefully", "routine"]
+    ],
+    C022: [
+      ["reproductive", "abortion", "constitutional right"],
+      ["two trimesters", "first two trimesters", "viability", "24 weeks"]
+    ],
+    C023: [
+      // Strict two-part check: (1) 52% figure, AND (2) race status (too close to call)
+      ["52%", "52 percent"],
+      ["too close to call", "undecided", "uncalled"]
+    ],
+    C025: [
+      ["145", "one hundred forty-five", "140"],
+      ["three dozen", "states", "40 states", "36 states"],
+      ["reject", "rejected"]
+    ],
+    C027: [
+      ["iranian", "iran", "qeshm"],
+      ["hormuz", "strait of hormuz", "island"]
+    ],
+    C030: [
+      // Casualties (at least 33), building function (aid distribution/shelter), bomb count (9 bombs)
+      ["33", "37", "42"],
+      ["school", "aid", "distribution", "shelter"],
+      ["nine", "9"]
+    ],
+    C036: [
+      ["15", "fifteen"],
+      ["usdt", "tether"],
+      ["usdc"],
+      ["ethereum", "bnb", "smart chain", "bsc"]
+    ],
+    C040: [
+      // Validates Dow surge (points), SpaceX decline (~4-7%), and Tesla decline (~5%)
+      ["dow", "points", "1,000", "1569", "1,569", "53,"],
+      ["spacex", "spcx"],
+      ["tesla", "tsla"],
+      ["down", "fell", "falling", "dropped", "dropping", "lower", "%"]
+    ],
+    C042: [
+      // Validates live spot quotes independently across all 3 assets
+      ["btc", "bitcoin"],
+      ["eth", "ethereum"],
+      ["sol", "solana"],
+      ["%", "percent", "+", "-"]
+    ],
+    C043: [
+      // Exact on-chain circulating supply and % of 21M cap
+      ["20,105", "20.1", "20,105,365", "95.7%", "95.7 percent"],
+      ["21", "21m", "cap"]
+    ],
+    C047: [
+      ["dan lahav", "lahav"],
+      ["human error", "time pressure", "time pressures"],
+      ["internet", "isolation", "sandbox", "misconfiguration"]
+    ],
+    C048: [
+      ["openai"], ["anthropic"], ["meta"], ["google"],
+      ["141,006", "141006", "141,000", "141k"]
+    ],
   };
 
   const targets = keyTargets[id];
